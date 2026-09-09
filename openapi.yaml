@@ -1,0 +1,288 @@
+openapi: 3.1.0
+info:
+  title: Cal API
+  version: 0.1.0
+servers:
+  - url: http://localhost:8080/api
+paths:
+  /health:
+    get:
+      responses:
+        "200":
+          description: API status
+  /auth/register:
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthRequest"
+      responses:
+        "200":
+          description: Authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+  /auth/login:
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthRequest"
+      responses:
+        "200":
+          description: Authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+  /auth/logout:
+    post:
+      responses:
+        "204":
+          description: Session cleared
+  /me:
+    get:
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+  /entries:
+    get:
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: q
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Entry"
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EntryInput"
+      responses:
+        "201":
+          description: Created entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+  /entries/{id}:
+    patch:
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EntryPatch"
+      responses:
+        "200":
+          description: Updated entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+    delete:
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+  /settings:
+    get:
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+    put:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingsInput"
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+  /holidays:
+    get:
+      parameters:
+        - name: country
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Holidays
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Holiday"
+components:
+  schemas:
+    AuthRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+    User:
+      type: object
+      required: [id, email]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+    Entry:
+      type: object
+      required: [id, title, type, date, completed, color, tags, createdAt]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        content:
+          type: string
+        type:
+          enum: [task, note, link]
+        linkUrl:
+          type: string
+        date:
+          type: string
+          format: date
+        completed:
+          type: boolean
+        color:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+    EntryInput:
+      type: object
+      required: [title, type, date]
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        type:
+          enum: [task, note, link]
+        linkUrl:
+          type: string
+        date:
+          type: string
+          format: date
+        color:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+    EntryPatch:
+      type: object
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        type:
+          enum: [task, note, link]
+        linkUrl:
+          type: string
+        date:
+          type: string
+          format: date
+        completed:
+          type: boolean
+        color:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+    Settings:
+      type: object
+      required: [country, showHolidays, theme]
+      properties:
+        country:
+          type: string
+        showHolidays:
+          type: boolean
+        theme:
+          enum: [light, dark, system]
+    SettingsInput:
+      $ref: "#/components/schemas/Settings"
+    Holiday:
+      type: object
+      required: [id, name, date, country]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        date:
+          type: string
+          format: date
+        country:
+          type: string

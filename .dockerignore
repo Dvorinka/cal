@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+.vite/
+.cache/
+coverage/
+.env
+.env.*
+!.env.example
+tmp/
+*.log
+apps/api/cal-api
+ref/
+.git/
