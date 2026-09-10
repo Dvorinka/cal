@@ -1,4 +1,5 @@
 import type { EntryType, Recur } from "@cal/api-client";
+import { renderMarkdown } from "../lib/markdown";
 import { AnimatePresence, motion } from "framer-motion";
 import { CalendarClock, Check, Link2, StickyNote, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -60,8 +61,10 @@ export function EntryEditor() {
   const [color, setColor] = useState("slate");
   const [tags, setTags] = useState("");
   const [content, setContent] = useState("");
+  const [noteMode, setNoteMode] = useState<"write" | "preview">("write");
   const [saving, setSaving] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (editor.mode === "create") {
@@ -77,6 +80,7 @@ export function EntryEditor() {
       setColor("slate");
       setTags("");
       setContent("");
+      setNoteMode("write");
     } else if (editor.mode === "edit") {
       const e = editor.entry;
       setTitle(e.title);
@@ -91,14 +95,20 @@ export function EntryEditor() {
       setColor(e.color);
       setTags(e.tags.join(", "));
       setContent(e.content ?? "");
+      setNoteMode("write");
     }
   }, [editor]);
 
   useEffect(() => {
-    if (open) {
-      window.setTimeout(() => titleRef.current?.focus(), 30);
-      if (accounts.length === 0) void loadAccounts();
-    }
+    if (!open) return;
+    // Notes land the caret in the body — the title can stay empty and is
+    // derived from the first line on save.
+    const target = type === "note" ? bodyRef : titleRef;
+    window.setTimeout(() => target.current?.focus(), 30);
+  }, [open, type]);
+
+  useEffect(() => {
+    if (open && accounts.length === 0) void loadAccounts();
   }, [open, accounts.length, loadAccounts]);
 
   useEffect(() => {
@@ -115,9 +125,13 @@ export function EntryEditor() {
   });
 
   async function save() {
-    const trimmed = title.trim();
+    let trimmed = title.trim();
+    // Notes may skip the title — derive it from the first markdown line.
+    if (!trimmed && type === "note") {
+      trimmed = content.split("\n").find((l) => l.trim() !== "")?.replace(/^#+\s*/, "").slice(0, 80) ?? "";
+    }
     if (!trimmed || !date) {
-      toast(!trimmed ? "A title is required" : "A date is required");
+      toast(!trimmed ? (type === "note" ? "Write something first" : "A title is required") : "A date is required");
       return;
     }
     if (endTime && !startTime) {
@@ -178,7 +192,7 @@ export function EntryEditor() {
               className="editor-title"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              placeholder="Title"
+              placeholder={type === "note" ? "Untitled note" : type === "event" ? "Event title" : type === "link" ? "Link title" : "Task"}
               aria-label="Title"
             />
             <div className="seg" role="group" aria-label="Entry type">
@@ -188,53 +202,88 @@ export function EntryEditor() {
                 </button>
               ))}
             </div>
-            <div className="editor-row">
-              <label className="field">
-                <span>Date</span>
-                <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-              </label>
-              <label className="field">
-                <span>Repeats</span>
-                <select
-                  className="select"
-                  value={type === "task" ? recur : "none"}
-                  disabled={type !== "task"}
-                  onChange={(e) => setRecur(e.target.value as Recur)}
-                >
-                  {RECURS.map((r) => (
-                    <option key={r.value} value={r.value}>
-                      {r.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div className="editor-row">
-              <label className="field">
-                <span>Start</span>
-                <input className="input" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
-              </label>
-              <label className="field">
-                <span>End</span>
-                <input className="input" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
-              </label>
-              {startTime && (
-                <label className="field">
-                  <span>Remind</span>
-                  <select
-                    className="select"
-                    value={remind}
-                    onChange={(e) => setRemind(e.target.value === "" ? "" : Number(e.target.value))}
-                  >
-                    {REMINDS.map((r) => (
-                      <option key={r.label} value={r.value}>
-                        {r.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-            </div>
+
+            {type === "note" ? (
+              <div className="note-editor">
+                <div className="note-bar">
+                  <div className="seg small">
+                    <button type="button" className={noteMode === "write" ? "active" : ""} onClick={() => setNoteMode("write")}>
+                      Write
+                    </button>
+                    <button type="button" className={noteMode === "preview" ? "active" : ""} onClick={() => setNoteMode("preview")}>
+                      Preview
+                    </button>
+                  </div>
+                  <span className="note-count">
+                    {content.trim() === "" ? "0 words" : `${content.trim().split(/\s+/).length} words`}
+                  </span>
+                </div>
+                {noteMode === "write" ? (
+                  <textarea
+                    ref={bodyRef}
+                    className="note-body"
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    placeholder={"# Heading\nWrite in markdown — **bold**, `code`, - [ ] todos, [links](url)"}
+                    aria-label="Note body"
+                  />
+                ) : (
+                  <div className="note-preview">
+                    {content.trim() === "" ? <p className="note-empty">Nothing to preview.</p> : renderMarkdown(content)}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="editor-row">
+                  <label className="field">
+                    <span>Date</span>
+                    <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+                  </label>
+                  <label className="field">
+                    <span>Repeats</span>
+                    <select
+                      className="select"
+                      value={type === "task" ? recur : "none"}
+                      disabled={type !== "task"}
+                      onChange={(e) => setRecur(e.target.value as Recur)}
+                    >
+                      {RECURS.map((r) => (
+                        <option key={r.value} value={r.value}>
+                          {r.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="editor-row">
+                  <label className="field">
+                    <span>Start</span>
+                    <input className="input" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+                  </label>
+                  <label className="field">
+                    <span>End</span>
+                    <input className="input" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+                  </label>
+                  {startTime && (
+                    <label className="field">
+                      <span>Remind</span>
+                      <select
+                        className="select"
+                        value={remind}
+                        onChange={(e) => setRemind(e.target.value === "" ? "" : Number(e.target.value))}
+                      >
+                        {REMINDS.map((r) => (
+                          <option key={r.label} value={r.value}>
+                            {r.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                </div>
+              </>
+            )}
             {accounts.length > 0 && (
               <div className="editor-row">
                 <label className="field">
@@ -272,6 +321,14 @@ export function EntryEditor() {
                 />
               </label>
             )}
+            {type === "note" && (
+              <div className="editor-row">
+                <label className="field">
+                  <span>File under</span>
+                  <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+                </label>
+              </div>
+            )}
             <div className="field">
               <span>Color</span>
               <div className="dots">
@@ -296,15 +353,17 @@ export function EntryEditor() {
                 placeholder="work, personal"
               />
             </label>
-            <label className="field">
-              <span>Details</span>
-              <textarea
-                className="textarea"
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder="Notes, context, links…"
-              />
-            </label>
+            {type !== "note" && (
+              <label className="field">
+                <span>Details</span>
+                <textarea
+                  className="textarea"
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  placeholder={type === "event" ? "Location, agenda, context…" : "Notes, context, links…"}
+                />
+              </label>
+            )}
             <div className="editor-foot">
               {editing?.type === "task" && (
                 <label className="switch-row" style={{ fontSize: 12.5 }}>

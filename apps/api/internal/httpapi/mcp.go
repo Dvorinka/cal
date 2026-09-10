@@ -111,6 +111,41 @@ var mcpTools = []gin.H{
 		"description": "List subscribed external calendar feeds.",
 		"inputSchema": gin.H{"type": "object", "properties": gin.H{}},
 	},
+	{
+		"name":        "get_entry",
+		"description": "Get a single entry with its full content (e.g. a note's markdown body).",
+		"inputSchema": gin.H{
+			"type":       "object",
+			"properties": gin.H{"id": gin.H{"type": "string"}},
+			"required":   []string{"id"},
+		},
+	},
+	{
+		"name":        "append_note",
+		"description": "Append markdown text to a note's body (or any entry's content). The user never has to open the editor.",
+		"inputSchema": gin.H{
+			"type": "object",
+			"properties": gin.H{
+				"id":   gin.H{"type": "string"},
+				"text": gin.H{"type": "string", "description": "Markdown to append"},
+			},
+			"required": []string{"id", "text"},
+		},
+	},
+	{
+		"name":        "search_entries",
+		"description": "Full-text search across titles and content; matches tags exactly.",
+		"inputSchema": gin.H{
+			"type":       "object",
+			"properties": gin.H{"q": gin.H{"type": "string"}},
+			"required":   []string{"q"},
+		},
+	},
+	{
+		"name":        "list_accounts",
+		"description": "List connected CalDAV calendar accounts.",
+		"inputSchema": gin.H{"type": "object", "properties": gin.H{}},
+	},
 }
 
 func (s *Server) mcpAuth(c *gin.Context) (store.User, bool) {
@@ -265,6 +300,67 @@ func (s *Server) mcpCall(c *gin.Context, user store.User, req rpcRequest) {
 			return
 		}
 		data, _ := json.Marshal(feeds)
+		respond(toolText(string(data), false))
+
+	case "get_entry", "append_note":
+		var args struct {
+			ID   string `json:"id"`
+			Text string `json:"text"`
+		}
+		_ = json.Unmarshal(params.Arguments, &args)
+		if args.ID == "" {
+			fail("id is required")
+			return
+		}
+		entry, err := s.store.Entry(ctx, user.ID, args.ID)
+		if err != nil {
+			fail("entry not found")
+			return
+		}
+		if params.Name == "get_entry" {
+			data, _ := json.Marshal(entry)
+			respond(toolText(string(data), false))
+			return
+		}
+		if args.Text == "" {
+			fail("text is required")
+			return
+		}
+		body := entry.Content
+		if body != "" && !strings.HasSuffix(body, "\n") {
+			body += "\n"
+		}
+		_, err = s.store.UpdateEntry(ctx, user.ID, args.ID, store.EntryPatch{Content: &[]string{body + args.Text}[0]})
+		if err != nil {
+			fail("update failed")
+			return
+		}
+		respond(toolText("appended", false))
+
+	case "search_entries":
+		var args struct {
+			Q string `json:"q"`
+		}
+		_ = json.Unmarshal(params.Arguments, &args)
+		if strings.TrimSpace(args.Q) == "" {
+			fail("q is required")
+			return
+		}
+		entries, err := s.store.ListEntries(ctx, user.ID, "", "", args.Q)
+		if err != nil {
+			fail("query failed")
+			return
+		}
+		data, _ := json.Marshal(entries)
+		respond(toolText(string(data), false))
+
+	case "list_accounts":
+		accounts, err := s.store.CaldavAccounts(ctx, user.ID)
+		if err != nil {
+			fail("query failed")
+			return
+		}
+		data, _ := json.Marshal(accounts)
 		respond(toolText(string(data), false))
 
 	default:

@@ -395,6 +395,18 @@ func (s *Store) DeleteEntry(ctx context.Context, userID, id string) error {
 	return nil
 }
 
+// Entry returns one entry owned by the user.
+func (s *Store) Entry(ctx context.Context, userID, id string) (Entry, error) {
+	var e Entry
+	err := e.scan(s.db.QueryRow(ctx, `
+		SELECT `+entryCols+` FROM entries WHERE id = $1 AND user_id = $2
+	`, id, userID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Entry{}, ErrNotFound
+	}
+	return e, err
+}
+
 func (s *Store) entryTx(ctx context.Context, tx pgx.Tx, userID, id string) (Entry, error) {
 	var e Entry
 	err := e.scan(tx.QueryRow(ctx, `
