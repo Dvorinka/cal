@@ -8,6 +8,13 @@ import { PageHeader } from "../components/PageHeader";
 import { formatDayShort } from "../lib/date";
 import { usePlanner } from "../stores/planner";
 
+function fmtMins(m: number): string {
+  if (m < 1) return "<1m";
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  return m % 60 === 0 ? `${h}h` : `${h}h ${m % 60}m`;
+}
+
 function minutesOf(t: TimeEntry): number {
   if (!t.endAt) return 0;
   return Math.round((new Date(t.endAt).getTime() - new Date(t.startAt).getTime()) / 60000);
@@ -50,7 +57,7 @@ export function TimePage() {
         title="Time"
         sub={
           sum
-            ? `${sum.todayMinutes}m today · ${sum.weekMinutes}m this week${sum.billableAmount > 0 ? ` · $${sum.billableAmount.toFixed(2)} billable` : ""}`
+            ? `${fmtMins(sum.todayMinutes)} today · ${fmtMins(sum.weekMinutes)} this week${sum.billableAmount > 0 ? ` · $${sum.billableAmount.toFixed(2)} billable` : ""}`
             : "sessions"
         }
       >
@@ -89,7 +96,7 @@ export function TimePage() {
                 <h3>
                   {formatDayShort(day)}
                   <span className="kanban-count" style={{ marginLeft: 8 }}>
-                    {total}m{earned > 0 ? ` · $${earned.toFixed(2)}` : ""}
+                    {fmtMins(total)}{earned > 0 ? ` · $${earned.toFixed(2)}` : ""}
                   </span>
                 </h3>
                 <ul className="trash-list" style={{ padding: 0 }}>
@@ -103,7 +110,7 @@ export function TimePage() {
                       <span className="trash-date">
                         {new Date(t.startAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
                         {t.endAt ? `–${new Date(t.endAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}` : " · running"}
-                        {` · ${minutesOf(t)}m`}
+                        {` · ${fmtMins(minutesOf(t))}`}
                         {amountOf(t) > 0 ? ` · $${amountOf(t).toFixed(2)}` : ""}
                       </span>
                       <button

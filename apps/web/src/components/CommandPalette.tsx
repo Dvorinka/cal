@@ -1,6 +1,6 @@
 import type { Entry } from "@cal/api-client";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, CalendarDays, Check, FolderOpen, Link2, Moon, Plus, Search, StickyNote, Sun } from "lucide-react";
+import { ArrowRight, CalendarDays, Check, FolderOpen, Link2, Moon, Plus, Search, StickyNote, Sun, Trello } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { formatDayShort } from "../lib/date";
@@ -31,6 +31,7 @@ export function CommandPalette() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Entry[]>([]);
   const [fileResults, setFileResults] = useState<{ id: string; origName: string; name: string }[]>([]);
+  const [boardResults, setBoardResults] = useState<{ id: string; name: string }[]>([]);
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -199,6 +200,7 @@ export function CommandPalette() {
         const out = await api.search(query.trim());
         setResults(out.entries);
         setFileResults(out.files);
+        setBoardResults(out.boards ?? []);
       } catch {
         // Offline: fall back to the locally cached entries.
         const q = query.trim().toLowerCase();
@@ -228,8 +230,9 @@ export function CommandPalette() {
       ...filteredActions.map((action) => ({ kind: "action" as const, action })),
       ...results.map((entry) => ({ kind: "entry" as const, entry })),
       ...fileResults.map((file) => ({ kind: "file" as const, file })),
+      ...boardResults.map((board) => ({ kind: "board" as const, board })),
     ],
-    [filteredActions, results, fileResults],
+    [filteredActions, results, fileResults, boardResults],
   );
 
   useEffect(() => setCursor(0), [items.length]);
@@ -246,6 +249,9 @@ export function CommandPalette() {
     } else if (item.kind === "file") {
       close();
       window.open(`/api/files/${item.file.name}`, "_blank");
+    } else if (item.kind === "board") {
+      close();
+      navigate(`/boards/${item.board.id}`);
     } else {
       close();
       selectDate(item.entry.date);
@@ -351,7 +357,23 @@ export function CommandPalette() {
                   </button>
                 );
               })}
-              {query.trim() && filteredActions.length === 0 && results.length === 0 && fileResults.length === 0 && (
+              {boardResults.length > 0 && <div className="palette-group">Boards</div>}
+              {boardResults.map((board) => {
+                const index = filteredActions.length + results.length + fileResults.length + boardResults.indexOf(board);
+                return (
+                  <button
+                    key={board.id}
+                    type="button"
+                    className={`palette-item ${cursor === index ? "active" : ""}`}
+                    onMouseEnter={() => setCursor(index)}
+                    onClick={() => choose(index)}
+                  >
+                    <span className="icon"><Trello size={14} /></span>
+                    {board.name}
+                  </button>
+                );
+              })}
+              {query.trim() && filteredActions.length === 0 && results.length === 0 && fileResults.length === 0 && boardResults.length === 0 && (
                 <div className="palette-empty">No matches for “{query.trim()}”</div>
               )}
             </div>

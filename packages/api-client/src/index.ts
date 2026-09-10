@@ -430,7 +430,7 @@ export class CalApi {
     return this.request("/github/import", { method: "POST", body: JSON.stringify({ url, boardId, columnId }) });
   }
 
-  async search(q: string): Promise<{ entries: Entry[]; files: { id: string; name: string; origName: string }[] }> {
+  async search(q: string): Promise<{ entries: Entry[]; files: { id: string; name: string; origName: string }[]; boards: Board[] }> {
     return this.request(`/search?q=${encodeURIComponent(q)}`);
   }
   async agenda(days = 7): Promise<string> {

@@ -333,13 +333,12 @@ func (s *Server) enrichLink(userID, entryID, raw string) {
 			defer resp.Body.Close()
 			var oe oembedResp
 			if json.NewDecoder(io.LimitReader(resp.Body, 64*1024)).Decode(&oe) == nil {
-				desc := oe.AuthorName
-				s.store.SetLinkMeta(ctx, userID, entryID, desc, oe.Thumbnail, "", vid)
+				s.store.SetLinkMeta(ctx, userID, entryID, oe.AuthorName, oe.Thumbnail, "", vid, oe.Title)
 				return
 			}
 		}
 		// oEmbed failed — still record the video id so the card can build the thumb.
-		s.store.SetLinkMeta(ctx, userID, entryID, "", "https://i.ytimg.com/vi/"+vid+"/hqdefault.jpg", "", vid)
+		s.store.SetLinkMeta(ctx, userID, entryID, "", "https://i.ytimg.com/vi/"+vid+"/hqdefault.jpg", "", vid, "")
 		return
 	}
 
@@ -347,7 +346,7 @@ func (s *Server) enrichLink(userID, entryID, raw string) {
 	if err != nil {
 		return
 	}
-	s.store.SetLinkMeta(ctx, userID, entryID, p.Description, p.Image, p.Favicon, "")
+	s.store.SetLinkMeta(ctx, userID, entryID, p.Description, p.Image, p.Favicon, "", p.Title)
 }
 
 // globalSearch — one endpoint across entries, files, and boards.
@@ -365,5 +364,6 @@ func (s *Server) globalSearch(c *gin.Context) {
 		return
 	}
 	files, _ := s.store.SearchFiles(ctx, uid, q)
-	c.JSON(http.StatusOK, gin.H{"entries": entries, "files": files})
+	boards, _ := s.store.SearchBoards(ctx, uid, q)
+	c.JSON(http.StatusOK, gin.H{"entries": entries, "files": files, "boards": boards})
 }

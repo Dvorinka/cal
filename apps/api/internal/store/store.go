@@ -420,14 +420,14 @@ func (s *Store) UpdateEntry(ctx context.Context, userID, id string, patch EntryP
 		SET title = $1, content = $2, type = $3, link_url = $4, date = $5,
 		    start_time = nullif($6, '')::time, end_time = nullif($7, '')::time,
 		    completed = $8, color = $9, tags = $10, recur = $11, remind = $12,
-		    pinned = $16, board_id = $17::uuid, column_id = $18::uuid,
+		    pinned = $16, board_id = $17::uuid, column_id = $18::uuid, watched = $19,
 		    dirty = CASE WHEN account_id IS NOT NULL THEN true ELSE dirty END,
 		    reminded_at = CASE WHEN $15 THEN NULL ELSE reminded_at END
 		WHERE id = $13 AND user_id = $14
 		RETURNING `+entryCols+`
 	`, current.Title, current.Content, current.Type, current.LinkURL, current.Date,
 		strOrEmpty(current.StartTime), strOrEmpty(current.EndTime),
-		current.Completed, current.Color, current.Tags, current.Recur, current.Remind, id, userID, resetRemind, current.Pinned, current.BoardID, current.ColumnID).
+		current.Completed, current.Color, current.Tags, current.Recur, current.Remind, id, userID, resetRemind, current.Pinned, current.BoardID, current.ColumnID, current.Watched).
 		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.Watched, &e.LinkImage, &e.LinkDesc, &e.LinkFavicon, &e.LinkVideoID, &e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
 			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty)
 	if err != nil {
@@ -1933,12 +1933,14 @@ func (s *Store) MarkDigestSent(ctx context.Context, userID string) {
 	_, _ = s.db.Exec(ctx, `UPDATE settings SET digest_last = (now() AT TIME ZONE timezone)::date WHERE user_id = $1`, userID)
 }
 
-// SetLinkMeta stores the unfurl/enrich results on a link entry.
-func (s *Store) SetLinkMeta(ctx context.Context, userID, id string, desc, image, favicon, videoID string) {
+// SetLinkMeta stores the unfurl/enrich results on a link entry. A fetched
+// title replaces a placeholder title (empty, or the raw URL).
+func (s *Store) SetLinkMeta(ctx context.Context, userID, id string, desc, image, favicon, videoID, title string) {
 	_, _ = s.db.Exec(ctx, `
 		UPDATE entries SET link_desc = nullif($3,''), link_image = nullif($4,''),
-		  link_favicon = nullif($5,''), link_video_id = nullif($6,'')
-		WHERE id = $1 AND user_id = $2`, id, userID, desc, image, favicon, videoID)
+		  link_favicon = nullif($5,''), link_video_id = nullif($6,''),
+		  title = CASE WHEN $7 <> '' AND (title = '' OR title = link_url) THEN $7 ELSE title END
+		WHERE id = $1 AND user_id = $2`, id, userID, desc, image, favicon, videoID, title)
 }
 
 // GlobalSearch — one query across entries (title+content), file names,
@@ -2020,6 +2022,27 @@ func (s *Store) GitHubUsers(ctx context.Context) ([]struct{ UserID, Token string
 			return nil, err
 		}
 		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// SearchBoards — board-name match for the global search.
+func (s *Store) SearchBoards(ctx context.Context, userID, q string) ([]Board, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT id::text, name, color, coalesce(description,''), target_date::text, share_token, created_at, 0, 0
+		FROM boards WHERE user_id = $1 AND name ILIKE $2 ORDER BY created_at DESC LIMIT 10`,
+		userID, "%"+q+"%")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Board{}
+	for rows.Next() {
+		var b Board
+		if err := rows.Scan(&b.ID, &b.Name, &b.Color, &b.Description, &b.TargetDate, &b.ShareToken, &b.CreatedAt, &b.Total, &b.Done); err != nil {
+			return nil, err
+		}
+		out = append(out, b)
 	}
 	return out, rows.Err()
 }

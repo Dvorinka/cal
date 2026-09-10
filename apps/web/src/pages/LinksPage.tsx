@@ -1,10 +1,12 @@
-import { Check, ExternalLink, Link2, Play, Plus, Square } from "lucide-react";
+import { Check, ExternalLink, Link2, Play, Plus, Youtube } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { linkDomain } from "../lib/entries";
 import { formatDayShort, todayIso } from "../lib/date";
 import { usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
+
+type Filter = "all" | "videos" | "articles";
 
 export function LinksPage() {
   const entries = usePlanner((state) => state.entries);
@@ -13,6 +15,7 @@ export function LinksPage() {
   const openCreate = useUi((state) => state.openCreate);
   const openEdit = useUi((state) => state.openEdit);
   const [grid, setGrid] = useState(true);
+  const [filter, setFilter] = useState<Filter>("all");
 
   useEffect(() => {
     void loadEntries({});
@@ -26,14 +29,28 @@ export function LinksPage() {
     [entries],
   );
 
+  const visible = useMemo(() => {
+    if (filter === "videos") return links.filter((l) => l.linkVideoId);
+    if (filter === "articles") return links.filter((l) => !l.linkVideoId);
+    return links;
+  }, [links, filter]);
+
+  const videoCount = links.filter((l) => l.linkVideoId).length;
+
   return (
     <>
-      <PageHeader title="Links" sub={`${links.length} saved`}>
-        <button
-          type="button"
-          className="btn btn-secondary btn-xs"
-          onClick={() => setGrid((v) => !v)}
-        >
+      <PageHeader title="Links" sub={`${links.length} saved · ${videoCount} video${videoCount === 1 ? "" : "s"}`}>
+        {(["all", "videos", "articles"] as Filter[]).map((f) => (
+          <button
+            key={f}
+            type="button"
+            className={`btn btn-secondary btn-xs ${filter === f ? "on" : ""}`}
+            onClick={() => setFilter(f)}
+          >
+            {f === "videos" ? "Videos" : f === "articles" ? "Articles" : "All"}
+          </button>
+        ))}
+        <button type="button" className="btn btn-secondary btn-xs" onClick={() => setGrid((v) => !v)}>
           {grid ? "List" : "Cards"}
         </button>
         <button type="button" className="btn btn-primary" onClick={() => openCreate(todayIso())}>
@@ -41,9 +58,9 @@ export function LinksPage() {
         </button>
       </PageHeader>
       <div className="page-scroll">
-        {links.length === 0 ? (
+        {visible.length === 0 ? (
           <div className="empty-hint">
-            <strong>No links saved</strong>
+            <strong>{filter === "all" ? "No links saved" : `No ${filter}`}</strong>
             <span>Save a link — previews and YouTube thumbnails fetch themselves.</span>
             <button type="button" className="btn btn-primary" onClick={() => openCreate(todayIso())}>
               <Plus size={14} /> Save one
@@ -51,38 +68,55 @@ export function LinksPage() {
           </div>
         ) : grid ? (
           <div className="link-grid">
-            {links.map((link) => {
+            {visible.map((link) => {
               const domain = linkDomain(link.linkUrl);
+              const isVideo = !!link.linkVideoId;
               return (
                 <article key={link.id} className={`link-card ${link.watched ? "watched" : ""}`}>
-                  {link.linkImage ? (
-                    <a href={link.linkUrl} target="_blank" rel="noopener noreferrer" className="link-thumb">
+                  <a href={link.linkUrl} target="_blank" rel="noopener noreferrer" className="link-thumb">
+                    {link.linkImage ? (
                       <img src={link.linkImage} alt="" loading="lazy" />
-                      {link.linkVideoId && <span className="link-play"><Play size={20} fill="currentColor" /></span>}
-                    </a>
-                  ) : (
-                    <a href={link.linkUrl} target="_blank" rel="noopener noreferrer" className="link-thumb link-thumb-plain">
-                      {link.linkFavicon ? <img src={link.linkFavicon} alt="" className="link-favicon" /> : <Link2 size={20} />}
-                    </a>
-                  )}
+                    ) : (
+                      <span className="link-thumb-plain">
+                        {link.linkFavicon ? <img src={link.linkFavicon} alt="" className="link-favicon" /> : <Link2 size={20} />}
+                      </span>
+                    )}
+                    {isVideo && (
+                      <span className="link-play">
+                        <span className="link-play-btn"><Play size={18} fill="currentColor" /></span>
+                      </span>
+                    )}
+                    {isVideo && (
+                      <button
+                        type="button"
+                        className={`link-watched ${link.watched ? "on" : ""}`}
+                        aria-label={link.watched ? "Mark unwatched" : "Mark watched"}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          void updateEntry(link.id, { watched: !link.watched });
+                        }}
+                      >
+                        <Check size={13} />
+                        {link.watched && <span>Watched</span>}
+                      </button>
+                    )}
+                  </a>
                   <div className="link-card-body">
                     <button type="button" className="link-card-title" onClick={() => openEdit(link)}>
                       {link.title}
                     </button>
-                    {link.linkDesc && <p className="link-desc">{link.linkDesc}</p>}
+                    {link.linkDesc && (
+                      <p className="link-desc">
+                        {isVideo && <Youtube size={12} className="link-yt" />}
+                        {link.linkDesc}
+                      </p>
+                    )}
                     <div className="link-card-meta">
                       <span className="link-domain">{domain}</span>
                       <span className="meta-chip date">{formatDayShort(link.date)}</span>
-                      {link.linkVideoId && (
-                        <button
-                          type="button"
-                          className="icon-btn"
-                          aria-label={link.watched ? "Mark unwatched" : "Mark watched"}
-                          onClick={() => void updateEntry(link.id, { watched: !link.watched })}
-                        >
-                          {link.watched ? <Check size={14} /> : <Square size={14} />}
-                        </button>
-                      )}
+                      {link.tags?.slice(0, 2).map((t) => (
+                        <span key={t} className="meta-chip">#{t}</span>
+                      ))}
                     </div>
                   </div>
                 </article>
@@ -91,10 +125,10 @@ export function LinksPage() {
           </div>
         ) : (
           <ul className="link-list">
-            {links.map((link) => {
+            {visible.map((link) => {
               const domain = linkDomain(link.linkUrl);
               return (
-                <li key={link.id} className={`link-row color-${link.color}`}>
+                <li key={link.id} className={`link-row color-${link.color} ${link.watched ? "watched" : ""}`}>
                   {link.linkFavicon ? (
                     <img src={link.linkFavicon} alt="" className="link-favicon" />
                   ) : (
@@ -104,6 +138,7 @@ export function LinksPage() {
                     {link.title}
                     {domain && <span className="link-domain">{domain}</span>}
                   </button>
+                  {link.linkVideoId && <Youtube size={13} style={{ color: "var(--text-3)" }} />}
                   <span className="meta-chip date">{formatDayShort(link.date)}</span>
                   {link.linkUrl && (
                     <a
