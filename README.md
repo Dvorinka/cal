@@ -21,8 +21,12 @@ and it's yours.
 - **Calendar feeds** — subscribe to any iCalendar URL (Google Calendar's secret
   address, iCloud public calendars, Nextcloud shared links, Outlook published
   calendars); external events render read-only beside your own
+- **CalDAV two-way sync** — connect Nextcloud, Radicale, Baikal or Fastmail
+  collections; events flow both directions on a 15-minute cycle, deletes
+  propagate, credentials AES-encrypted at rest
 - **.ics import** — drop in a calendar file; events land as real entries,
   recurring rules expand
+- **Web push** — VAPID-based push for reminders, fires even with the tab closed
 - **Natural-language quick add** — `dentist fri 5pm #health` parses the date,
   time and tags on the Tasks page
 - **Reminders** — per-entry lead times; browser notifications fire while the
@@ -102,9 +106,9 @@ npm run android:build        # builds the PWA, syncs, produces an APK
 # -> android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-The shell wraps the same SPA — the API URL is relative, so the APK works
-against whatever origin serves it. Release builds need a signing config
-(`./gradlew assembleRelease` after adding a keystore).
+A signing config is wired for releases — drop your keystore at
+`android/app/keystore/cal-release.jks` (gitignored) and run
+`./gradlew assembleRelease` for a signed `app-release.apk`.
 
 ## MCP
 
@@ -142,6 +146,8 @@ Auth is a secure, HttpOnly session cookie (`SESSION_SECURE=true` in production).
 | `GET/POST /api/feeds`, `DELETE /api/feeds/:id`, `POST /api/feeds/:id/refresh` | ICS feed subscriptions |
 | `GET /api/feed-events?from=&to=` | expanded external events |
 | `POST /api/import` | import a .ics file |
+| `GET/POST /api/caldav`, `DELETE /api/caldav/:id`, `POST /api/caldav/:id/sync` | two-way CalDAV accounts |
+| `GET /api/push/vapid`, `POST /api/push/subscribe`, `POST /api/push/unsubscribe` | web push |
 | `GET /api/widget/today?token=` | token-gated read-only agenda |
 | `POST /api/mcp` | MCP endpoint (bearer `apiToken`) |
 | `GET /api/holidays?country=&year=` | computed holidays |
