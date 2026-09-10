@@ -28,5 +28,9 @@ function read<T>(key: string): T | undefined {
 }
 
 function write(key: string, value: unknown): void {
-  localStorage.setItem(prefix + key, JSON.stringify(value));
+  try {
+    localStorage.setItem(prefix + key, JSON.stringify(value));
+  } catch {
+    // no storage (tests, SSR, private mode)
+  }
 }

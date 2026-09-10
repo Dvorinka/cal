@@ -29,8 +29,11 @@ export function EntryEditor() {
   const deleteEntry = usePlanner((state) => state.deleteEntry);
   const toast = usePlanner((state) => state.toast);
 
+  const entries = usePlanner((state) => state.entries);
   const open = editor.mode !== "closed";
-  const editing = editor.mode === "edit" ? editor.entry : undefined;
+  // Resolve against the live store so optimistic updates (e.g. Done) re-render.
+  const editing =
+    editor.mode === "edit" ? (entries.find((e) => e.id === editor.entry.id) ?? editor.entry) : undefined;
 
   const [title, setTitle] = useState("");
   const [type, setType] = useState<EntryType>("task");
@@ -239,6 +242,19 @@ export function EntryEditor() {
               />
             </label>
             <div className="editor-foot">
+              {editing?.type === "task" && (
+                <label className="switch-row" style={{ fontSize: 12.5 }}>
+                  Done
+                  <span className="switch">
+                    <input
+                      type="checkbox"
+                      checked={editing.completed}
+                      onChange={(e) => void updateEntry(editing.id, { completed: e.target.checked })}
+                    />
+                    <i />
+                  </span>
+                </label>
+              )}
               {editing && (
                 <button
                   type="button"

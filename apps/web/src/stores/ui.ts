@@ -47,7 +47,11 @@ const persisted = (() => {
 })();
 
 function persist(state: Pick<UiState, "view" | "hiddenTypes">) {
-  localStorage.setItem("cal:ui", JSON.stringify({ view: state.view, hiddenTypes: [...state.hiddenTypes] }));
+  try {
+    localStorage.setItem("cal:ui", JSON.stringify({ view: state.view, hiddenTypes: [...state.hiddenTypes] }));
+  } catch {
+    // no storage (tests, SSR)
+  }
 }
 
 export const useUi = create<UiState>((set, get) => ({

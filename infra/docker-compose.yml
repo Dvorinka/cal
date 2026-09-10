@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: cal
       POSTGRES_PASSWORD: cal
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     volumes:
       - cal-db:/var/lib/postgresql/data
     healthcheck:
@@ -22,10 +22,10 @@ services:
     environment:
       DATABASE_URL: postgres://cal:cal@db:5432/cal?sslmode=disable
       SESSION_SECURE: "false"
-      WEB_ORIGIN: http://localhost:5173
+      WEB_ORIGIN: http://localhost:${WEB_PORT:-5173}
       PORT: "8080"
     ports:
-      - "8080:8080"
+      - "${API_PORT:-8080}:8080"
     depends_on:
       db:
         condition: service_healthy
@@ -35,7 +35,7 @@ services:
       context: ..
       dockerfile: apps/web/Dockerfile
     ports:
-      - "5173:80"
+      - "${WEB_PORT:-5173}:80"
     depends_on:
       - api
 

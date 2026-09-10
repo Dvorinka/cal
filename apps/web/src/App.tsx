@@ -16,7 +16,7 @@ import { useUi } from "./stores/ui";
 export function App() {
   const { user, booted, entries, holidays, settings, bootstrap, loadEntries, updateEntry, loadHolidays } = usePlanner();
   const { view, anchor, selectedDate, hiddenTypes, paletteOpen, editor, contextMenu } = useUi();
-  const { setView, shift, goToday, openPalette, closePalette, openCreate, closeEditor, setContextMenu } = useUi();
+  const { setView, shift, goToday, openPalette, closePalette, openCreate, setContextMenu } = useUi();
 
   useEffect(() => {
     void bootstrap();

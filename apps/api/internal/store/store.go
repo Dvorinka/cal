@@ -13,6 +13,7 @@ import (
 )
 
 var ErrNotFound = errors.New("not found")
+var ErrInvalid = errors.New("invalid entry")
 
 type Store struct {
 	db *pgxpool.Pool
@@ -145,6 +146,7 @@ func (s *Store) UserBySession(ctx context.Context, sessionID string) (User, erro
 }
 
 func (s *Store) CreateSession(ctx context.Context, userID string) (string, error) {
+	_, _ = s.db.Exec(ctx, `DELETE FROM sessions WHERE expires_at < now()`)
 	id := uuid.NewString()
 	_, err := s.db.Exec(ctx, `
 		INSERT INTO sessions (id, user_id, expires_at)
@@ -257,6 +259,21 @@ func (s *Store) UpdateEntry(ctx context.Context, userID, id string, patch EntryP
 	}
 	if patch.HasTags {
 		current.Tags = patch.Tags
+	}
+
+	// Re-validate the merged row so a partial patch cannot violate the
+	// time-ordering or recur-on-task rules the DB enforces.
+	if strings.TrimSpace(current.Title) == "" || current.Type == "" {
+		return Entry{}, ErrInvalid
+	}
+	if current.Type != "task" && current.Recur != "none" {
+		return Entry{}, ErrInvalid
+	}
+	if current.StartTime == nil && current.EndTime != nil {
+		return Entry{}, ErrInvalid
+	}
+	if current.StartTime != nil && current.EndTime != nil && *current.EndTime <= *current.StartTime {
+		return Entry{}, ErrInvalid
 	}
 
 	var e Entry

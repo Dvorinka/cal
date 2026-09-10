@@ -162,6 +162,10 @@ func (s *Server) updateEntry(c *gin.Context) {
 		c.String(http.StatusNotFound, "entry not found")
 		return
 	}
+	if errors.Is(err, store.ErrInvalid) {
+		c.String(http.StatusBadRequest, "invalid entry")
+		return
+	}
 	if err != nil {
 		c.String(http.StatusInternalServerError, "failed to update entry")
 		return
