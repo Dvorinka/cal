@@ -25,6 +25,7 @@ export interface Entry {
   recur: Recur;
   /** Minutes before startTime to fire a reminder; absent = none. */
   remind?: number;
+  accountId?: string;
   createdAt: string;
 }
 
@@ -40,6 +41,7 @@ export interface EntryInput {
   tags?: string[];
   recur?: Recur;
   remind?: number | null;
+  accountId?: string;
 }
 
 export type EntryPatch = Partial<EntryInput & { completed: boolean }>;
@@ -52,6 +54,15 @@ export interface Settings {
   accent: Accent;
   widgetToken: string;
   apiToken: string;
+}
+
+export interface CaldavAccount {
+  id: string;
+  name: string;
+  url: string;
+  username: string;
+  color: string;
+  lastSynced?: string;
 }
 
 export interface Feed {
@@ -179,6 +190,22 @@ export class CalApi {
     return this.request<FeedEvent[]>(`/feed-events?${search.toString()}`);
   }
 
+  async caldavAccounts(): Promise<CaldavAccount[]> {
+    return this.request<CaldavAccount[]>("/caldav");
+  }
+
+  async addCaldavAccount(input: { name?: string; url: string; username: string; password: string; color?: string }): Promise<CaldavAccount> {
+    return this.request<CaldavAccount>("/caldav", { method: "POST", body: input });
+  }
+
+  async deleteCaldavAccount(id: string): Promise<void> {
+    await this.request<void>(`/caldav/${id}`, { method: "DELETE" });
+  }
+
+  async syncCaldav(id: string): Promise<void> {
+    await this.request<void>(`/caldav/${id}/sync`, { method: "POST" });
+  }
+
   async importIcs(file: File): Promise<{ imported: number }> {
     const response = await fetch(`${this.baseUrl}/import`, {
       method: "POST",
@@ -196,6 +223,19 @@ export class CalApi {
   async rotateWidgetToken(): Promise<string> {
     const out = await this.request<{ widgetToken: string }>("/settings/widget-token", { method: "POST" });
     return out.widgetToken;
+  }
+
+  async pushVapid(): Promise<string> {
+    const out = await this.request<{ publicKey: string }>("/push/vapid");
+    return out.publicKey;
+  }
+
+  async pushSubscribe(sub: PushSubscriptionJSON): Promise<void> {
+    await this.request<void>("/push/subscribe", { method: "POST", body: sub });
+  }
+
+  async pushUnsubscribe(endpoint: string): Promise<void> {
+    await this.request<void>("/push/unsubscribe", { method: "POST", body: { endpoint } });
   }
 
   async rotateApiToken(): Promise<string> {

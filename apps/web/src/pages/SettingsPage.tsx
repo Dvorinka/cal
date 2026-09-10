@@ -1,7 +1,8 @@
 import type { Accent } from "@cal/api-client";
-import { Copy, Download, LogOut, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Bell, BellOff, Copy, Download, LogOut, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
+import { disablePush, enablePush, pushEnabled } from "../lib/push";
 import { usePlanner } from "../stores/planner";
 
 const ACCENTS: { value: Accent; label: string }[] = [
@@ -21,6 +22,11 @@ export function SettingsPage() {
   const loadEntries = usePlanner((state) => state.loadEntries);
   const loadFeeds = usePlanner((state) => state.loadFeeds);
   const addFeed = usePlanner((state) => state.addFeed);
+  const accounts = usePlanner((state) => state.accounts);
+  const loadAccounts = usePlanner((state) => state.loadAccounts);
+  const addAccount = usePlanner((state) => state.addAccount);
+  const removeAccount = usePlanner((state) => state.removeAccount);
+  const syncAccount = usePlanner((state) => state.syncAccount);
   const removeFeed = usePlanner((state) => state.removeFeed);
   const refreshFeed = usePlanner((state) => state.refreshFeed);
   const importIcs = usePlanner((state) => state.importIcs);
@@ -32,11 +38,22 @@ export function SettingsPage() {
   const [feedName, setFeedName] = useState("");
   const [feedUrl, setFeedUrl] = useState("");
   const [adding, setAdding] = useState(false);
+  const [pushOn, setPushOn] = useState<boolean>();
+  const [davName, setDavName] = useState("");
+  const [davUrl, setDavUrl] = useState("");
+  const [davUser, setDavUser] = useState("");
+  const [davPass, setDavPass] = useState("");
+  const [addingAccount, setAddingAccount] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    void pushEnabled().then(setPushOn).catch(() => setPushOn(false));
+  }, []);
 
   useEffect(() => {
     void loadEntries({});
     void loadFeeds();
+    void loadAccounts();
   }, [loadEntries, loadFeeds]);
 
   const stats = useMemo(() => {
@@ -53,6 +70,23 @@ export function SettingsPage() {
   }, [entries]);
 
   const set = (patch: Partial<typeof settings>) => void updateSettings({ ...settings, ...patch });
+
+  async function submitAccount() {
+    setAddingAccount(true);
+    const ok = await addAccount({
+      name: davName.trim() || undefined,
+      url: davUrl.trim(),
+      username: davUser.trim(),
+      password: davPass,
+    });
+    setAddingAccount(false);
+    if (ok) {
+      setDavName("");
+      setDavUrl("");
+      setDavUser("");
+      setDavPass("");
+    }
+  }
 
   async function submitFeed() {
     if (!feedUrl.trim()) return;
@@ -180,6 +214,57 @@ export function SettingsPage() {
         </section>
 
         <section className="panel">
+          <h3>Connected calendars</h3>
+          <p className="panel-note">
+            Two-way sync over CalDAV — Nextcloud, Radicale, Baikal, Fastmail (app password). Events on a
+            connected calendar stay editable in both directions. Paste the collection URL
+            (e.g. <code>https://cloud.example/remote.php/dav/calendars/you/personal/</code>).
+          </p>
+          {accounts.map((a) => (
+            <div key={a.id} className="feed-row">
+              <span className="swatch" style={{ "--swatch": `var(--c-${a.color})` } as React.CSSProperties} />
+              <div className="feed-meta">
+                <span className="feed-name">{a.name}</span>
+                <span className="feed-url">{a.url}</span>
+              </div>
+              {a.lastSynced && <span className="feed-age">synced {new Date(a.lastSynced).toLocaleTimeString()}</span>}
+              <button type="button" className="icon-btn" aria-label="Sync now" onClick={() => void syncAccount(a.id)}>
+                <RefreshCw size={14} />
+              </button>
+              <button type="button" className="icon-btn" aria-label="Disconnect" onClick={() => void removeAccount(a.id)}>
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+          <div className="feed-add" style={{ gridTemplateColumns: "1fr 1fr" }}>
+            <input className="input" placeholder="Name" value={davName} onChange={(e) => setDavName(e.target.value)} />
+            <input className="input" placeholder="Calendar URL" value={davUrl} onChange={(e) => setDavUrl(e.target.value)} />
+            <input className="input" placeholder="Username" value={davUser} onChange={(e) => setDavUser(e.target.value)} />
+            <input
+              className="input"
+              type="password"
+              placeholder="Password / app password"
+              value={davPass}
+              onChange={(e) => setDavPass(e.target.value)}
+            />
+          </div>
+          <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end" }}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={addingAccount || !davUrl.trim()}
+              onClick={() => void submitAccount()}
+            >
+              <Plus size={14} /> {addingAccount ? "Connecting…" : "Connect"}
+            </button>
+          </div>
+          <p className="panel-note" style={{ marginTop: 8 }}>
+            Proton Calendar does not expose CalDAV outside Bridge — import via .ics instead. Google requires
+            OAuth (not supported); use its .ics secret address above.
+          </p>
+        </section>
+
+        <section className="panel">
           <h3>Holidays</h3>
           <div className="settings-grid">
             <label className="switch-row">
@@ -205,6 +290,33 @@ export function SettingsPage() {
               </select>
             </label>
           </div>
+        </section>
+
+        <section className="panel">
+          <h3>Notifications</h3>
+          <p className="panel-note">
+            Entries with a reminder fire a notification at start − lead time. Push works even when the
+            tab is closed; in-app notifications cover the open app.
+          </p>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => {
+              if (pushOn) {
+                void disablePush(usePlanner.getState().api).then(() => setPushOn(false));
+              } else {
+                void enablePush(usePlanner.getState().api)
+                  .then((ok) => {
+                    setPushOn(ok);
+                    toast(ok ? "Push notifications enabled" : "Notifications not available here");
+                  })
+                  .catch(() => toast("Could not enable notifications"));
+              }
+            }}
+          >
+            {pushOn ? <BellOff size={14} /> : <Bell size={14} />}
+            {pushOn ? "Disable push notifications" : "Enable push notifications"}
+          </button>
         </section>
 
         <section className="panel">

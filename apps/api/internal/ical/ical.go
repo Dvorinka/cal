@@ -390,3 +390,56 @@ func unescape(s string) string {
 	r := strings.NewReplacer(`\n`, "\n", `\\`, `\`, `\,`, ",", `\;`, ";", `\N`, "\n")
 	return r.Replace(s)
 }
+
+// EncodeEvent serializes an Event into a minimal valid VCALENDAR/VEVENT.
+func EncodeEvent(e Event) string {
+	var b strings.Builder
+	b.WriteString("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Cal//EN\r\nBEGIN:VEVENT\r\n")
+	b.WriteString("UID:" + fold(escapeText(e.UID)) + "\r\n")
+	b.WriteString("DTSTAMP:" + time.Now().UTC().Format("20060102T150405Z") + "\r\n")
+	b.WriteString("SUMMARY:" + fold(escapeText(e.Summary)) + "\r\n")
+	if e.Description != "" {
+		b.WriteString("DESCRIPTION:" + fold(escapeText(e.Description)) + "\r\n")
+	}
+	if e.Location != "" {
+		b.WriteString("LOCATION:" + fold(escapeText(e.Location)) + "\r\n")
+	}
+	if e.URL != "" {
+		b.WriteString("URL:" + e.URL + "\r\n")
+	}
+	if e.AllDay {
+		b.WriteString("DTSTART;VALUE=DATE:" + e.Start.Format("20060102") + "\r\n")
+		end := e.End
+		if !end.After(e.Start) {
+			end = e.Start.AddDate(0, 0, 1)
+		}
+		b.WriteString("DTEND;VALUE=DATE:" + end.Format("20060102") + "\r\n")
+	} else {
+		b.WriteString("DTSTART:" + e.Start.UTC().Format("20060102T150405Z") + "\r\n")
+		if e.End.After(e.Start) {
+			b.WriteString("DTEND:" + e.End.UTC().Format("20060102T150405Z") + "\r\n")
+		}
+	}
+	b.WriteString("END:VEVENT\r\nEND:VCALENDAR\r\n")
+	return b.String()
+}
+
+func escapeText(s string) string {
+	r := strings.NewReplacer(`\`, `\\`, "\n", `\n`, ",", `\,`, ";", `\;`)
+	return r.Replace(s)
+}
+
+// fold wraps a content line at 75 octets per RFC 5545 (simplified to runes —
+// fine for typical titles/descriptions).
+func fold(s string) string {
+	if len(s) <= 70 {
+		return s
+	}
+	var b strings.Builder
+	for len(s) > 70 {
+		b.WriteString(s[:70] + "\r\n ")
+		s = s[70:]
+	}
+	b.WriteString(s)
+	return b.String()
+}

@@ -41,6 +41,8 @@ export function EntryEditor() {
   const toast = usePlanner((state) => state.toast);
 
   const entries = usePlanner((state) => state.entries);
+  const accounts = usePlanner((state) => state.accounts);
+  const loadAccounts = usePlanner((state) => state.loadAccounts);
   const open = editor.mode !== "closed";
   // Resolve against the live store so optimistic updates (e.g. Done) re-render.
   const editing =
@@ -53,6 +55,7 @@ export function EntryEditor() {
   const [endTime, setEndTime] = useState("");
   const [recur, setRecur] = useState<Recur>("none");
   const [remind, setRemind] = useState<number | "">("");
+  const [accountId, setAccountId] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [color, setColor] = useState("slate");
   const [tags, setTags] = useState("");
@@ -69,6 +72,7 @@ export function EntryEditor() {
       setEndTime(editor.startTime ? addHour(editor.startTime) : "");
       setRecur("none");
       setRemind("");
+      setAccountId("");
       setLinkUrl("");
       setColor("slate");
       setTags("");
@@ -82,6 +86,7 @@ export function EntryEditor() {
       setEndTime(e.endTime ?? "");
       setRecur(e.recur);
       setRemind(e.remind ?? "");
+      setAccountId(e.accountId ?? "");
       setLinkUrl(e.linkUrl ?? "");
       setColor(e.color);
       setTags(e.tags.join(", "));
@@ -90,8 +95,11 @@ export function EntryEditor() {
   }, [editor]);
 
   useEffect(() => {
-    if (open) window.setTimeout(() => titleRef.current?.focus(), 30);
-  }, [open]);
+    if (open) {
+      window.setTimeout(() => titleRef.current?.focus(), 30);
+      if (accounts.length === 0) void loadAccounts();
+    }
+  }, [open, accounts.length, loadAccounts]);
 
   useEffect(() => {
     if (!open) return;
@@ -136,7 +144,7 @@ export function EntryEditor() {
     };
     try {
       if (editing) await updateEntry(editing.id, fields);
-      else await createEntry({ ...fields, type });
+      else await createEntry({ ...fields, type, accountId: accountId || undefined });
       close();
     } finally {
       setSaving(false);
@@ -227,6 +235,31 @@ export function EntryEditor() {
                 </label>
               )}
             </div>
+            {accounts.length > 0 && (
+              <div className="editor-row">
+                <label className="field">
+                  <span>Calendar</span>
+                  {editing?.accountId ? (
+                    <select className="select" disabled value={editing.accountId}>
+                      {accounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name} (synced)
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <select className="select" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+                      <option value="">Cal (local)</option>
+                      {accounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </label>
+              </div>
+            )}
             {type === "link" && (
               <label className="field">
                 <span>URL</span>

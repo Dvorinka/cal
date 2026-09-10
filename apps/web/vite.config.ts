@@ -27,6 +27,7 @@ export default defineConfig(({ mode }) => {
           ]
         },
         workbox: {
+          importScripts: ["/sw-push.js"],
           runtimeCaching: [
             {
               urlPattern: ({ url }) => url.pathname.startsWith("/api/entries") || url.pathname.startsWith("/api/holidays"),

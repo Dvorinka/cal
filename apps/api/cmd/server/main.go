@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"cal/apps/api/internal/calendar"
+	"cal/apps/api/internal/caldav"
 	"cal/apps/api/internal/httpapi"
 	"cal/apps/api/internal/store"
 )
@@ -24,6 +25,8 @@ func main() {
 
 	s := store.New(db)
 	go httpapi.RefreshFeedsLoop(context.Background(), s, 30*time.Minute)
+	go httpapi.PushLoop(context.Background(), s, time.Minute)
+	go caldavLoop(context.Background(), s)
 
 	router := httpapi.New(s, calendar.NewHolidayCache())
 	addr := ":" + env("PORT", "8080")
@@ -39,4 +42,20 @@ func env(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// caldavLoop syncs every connected account every 15 minutes.
+func caldavLoop(ctx context.Context, s *store.Store) {
+	syncer := caldav.NewSyncer(s)
+	syncer.SyncAll(ctx)
+	ticker := time.NewTicker(15 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			syncer.SyncAll(ctx)
+		}
+	}
 }

@@ -1,5 +1,6 @@
 import {
   CalApi,
+  type CaldavAccount,
   type Country,
   type Entry,
   type EntryInput,
@@ -55,6 +56,11 @@ interface PlannerState {
   loadHolidays: (country: string, year: number) => Promise<void>;
   loadCountries: () => Promise<void>;
   loadFeeds: () => Promise<void>;
+  accounts: CaldavAccount[];
+  loadAccounts: () => Promise<void>;
+  addAccount: (input: { name?: string; url: string; username: string; password: string }) => Promise<boolean>;
+  removeAccount: (id: string) => Promise<void>;
+  syncAccount: (id: string) => Promise<void>;
   loadFeedEvents: (params: { from: string; to: string }) => Promise<void>;
   addFeed: (input: { name: string; url: string; color?: string }) => Promise<boolean>;
   removeFeed: (id: string) => Promise<void>;
@@ -71,6 +77,7 @@ export const usePlanner = create<PlannerState>((set, get) => ({
   entries: readCachedEntries(),
   feedEvents: [],
   feeds: [],
+  accounts: [],
   holidays: [],
   countries: [],
   settings: readCachedSettings(),
@@ -285,6 +292,48 @@ export const usePlanner = create<PlannerState>((set, get) => ({
       get().toast("Feed refreshed");
     } catch (error) {
       get().toast(error instanceof Error ? error.message : "Failed to refresh feed");
+    }
+  },
+
+  async loadAccounts() {
+    try {
+      const accounts = await get().api.caldavAccounts();
+      set({ accounts });
+    } catch {
+      set({ accounts: [] });
+    }
+  },
+
+  async addAccount(input) {
+    try {
+      await get().api.addCaldavAccount(input);
+      await get().loadAccounts();
+      get().toast("Calendar connected — syncing");
+      return true;
+    } catch (error) {
+      get().toast(error instanceof Error ? error.message : "Failed to connect");
+      return false;
+    }
+  },
+
+  async removeAccount(id) {
+    try {
+      await get().api.deleteCaldavAccount(id);
+      set({ accounts: get().accounts.filter((a) => a.id !== id), entries: get().entries.filter((e) => e.accountId !== id) });
+      get().toast("Calendar removed — its events stay deleted locally");
+    } catch (error) {
+      get().toast(error instanceof Error ? error.message : "Failed to remove");
+    }
+  },
+
+  async syncAccount(id) {
+    try {
+      await get().api.syncCaldav(id);
+      await get().loadAccounts();
+      await get().loadEntries({});
+      get().toast("Synced");
+    } catch (error) {
+      get().toast(error instanceof Error ? error.message : "Sync failed");
     }
   },
 

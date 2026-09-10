@@ -28,7 +28,8 @@ type User struct {
 // Times are rendered as HH:MM strings to keep the API surface simple.
 const entryCols = `id::text, title, content, type, link_url, date::text,
 	to_char(start_time, 'HH24:MI'), to_char(end_time, 'HH24:MI'),
-	completed, color, tags, recur, remind, created_at`
+	completed, color, tags, recur, remind, created_at,
+	account_id::text, external_uid, external_href, external_etag, dirty`
 
 type Entry struct {
 	ID        string    `json:"id"`
@@ -43,13 +44,20 @@ type Entry struct {
 	Color     string    `json:"color"`
 	Tags      []string  `json:"tags"`
 	Recur     string    `json:"recur"`
-	Remind    *int      `json:"remind,omitempty"`
-	CreatedAt time.Time `json:"createdAt"`
+	Remind       *int      `json:"remind,omitempty"`
+	CreatedAt    time.Time `json:"createdAt"`
+	OwnerID      string    `json:"-"`
+	AccountID    *string   `json:"accountId,omitempty"`
+	ExternalUID  *string   `json:"-"`
+	ExternalHref *string   `json:"-"`
+	ExternalETag *string   `json:"-"`
+	Dirty        bool      `json:"-"`
 }
 
 func (e *Entry) scan(row interface{ Scan(...any) error }) error {
 	return row.Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date,
-		&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.CreatedAt)
+		&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.CreatedAt,
+		&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty)
 }
 
 type Settings struct {
@@ -82,6 +90,7 @@ type EntryInput struct {
 	Tags      []string `json:"tags"`
 	Recur     string   `json:"recur"`
 	Remind    *int     `json:"remind"`
+	AccountID *string  `json:"accountId"`
 }
 
 type EntryPatch struct {
@@ -222,11 +231,12 @@ func (s *Store) CreateEntry(ctx context.Context, userID string, input EntryInput
 	}
 	var e Entry
 	err := s.db.QueryRow(ctx, `
-		INSERT INTO entries (user_id, title, content, type, link_url, date, start_time, end_time, color, tags, recur, remind)
-		VALUES ($1, $2, $3, $4, $5, $6, nullif($7, '')::time, nullif($8, '')::time, $9, $10, coalesce(nullif($11, ''), 'none'), $12)
+		INSERT INTO entries (user_id, title, content, type, link_url, date, start_time, end_time, color, tags, recur, remind, account_id, dirty)
+		VALUES ($1, $2, $3, $4, $5, $6, nullif($7, '')::time, nullif($8, '')::time, $9, $10, coalesce(nullif($11, ''), 'none'), $12, $13::uuid, $13 IS NOT NULL)
 		RETURNING `+entryCols+`
-	`, userID, input.Title, input.Content, input.Type, input.LinkURL, input.Date, input.StartTime, input.EndTime, input.Color, input.Tags, input.Recur, input.Remind).
-		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.CreatedAt)
+	`, userID, input.Title, input.Content, input.Type, input.LinkURL, input.Date, input.StartTime, input.EndTime, input.Color, input.Tags, input.Recur, input.Remind, input.AccountID).
+		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.CreatedAt,
+			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty)
 	return e, err
 }
 
@@ -293,18 +303,24 @@ func (s *Store) UpdateEntry(ctx context.Context, userID, id string, patch EntryP
 		return Entry{}, ErrInvalid
 	}
 
+	// Rescheduling clears the reminder so it can fire again.
+	resetRemind := patch.Remind != nil || patch.StartTime != nil || patch.Date != nil
+
 	var e Entry
 	err = tx.QueryRow(ctx, `
 		UPDATE entries
 		SET title = $1, content = $2, type = $3, link_url = $4, date = $5,
 		    start_time = nullif($6, '')::time, end_time = nullif($7, '')::time,
-		    completed = $8, color = $9, tags = $10, recur = $11, remind = $12
+		    completed = $8, color = $9, tags = $10, recur = $11, remind = $12,
+		    dirty = CASE WHEN account_id IS NOT NULL THEN true ELSE dirty END,
+		    reminded_at = CASE WHEN $15 THEN NULL ELSE reminded_at END
 		WHERE id = $13 AND user_id = $14
 		RETURNING `+entryCols+`
 	`, current.Title, current.Content, current.Type, current.LinkURL, current.Date,
 		strOrEmpty(current.StartTime), strOrEmpty(current.EndTime),
-		current.Completed, current.Color, current.Tags, current.Recur, current.Remind, id, userID).
-		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.CreatedAt)
+		current.Completed, current.Color, current.Tags, current.Recur, current.Remind, id, userID, resetRemind).
+		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.CreatedAt,
+			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty)
 	if err != nil {
 		return Entry{}, err
 	}
@@ -463,6 +479,284 @@ func (s *Store) UserByApiToken(ctx context.Context, token string) (User, error) 
 		return User{}, ErrNotFound
 	}
 	return u, err
+}
+
+// ---------- Push ----------
+
+type PushSubscription struct {
+	ID       string `json:"id"`
+	Endpoint string `json:"endpoint"`
+	P256dh   string `json:"p256dh"`
+	Auth     string `json:"auth"`
+}
+
+func (s *Store) UpsertPushSub(ctx context.Context, userID, endpoint, p256dh, auth string) error {
+	_, err := s.db.Exec(ctx, `
+		INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (endpoint) DO UPDATE SET p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth, user_id = EXCLUDED.user_id
+	`, uuid.NewString(), userID, endpoint, p256dh, auth)
+	return err
+}
+
+func (s *Store) DeletePushSub(ctx context.Context, endpoint string) error {
+	_, err := s.db.Exec(ctx, `DELETE FROM push_subscriptions WHERE endpoint = $1`, endpoint)
+	return err
+}
+
+func (s *Store) PushSubs(ctx context.Context, userID string) ([]PushSubscription, error) {
+	rows, err := s.db.Query(ctx, `SELECT id::text, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = $1`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	subs := []PushSubscription{}
+	for rows.Next() {
+		var sub PushSubscription
+		if err := rows.Scan(&sub.ID, &sub.Endpoint, &sub.P256dh, &sub.Auth); err != nil {
+			return nil, err
+		}
+		subs = append(subs, sub)
+	}
+	return subs, rows.Err()
+}
+
+// DueReminders returns entries whose reminder moment has arrived but has not
+// been pushed yet. Entry.OwnerID carries the owning user.
+func (s *Store) DueReminders(ctx context.Context) ([]Entry, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT `+entryCols+`, user_id::text FROM entries
+		WHERE remind IS NOT NULL AND reminded_at IS NULL AND start_time IS NOT NULL
+		  AND date = CURRENT_DATE
+		  AND (date + start_time - (remind || ' minutes')::interval) <= now()
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var entries []Entry
+	for rows.Next() {
+		var e Entry
+		if err := rows.Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date,
+			&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.CreatedAt,
+			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty, &e.OwnerID); err != nil {
+			return nil, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
+func (s *Store) MarkReminded(ctx context.Context, id string) error {
+	_, err := s.db.Exec(ctx, `UPDATE entries SET reminded_at = now() WHERE id = $1`, id)
+	return err
+}
+
+// ServerConfig reads/writes the singleton config map (VAPID keys, crypto key).
+func (s *Store) ServerConfig(ctx context.Context, key string) (string, error) {
+	var v string
+	err := s.db.QueryRow(ctx, `SELECT value FROM server_config WHERE key = $1`, key).Scan(&v)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return v, err
+}
+
+func (s *Store) SetServerConfig(ctx context.Context, key, value string) error {
+	_, err := s.db.Exec(ctx, `
+		INSERT INTO server_config (key, value) VALUES ($1, $2)
+		ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+	`, key, value)
+	return err
+}
+
+// ---------- CalDAV ----------
+
+type CaldavAccount struct {
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	URL         string     `json:"url"`
+	Username    string     `json:"username"`
+	PasswordEnc string     `json:"-"`
+	Color       string     `json:"color"`
+	LastSynced  *time.Time `json:"lastSynced,omitempty"`
+}
+
+func (s *Store) CreateCaldavAccount(ctx context.Context, userID, name, url, username, passwordEnc, color string) (CaldavAccount, error) {
+	var a CaldavAccount
+	err := s.db.QueryRow(ctx, `
+		INSERT INTO caldav_accounts (id, user_id, name, url, username, password_enc, color)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING id::text, name, url, username, color
+	`, uuid.NewString(), userID, name, url, username, passwordEnc, color).
+		Scan(&a.ID, &a.Name, &a.URL, &a.Username, &a.Color)
+	return a, err
+}
+
+func (s *Store) CaldavAccounts(ctx context.Context, userID string) ([]CaldavAccount, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT id::text, name, url, username, color, last_synced FROM caldav_accounts WHERE user_id = $1 ORDER BY created_at
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []CaldavAccount{}
+	for rows.Next() {
+		var a CaldavAccount
+		if err := rows.Scan(&a.ID, &a.Name, &a.URL, &a.Username, &a.Color, &a.LastSynced); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// CaldavAccountWithSecret returns the account incl. the encrypted password.
+func (s *Store) CaldavAccountWithSecret(ctx context.Context, id string) (CaldavAccount, string, error) {
+	var a CaldavAccount
+	var userID string
+	err := s.db.QueryRow(ctx, `
+		SELECT id::text, user_id::text, name, url, username, password_enc, color FROM caldav_accounts WHERE id = $1
+	`, id).Scan(&a.ID, &userID, &a.Name, &a.URL, &a.Username, &a.PasswordEnc, &a.Color)
+	return a, userID, err
+}
+
+// AccountOwner pairs an account with its user for the background sync loop.
+type AccountOwner struct {
+	Account CaldavAccount
+	UserID  string
+}
+
+func (s *Store) AllCaldavAccounts(ctx context.Context) ([]AccountOwner, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT id::text, user_id::text, name, url, username, password_enc, color FROM caldav_accounts
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AccountOwner
+	for rows.Next() {
+		var o AccountOwner
+		if err := rows.Scan(&o.Account.ID, &o.UserID, &o.Account.Name, &o.Account.URL,
+			&o.Account.Username, &o.Account.PasswordEnc, &o.Account.Color); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) DeleteCaldavAccount(ctx context.Context, userID, id string) error {
+	_, err := s.db.Exec(ctx, `DELETE FROM caldav_accounts WHERE id = $1 AND user_id = $2`, id, userID)
+	return err
+}
+
+func (s *Store) TouchCaldavSync(ctx context.Context, id string) error {
+	_, err := s.db.Exec(ctx, `UPDATE caldav_accounts SET last_synced = now() WHERE id = $1`, id)
+	return err
+}
+
+// AccountEntries returns all entries belonging to a CalDAV account.
+func (s *Store) AccountEntries(ctx context.Context, userID, accountID string) ([]Entry, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT `+entryCols+` FROM entries WHERE user_id = $1 AND account_id = $2
+	`, userID, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Entry{}
+	for rows.Next() {
+		var e Entry
+		if err := e.scan(rows); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// UpsertSyncedEntry inserts or refreshes a pulled remote event. The caller
+// supplies the full row; dirty stays false since the remote is authoritative.
+func (s *Store) UpsertSyncedEntry(ctx context.Context, userID, accountID string, e Entry) error {
+	_, err := s.db.Exec(ctx, `
+		INSERT INTO entries (id, user_id, title, content, type, date, start_time, end_time, color, external_uid, external_href, external_etag, account_id)
+		VALUES ($1, $2, $3, $4, 'event', $5, nullif($6, '')::time, nullif($7, '')::time, $8, $9, $10, $11, $12)
+		ON CONFLICT (external_uid) WHERE external_uid IS NOT NULL DO UPDATE SET
+			title = EXCLUDED.title, content = EXCLUDED.content, date = EXCLUDED.date,
+			start_time = EXCLUDED.start_time, end_time = EXCLUDED.end_time,
+			external_href = EXCLUDED.external_href, external_etag = EXCLUDED.external_etag,
+			dirty = false
+	`, e.ID, userID, e.Title, e.Content, e.Date, strOrEmpty(e.StartTime), strOrEmpty(e.EndTime), e.Color,
+		e.ExternalUID, e.ExternalHref, e.ExternalETag, accountID)
+	return err
+}
+
+// DeleteSyncedMissing removes synced entries whose UIDs disappeared remotely.
+func (s *Store) DeleteSyncedMissing(ctx context.Context, userID, accountID string, keepUIDs []string) error {
+	// Tombstone only entries that came from the server (not locally-created,
+	// not-yet-pushed ones — those have an href but may just be pending).
+	_, err := s.db.Exec(ctx, `
+		DELETE FROM entries
+		WHERE user_id = $1 AND account_id = $2 AND external_uid IS NOT NULL
+		  AND external_uid != ALL($3) AND dirty = false
+	`, userID, accountID, keepUIDs)
+	return err
+}
+
+func (s *Store) ClearDirty(ctx context.Context, id, etag string) error {
+	_, err := s.db.Exec(ctx, `UPDATE entries SET dirty = false, external_etag = coalesce(nullif($2, ''), external_etag) WHERE id = $1`, id, etag)
+	return err
+}
+
+func (s *Store) SetExternalRef(ctx context.Context, id, uid, href, etag string) error {
+	_, err := s.db.Exec(ctx, `
+		UPDATE entries SET external_uid = $2, external_href = $3, external_etag = $4, dirty = false WHERE id = $1
+	`, id, uid, href, etag)
+	return err
+}
+
+// Tombstone records a local delete that must propagate to the server.
+func (s *Store) Tombstone(ctx context.Context, accountID, href string) error {
+	_, err := s.db.Exec(ctx, `
+		INSERT INTO sync_tombstones (account_id, href) VALUES ($1, $2) ON CONFLICT DO NOTHING
+	`, accountID, href)
+	return err
+}
+
+func (s *Store) Tombstones(ctx context.Context, accountID string) ([]string, error) {
+	rows, err := s.db.Query(ctx, `SELECT href FROM sync_tombstones WHERE account_id = $1`, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var h string
+		if err := rows.Scan(&h); err != nil {
+			return nil, err
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) ClearTombstone(ctx context.Context, accountID, href string) error {
+	_, err := s.db.Exec(ctx, `DELETE FROM sync_tombstones WHERE account_id = $1 AND href = $2`, accountID, href)
+	return err
+}
+
+// EntryExternalRef returns the href needed to tombstone a synced entry.
+func (s *Store) EntryExternalRef(ctx context.Context, userID, id string) (accountID, href string, ok bool, err error) {
+	err = s.db.QueryRow(ctx, `
+		SELECT account_id::text, external_href FROM entries WHERE id = $1 AND user_id = $2 AND external_href IS NOT NULL
+	`, id, userID).Scan(&accountID, &href)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", "", false, nil
+	}
+	return accountID, href, err == nil, err
 }
 
 // ---------- Feeds ----------

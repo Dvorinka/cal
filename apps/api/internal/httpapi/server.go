@@ -70,6 +70,14 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authed.POST("/import", server.importICS)
 	authed.POST("/settings/widget-token", server.rotateWidgetToken)
 	authed.POST("/settings/api-token", server.rotateApiToken)
+	authed.GET("/push/vapid", server.pushVapid)
+	authed.POST("/push/subscribe", server.subscribePush)
+	authed.POST("/push/unsubscribe", server.unsubscribePush)
+	authed.GET("/caldav", server.listCaldav)
+	authed.POST("/caldav", server.createCaldav)
+	authed.POST("/caldav/test", server.testCaldav)
+	authed.DELETE("/caldav/:id", server.deleteCaldav)
+	authed.POST("/caldav/:id/sync", server.syncCaldav)
 
 	router.GET("/api/widget/today", server.widgetToday)
 	router.POST("/api/mcp", server.mcp)
@@ -150,6 +158,16 @@ func (s *Server) createEntry(c *gin.Context) {
 		c.String(http.StatusBadRequest, "invalid entry")
 		return
 	}
+	// accountId must reference one of the caller's CalDAV accounts.
+	if input.AccountID != nil && *input.AccountID != "" {
+		_, owner, err := s.store.CaldavAccountWithSecret(c.Request.Context(), *input.AccountID)
+		if err != nil || owner != currentUser(c).ID {
+			c.String(http.StatusBadRequest, "unknown calendar account")
+			return
+		}
+	} else {
+		input.AccountID = nil
+	}
 	entry, err := s.store.CreateEntry(c.Request.Context(), currentUser(c).ID, input)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "failed to create entry")
@@ -186,7 +204,12 @@ func (s *Server) updateEntry(c *gin.Context) {
 }
 
 func (s *Server) deleteEntry(c *gin.Context) {
-	err := s.store.DeleteEntry(c.Request.Context(), currentUser(c).ID, c.Param("id"))
+	userID, id := currentUser(c).ID, c.Param("id")
+	// A synced delete writes a tombstone so the next sync can DELETE remotely.
+	if accountID, href, ok, err := s.store.EntryExternalRef(c.Request.Context(), userID, id); err == nil && ok {
+		_ = s.store.Tombstone(c.Request.Context(), accountID, href)
+	}
+	err := s.store.DeleteEntry(c.Request.Context(), userID, id)
 	if errors.Is(err, store.ErrNotFound) {
 		c.String(http.StatusNotFound, "entry not found")
 		return
@@ -413,7 +436,7 @@ func validEntry(input store.EntryInput) bool {
 }
 
 func validType(typ string) bool {
-	return typ == "task" || typ == "note" || typ == "link"
+	return typ == "task" || typ == "note" || typ == "link" || typ == "event"
 }
 
 func validDate(date string) bool {

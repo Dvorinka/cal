@@ -324,6 +324,109 @@ paths:
           description: JSON-RPC response
         "401":
           description: Invalid API token
+  /caldav:
+    get:
+      summary: List connected CalDAV calendar accounts
+      responses:
+        "200":
+          description: Accounts (passwords never leave the server)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CaldavAccount"
+    post:
+      summary: Connect a CalDAV collection (verified before saving; password AES-encrypted at rest)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                name:
+                  type: string
+                url:
+                  type: string
+                  description: Calendar collection URL
+                username:
+                  type: string
+                password:
+                  type: string
+                color:
+                  type: string
+      responses:
+        "201":
+          description: Connected account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CaldavAccount"
+        "502":
+          description: Could not reach or authenticate the server
+  /caldav/test:
+    post:
+      summary: Probe credentials without saving
+      responses:
+        "204":
+          description: Connection OK
+        "502":
+          description: Connection failed
+  /caldav/{id}:
+    delete:
+      summary: Disconnect; synced entries are removed locally
+      responses:
+        "204":
+          description: Removed
+  /caldav/{id}/sync:
+    post:
+      summary: Force a two-way sync (push dirty changes, pull remote changes)
+      responses:
+        "204":
+          description: Synced
+        "502":
+          description: Remote unreachable
+  /push/vapid:
+    get:
+      responses:
+        "200":
+          description: VAPID public key for pushManager.subscribe
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  publicKey:
+                    type: string
+  /push/subscribe:
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [endpoint, keys]
+              properties:
+                endpoint:
+                  type: string
+                keys:
+                  type: object
+                  properties:
+                    p256dh:
+                      type: string
+                    auth:
+                      type: string
+      responses:
+        "204":
+          description: Subscription stored
+  /push/unsubscribe:
+    post:
+      responses:
+        "204":
+          description: Subscription removed
   /export:
     get:
       summary: Download all user data as JSON
@@ -539,6 +642,23 @@ components:
         color:
           type: string
         fetchedAt:
+          type: string
+          format: date-time
+    CaldavAccount:
+      type: object
+      required: [id, name, url, username, color]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        url:
+          type: string
+        username:
+          type: string
+        color:
+          type: string
+        lastSynced:
           type: string
           format: date-time
     FeedEvent:
