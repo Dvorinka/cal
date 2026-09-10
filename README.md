@@ -7,6 +7,10 @@ recurring tasks, holidays for 40+ regions, dark mode, keyboard-first, installabl
 as a PWA. No accounts to create on someone else's server; one `docker compose up`
 and it's yours.
 
+![Month view](docs/screenshot-month.png)
+
+![Week view, dark theme](docs/screenshot-week-dark.png)
+
 ## Features
 
 - **Three real views** — month grid, week and day time grids with an all-day row
@@ -44,6 +48,9 @@ docker compose -f infra/docker-compose.yml up --build
 ```
 
 Web: http://localhost:5173 — API: http://localhost:8080
+
+Ports are overridable when they collide with other stacks:
+`DB_PORT=5434 API_PORT=8082 WEB_PORT=5273 docker compose -f infra/docker-compose.yml up --build`
 
 ## Development
 

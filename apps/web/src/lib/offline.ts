@@ -1,4 +1,4 @@
-import type { Entry, Settings } from "@cal/api-client";
+import type { Entry, Settings, User } from "@cal/api-client";
 
 const prefix = "cal:";
 
@@ -8,6 +8,22 @@ export function readCachedEntries(): Entry[] {
 
 export function cacheEntries(entries: Entry[]): void {
   write("entries", entries);
+}
+
+export function readCachedUser(): User | undefined {
+  return read<User>("user");
+}
+
+export function cacheUser(user: User): void {
+  write("user", user);
+}
+
+export function clearCachedUser(): void {
+  try {
+    localStorage.removeItem(prefix + "user");
+  } catch {
+    // no storage
+  }
 }
 
 export function readCachedSettings(): Settings {

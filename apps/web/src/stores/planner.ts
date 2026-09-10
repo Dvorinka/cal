@@ -9,7 +9,16 @@ import {
   type User,
 } from "@cal/api-client";
 import { create } from "zustand";
-import { cacheEntries, cacheSettings, readCachedEntries, readCachedSettings } from "../lib/offline";
+import {
+  cacheEntries,
+  cacheSettings,
+  cacheUser,
+  clearCachedUser,
+  readCachedEntries,
+  readCachedSettings,
+  readCachedUser,
+} from "../lib/offline";
+import { ApiError } from "@cal/api-client";
 
 export interface Toast {
   id: number;
@@ -62,10 +71,17 @@ export const usePlanner = create<PlannerState>((set, get) => ({
       const user = await get().api.me();
       const settings = await get().api.settings();
       cacheSettings(settings);
-      set({ user, settings, booted: true });
+      cacheUser(user);
+      set({ user, settings, booted: true, offline: false });
       void get().loadCountries();
-    } catch {
-      set({ user: undefined, booted: true });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        set({ user: undefined, booted: true });
+        return;
+      }
+      // Network/server failure: fall back to the cached session if present.
+      const user = readCachedUser();
+      set({ user, booted: true, offline: user !== undefined });
     }
   },
 
@@ -73,7 +89,8 @@ export const usePlanner = create<PlannerState>((set, get) => ({
     const user = await get().api.login({ email, password });
     const settings = await get().api.settings();
     cacheSettings(settings);
-    set({ user, settings, error: undefined });
+    cacheUser(user);
+    set({ user, settings, error: undefined, offline: false });
     void get().loadCountries();
   },
 
@@ -81,7 +98,8 @@ export const usePlanner = create<PlannerState>((set, get) => ({
     const user = await get().api.register({ email, password });
     const settings = await get().api.settings();
     cacheSettings(settings);
-    set({ user, settings, error: undefined });
+    cacheUser(user);
+    set({ user, settings, error: undefined, offline: false });
     void get().loadCountries();
   },
 
@@ -89,6 +107,7 @@ export const usePlanner = create<PlannerState>((set, get) => ({
     try {
       await get().api.logout();
     } finally {
+      clearCachedUser();
       set({ user: undefined, entries: [], holidays: [] });
     }
   },
