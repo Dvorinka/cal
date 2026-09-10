@@ -530,6 +530,25 @@ func (s *Store) FeedCaches(ctx context.Context, userID string) (map[Feed]string,
 	return out, rows.Err()
 }
 
+// AllFeeds returns every feed across users — used by the background sync loop.
+func (s *Store) AllFeeds(ctx context.Context) (map[string]Feed, error) {
+	rows, err := s.db.Query(ctx, `SELECT id::text, user_id::text, name, url, color, fetched_at FROM feeds`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]Feed{}
+	var userID string
+	for rows.Next() {
+		var f Feed
+		if err := rows.Scan(&f.ID, &userID, &f.Name, &f.URL, &f.Color, &f.FetchedAt); err != nil {
+			return nil, err
+		}
+		out[userID+"/"+f.ID] = f
+	}
+	return out, rows.Err()
+}
+
 // RefreshFeedCache stores the latest ICS body for a feed.
 func (s *Store) RefreshFeedCache(ctx context.Context, userID, feedID, ics string) error {
 	_, err := s.db.Exec(ctx, `

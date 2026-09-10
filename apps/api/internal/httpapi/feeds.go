@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"io"
 	"log"
@@ -253,6 +254,40 @@ func (s *Server) rotateWidgetToken(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"widgetToken": token})
+}
+
+// RefreshFeedsLoop re-fetches every subscribed feed on an interval so the
+// calendar stays current without manual refreshes. Failures are logged and
+// skipped — a dead feed keeps its last cache.
+func RefreshFeedsLoop(ctx context.Context, s *store.Store, every time.Duration) {
+	tick := func() {
+		feeds, err := s.AllFeeds(ctx)
+		if err != nil {
+			log.Printf("feeds sync: %v", err)
+			return
+		}
+		for key, feed := range feeds {
+			userID := key[:strings.IndexByte(key, '/')]
+			ics, err := fetchICS(feed.URL)
+			if err != nil {
+				continue
+			}
+			if err := s.RefreshFeedCache(ctx, userID, feed.ID, ics); err != nil {
+				log.Printf("feeds sync %s: %v", feed.Name, err)
+			}
+		}
+	}
+	tick()
+	ticker := time.NewTicker(every)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			tick()
+		}
+	}
 }
 
 func (s *Server) rotateApiToken(c *gin.Context) {

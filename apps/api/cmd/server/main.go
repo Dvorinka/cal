@@ -22,7 +22,10 @@ func main() {
 	}
 	defer db.Close()
 
-	router := httpapi.New(store.New(db), calendar.NewHolidayCache())
+	s := store.New(db)
+	go httpapi.RefreshFeedsLoop(context.Background(), s, 30*time.Minute)
+
+	router := httpapi.New(s, calendar.NewHolidayCache())
 	addr := ":" + env("PORT", "8080")
 	slog.Info("api listening", "addr", addr)
 	if err := router.Run(addr); err != nil {
