@@ -10,6 +10,9 @@ import { Sidebar } from "./components/Sidebar";
 import { Toasts } from "./components/Toasts";
 import { CalendarPage } from "./pages/CalendarPage";
 import { BoardsPage } from "./pages/BoardsPage";
+import { SharedBoardPage } from "./pages/SharedBoardPage";
+import { TagsPage } from "./pages/TagsPage";
+import { TrashPage } from "./pages/TrashPage";
 import { FilesPage } from "./pages/FilesPage";
 import { LinksPage } from "./pages/LinksPage";
 import { NotesPage } from "./pages/NotesPage";
@@ -104,6 +107,15 @@ function Shell() {
     return () => window.clearInterval(timer);
   }, [user]);
 
+  // Public shared boards render without auth.
+  if (window.location.pathname.startsWith("/board/")) {
+    return (
+      <Routes>
+        <Route path="/board/:token" element={<SharedBoardPage />} />
+      </Routes>
+    );
+  }
+
   if (!user) return <AuthPanel />;
 
   return (
@@ -120,6 +132,8 @@ function Shell() {
           <Route path="/boards" element={<BoardsPage />} />
           <Route path="/boards/:boardId" element={<BoardsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/trash" element={<TrashPage />} />
+          <Route path="/tags" element={<TagsPage />} />
           <Route path="/share" element={<ShareTarget />} />
           <Route path="/entry/:id" element={<EntryDeepLink />} />
           <Route path="*" element={<Navigate to="/" replace />} />

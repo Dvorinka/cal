@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, Link2, Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { Check, Link2, Pencil, RotateCcw, Timer, Trash2 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
@@ -10,6 +10,7 @@ export function ContextMenu() {
   const openEdit = useUi((state) => state.openEdit);
   const updateEntry = usePlanner((state) => state.updateEntry);
   const deleteEntry = usePlanner((state) => state.deleteEntry);
+  const api = usePlanner((state) => state.api);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -66,6 +67,16 @@ export function ContextMenu() {
             >
               {entry.completed ? <RotateCcw size={14} /> : <Check size={14} />}
               {entry.completed ? "Reopen" : "Mark complete"}
+            </button>
+          )}
+          {entry.type === "task" && (
+            <button
+              type="button"
+              onClick={() => {
+                void api.startTimer(entry.id).then(() => setMenu(undefined)).catch(() => setMenu(undefined));
+              }}
+            >
+              <Timer size={14} /> Start timer
             </button>
           )}
           {isLink && (

@@ -2521,3 +2521,32 @@ button {
 .card-checks { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--text-3); }
 .card-checks.all { color: var(--accent); }
 .kanban-count.over { color: #dc2626; font-weight: 700; }
+
+/* timer pill */
+.timer-pill { display: flex; align-items: center; gap: 8px; margin: 8px 12px; padding: 7px 10px; border: 1px solid var(--accent); border-radius: 999px; font-size: 12px; background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.timer-icon { color: var(--accent); }
+.timer-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timer-clock { font-variant-numeric: tabular-nums; font-weight: 650; }
+.timer-stop { display: inline-flex; background: none; border: 0; color: var(--text-2); cursor: pointer; padding: 2px; }
+.timer-stop:hover { color: var(--accent); }
+
+/* trash + tags + shared board */
+.trash-list { list-style: none; margin: 0; padding: 0 24px; }
+.trash-row { display: flex; align-items: center; gap: 10px; padding: 9px 8px; border-bottom: 1px solid var(--line); }
+.trash-type { font-size: 11px; color: var(--text-3); width: 52px; text-transform: capitalize; }
+.trash-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-open { background: none; border: 0; font: inherit; color: var(--text-1); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; padding: 0; }
+.tag-open:hover { color: var(--accent); }
+.trash-date { font-size: 11.5px; color: var(--text-3); }
+.tag-n { color: var(--text-3); margin-left: 2px; }
+.icon-btn.danger:hover { color: #dc2626; }
+.shared-board { min-height: 100vh; background: var(--bg); color: var(--text-1); padding: 40px 24px; }
+.shared-head { max-width: 1200px; margin: 0 auto 20px; }
+.shared-head h1 { font-size: 24px; }
+.shared-desc { color: var(--text-2); }
+.shared-target { font-size: 12px; color: var(--accent); font-weight: 600; }
+.shared-kanban { padding: 0; }
+.note-templates { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.bulk-bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; margin: 0 0 10px; border: 1px solid var(--accent); border-radius: var(--r-sm); background: color-mix(in srgb, var(--accent) 8%, transparent); font-size: 12.5px; }
+.bulk-bar > span { font-weight: 650; }
+.board-desc { margin: 0 24px 10px; color: var(--text-2); font-size: 13px; max-width: 640px; }

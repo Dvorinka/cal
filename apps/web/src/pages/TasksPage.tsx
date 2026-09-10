@@ -1,4 +1,4 @@
-import { Check, Plus } from "lucide-react";
+import { Check, CheckSquare, Plus, Square, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { allTags, groupTasks } from "../lib/entries";
@@ -8,20 +8,43 @@ import { usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
 import type { Entry } from "@cal/api-client";
 
-function TaskRow({ entry, muted }: { entry: Entry; muted?: boolean }) {
+function TaskRow({
+  entry,
+  muted,
+  selecting,
+  selected,
+  onSelect,
+}: {
+  entry: Entry;
+  muted?: boolean;
+  selecting?: boolean;
+  selected?: boolean;
+  onSelect?: (id: string) => void;
+}) {
   const openEdit = useUi((state) => state.openEdit);
   const updateEntry = usePlanner((state) => state.updateEntry);
   return (
     <li className={`task-row ${entry.completed ? "done" : ""} ${muted ? "muted" : ""}`}>
-      <button
-        type="button"
-        className="tickbox"
-        aria-label={entry.completed ? "Reopen" : "Complete"}
-        onClick={() => void updateEntry(entry.id, { completed: !entry.completed })}
-      >
-        {entry.completed && <Check size={12} strokeWidth={3} />}
-      </button>
-      <button type="button" className="row-title" onClick={() => openEdit(entry)}>
+      {selecting ? (
+        <button
+          type="button"
+          className="tickbox"
+          aria-label={selected ? "Deselect" : "Select"}
+          onClick={() => onSelect?.(entry.id)}
+        >
+          {selected ? <CheckSquare size={12} strokeWidth={3} /> : <Square size={12} />}
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="tickbox"
+          aria-label={entry.completed ? "Reopen" : "Complete"}
+          onClick={() => void updateEntry(entry.id, { completed: !entry.completed })}
+        >
+          {entry.completed && <Check size={12} strokeWidth={3} />}
+        </button>
+      )}
+      <button type="button" className="row-title" onClick={() => (selecting ? onSelect?.(entry.id) : openEdit(entry))}>
         {entry.title}
       </button>
       {entry.tags.map((tag) => (
@@ -39,9 +62,14 @@ export function TasksPage() {
   const entries = usePlanner((state) => state.entries);
   const loadEntries = usePlanner((state) => state.loadEntries);
   const createEntry = usePlanner((state) => state.createEntry);
+  const updateEntry = usePlanner((state) => state.updateEntry);
+  const deleteEntry = usePlanner((state) => state.deleteEntry);
+  const toast = usePlanner((state) => state.toast);
   const [tag, setTag] = useState<string>();
   const [quick, setQuick] = useState("");
   const [showDone, setShowDone] = useState(false);
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const today = todayIso();
 
   // The task list needs every entry, not just the visible calendar range.
@@ -69,10 +97,57 @@ export function TasksPage() {
     });
   }
 
+  function toggleSelect(id: string) {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function bulkComplete() {
+    for (const id of selected) await updateEntry(id, { completed: true });
+    toast(`${selected.size} completed`);
+    setSelected(new Set());
+    setSelecting(false);
+  }
+
+  async function bulkDelete() {
+    for (const id of selected) await deleteEntry(id);
+    toast(`${selected.size} moved to trash`);
+    setSelected(new Set());
+    setSelecting(false);
+  }
+
+  const rowProps = { selecting, onSelect: toggleSelect };
+
   return (
     <>
-      <PageHeader title="Tasks" sub={`${groups.overdue.length + groups.today.length + groups.upcoming.length} open`} />
+      <PageHeader title="Tasks" sub={`${groups.overdue.length + groups.today.length + groups.upcoming.length} open`}>
+        <button
+          type="button"
+          className={`btn btn-secondary btn-xs ${selecting ? "on" : ""}`}
+          onClick={() => {
+            setSelecting((v) => !v);
+            setSelected(new Set());
+          }}
+        >
+          {selecting ? `Done selecting (${selected.size})` : "Select"}
+        </button>
+      </PageHeader>
       <div className="page-scroll">
+        {selecting && selected.size > 0 && (
+          <div className="bulk-bar">
+            <span>{selected.size} selected</span>
+            <button type="button" className="btn btn-secondary btn-xs" onClick={() => void bulkComplete()}>
+              <Check size={12} /> Complete all
+            </button>
+            <button type="button" className="btn btn-secondary btn-xs" onClick={() => void bulkDelete()}>
+              <Trash2 size={12} /> Delete all
+            </button>
+          </div>
+        )}
         <div className="quick-add">
           <Plus size={15} />
           <input
@@ -106,18 +181,30 @@ export function TasksPage() {
           {groups.overdue.length > 0 && (
             <section className="panel">
               <h3 className="overdue">Overdue</h3>
-              <ul className="task-list">{groups.overdue.map((e) => <TaskRow key={e.id} entry={e} />)}</ul>
+              <ul className="task-list">
+                {groups.overdue.map((e) => (
+                  <TaskRow key={e.id} entry={e} selected={selected.has(e.id)} {...rowProps} />
+                ))}
+              </ul>
             </section>
           )}
           <section className="panel">
             <h3>Today</h3>
             {groups.today.length === 0 && <p className="panel-empty">Nothing due today.</p>}
-            <ul className="task-list">{groups.today.map((e) => <TaskRow key={e.id} entry={e} />)}</ul>
+            <ul className="task-list">
+              {groups.today.map((e) => (
+                <TaskRow key={e.id} entry={e} selected={selected.has(e.id)} {...rowProps} />
+              ))}
+            </ul>
           </section>
           {groups.upcoming.length > 0 && (
             <section className="panel">
               <h3>Upcoming</h3>
-              <ul className="task-list">{groups.upcoming.map((e) => <TaskRow key={e.id} entry={e} />)}</ul>
+              <ul className="task-list">
+                {groups.upcoming.map((e) => (
+                  <TaskRow key={e.id} entry={e} selected={selected.has(e.id)} {...rowProps} />
+                ))}
+              </ul>
             </section>
           )}
           {groups.done.length > 0 && (
@@ -125,7 +212,13 @@ export function TasksPage() {
               <button type="button" className="group-toggle" onClick={() => setShowDone(!showDone)}>
                 Done · {groups.done.length}
               </button>
-              {showDone && <ul className="task-list">{groups.done.map((e) => <TaskRow key={e.id} entry={e} muted />)}</ul>}
+              {showDone && (
+                <ul className="task-list">
+                  {groups.done.map((e) => (
+                    <TaskRow key={e.id} entry={e} muted selected={selected.has(e.id)} {...rowProps} />
+                  ))}
+                </ul>
+              )}
             </section>
           )}
         </div>

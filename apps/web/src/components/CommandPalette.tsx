@@ -122,6 +122,51 @@ export function CommandPalette() {
         },
       },
       {
+        id: "boards",
+        label: "Go to boards",
+        icon: <ArrowRight size={15} />,
+        run: () => {
+          close();
+          navigate("/boards");
+        },
+      },
+      {
+        id: "files",
+        label: "Go to files",
+        icon: <ArrowRight size={15} />,
+        run: () => {
+          close();
+          navigate("/files");
+        },
+      },
+      {
+        id: "tags",
+        label: "Go to tags",
+        icon: <ArrowRight size={15} />,
+        run: () => {
+          close();
+          navigate("/tags");
+        },
+      },
+      {
+        id: "timer",
+        label: "Start focus timer",
+        icon: <ArrowRight size={15} />,
+        run: () => {
+          close();
+          void api.startTimer().catch(() => {});
+        },
+      },
+      {
+        id: "agenda",
+        label: "Copy week agenda (markdown)",
+        icon: <ArrowRight size={15} />,
+        run: () => {
+          close();
+          void api.agenda(7).then((md) => navigator.clipboard.writeText(md));
+        },
+      },
+      {
         id: "theme",
         label: settings.theme === "dark" ? "Switch to light theme" : "Switch to dark theme",
         icon: settings.theme === "dark" ? <Sun size={15} /> : <Moon size={15} />,

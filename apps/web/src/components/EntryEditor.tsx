@@ -1,7 +1,7 @@
-import type { Board, BoardColumn, EntryType, Recur, Revision } from "@cal/api-client";
+import type { ActivityItem, Board, BoardColumn, EntryType, Recur, Revision } from "@cal/api-client";
 import { renderMarkdown } from "../lib/markdown";
 import { AnimatePresence, motion } from "framer-motion";
-import { CalendarClock, Check, History, Link2, Paperclip, Pin, StickyNote, Trash2 } from "lucide-react";
+import { CalendarClock, Check, History, Link2, ListOrdered, Paperclip, Pin, StickyNote, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
@@ -77,6 +77,8 @@ export function EntryEditor() {
   const [content, setContent] = useState("");
   const [noteMode, setNoteMode] = useState<"write" | "preview">("write");
   const [showHistory, setShowHistory] = useState(false);
+  const [showActivity, setShowActivity] = useState(false);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [revisions, setRevisions] = useState<Revision[]>([]);
   const [saving, setSaving] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
@@ -295,14 +297,33 @@ export function EntryEditor() {
                   </div>
                 </div>
                 {noteMode === "write" ? (
-                  <textarea
-                    ref={bodyRef}
-                    className="note-body"
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    placeholder={"# Heading\nWrite in markdown — **bold**, `code`, - [ ] todos, [links](url), [[wiki links]]"}
-                    aria-label="Note body"
-                  />
+                  <>
+                    {content.trim() === "" && (
+                      <div className="note-templates">
+                        {NOTE_TEMPLATES.map((t) => (
+                          <button
+                            key={t.label}
+                            type="button"
+                            className="tag-chip"
+                            onClick={() => {
+                              setContent(t.body);
+                              bodyRef.current?.focus();
+                            }}
+                          >
+                            {t.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <textarea
+                      ref={bodyRef}
+                      className="note-body"
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                      placeholder={"# Heading\nWrite in markdown — **bold**, `code`, - [ ] todos, [links](url), [[wiki links]]"}
+                      aria-label="Note body"
+                    />
+                  </>
                 ) : (
                   <div className="note-preview">
                     {content.trim() === "" ? (
@@ -537,6 +558,35 @@ export function EntryEditor() {
                 <Pin size={13} /> {editing.pinned ? "Pinned" : "Pin"}
               </button>
             )}
+            {editing && editing.boardId && (
+              <button
+                type="button"
+                className="history-toggle"
+                onClick={() => {
+                  const next = !showActivity;
+                  setShowActivity(next);
+                  if (next) void api.entryActivity(editing.id).then(setActivity).catch(() => {});
+                }}
+              >
+                <ListOrdered size={13} /> Activity {showActivity ? "▴" : "▾"}
+              </button>
+            )}
+            {editing && showActivity && (
+              <div className="history-list">
+                {activity.length === 0 && <p className="note-empty">No activity yet.</p>}
+                {activity.map((a) => (
+                  <div key={a.id} className="history-row">
+                    <div className="history-meta">
+                      <span className="history-title">{a.action}</span>
+                      <span className="history-when">
+                        {new Date(a.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        {a.detail ? ` — ${a.detail}` : ""}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             {editing && (
               <div className="history-wrap">
                 <button
@@ -630,3 +680,10 @@ function addHour(time: string): string {
   const [h, m] = time.split(":").map(Number);
   return `${String(Math.min(23, h + 1)).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
+
+const NOTE_TEMPLATES: { label: string; body: string }[] = [
+  { label: "Meeting notes", body: "# Meeting — \n\n**Attendees:** \n\n## Agenda\n- \n\n## Notes\n\n## Action items\n- [ ] \n" },
+  { label: "Daily standup", body: "**Yesterday:** \n\n**Today:** \n\n**Blocked by:** \n" },
+  { label: "Decision log", body: "# Decision: \n\n**Context:** \n\n**Options considered:**\n- \n\n**Chose:** \n\n**Why:** \n" },
+  { label: "Project brief", body: "# \n\n**Goal:** \n\n**Scope:** in / out\n\n**Milestones:**\n- [ ] \n\n**Open questions:**\n- \n" },
+];

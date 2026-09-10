@@ -194,6 +194,18 @@ func (s *Server) moveCard(c *gin.Context) {
 			go s.fireWebhooks(context.Background(), userID, "entry.updated", nil)
 		}
 	}
+	targetName, sourceName := "", ""
+	for _, col := range cols {
+		if body.ColumnID != nil && col.ID == *body.ColumnID {
+			targetName = col.Name
+		}
+		if entry.ColumnID != nil && col.ID == *entry.ColumnID {
+			sourceName = col.Name
+		}
+	}
+	if targetName != sourceName {
+		s.store.LogActivity(c.Request.Context(), userID, entryID, "moved", sourceName+" → "+targetName)
+	}
 	c.Status(http.StatusNoContent)
 }
 

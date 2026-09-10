@@ -523,6 +523,42 @@ paths:
   /cards/{id}/move:
     post:
       summary: Move card to column at fractional position
+  /timer/start:
+    post:
+      summary: Start the running focus timer {entryId?, note?}
+  /timer/stop:
+    post:
+      summary: Stop the running timer
+  /timer/current:
+    get:
+      summary: Running timer or 204
+  /time/summary:
+    get:
+      summary: todayMinutes, weekMinutes, perEntry
+  /entries/{id}/activity:
+    get:
+      summary: Card activity log
+  /trash:
+    get:
+      summary: Soft-deleted entries
+  /trash/{id}/restore:
+    post:
+      summary: Restore a trashed entry
+  /trash/{id}:
+    delete:
+      summary: Purge a trashed entry permanently
+  /boards/{id}/share:
+    post:
+      summary: Toggle a public board share token {on}
+  /shared/boards/{token}:
+    get:
+      summary: Public board columns + cards (no auth)
+  /tags:
+    get:
+      summary: Tag -> entry count map
+  /agenda:
+    get:
+      summary: Markdown agenda for ?days=N (1-60)
   /activity:
     get:
       summary: Date -> entry count map, last 120 days

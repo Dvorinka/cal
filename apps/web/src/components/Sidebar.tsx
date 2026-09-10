@@ -1,4 +1,5 @@
-import { CalendarDays, ChevronLeft, ChevronRight, FolderOpen, Link2, ListChecks, Plus, Search, Settings2, StickyNote, Sun, Trello } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, FolderOpen, Hash, Link2, ListChecks, Plus, Search, Settings2, StickyNote, Sun, Trash2, Trello } from "lucide-react";
+import { TimerPill } from "./TimerPill";
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { addMonths, fromIso, iso, monthMatrix, todayIso, weekdayNames, type WeekStartPref } from "../lib/date";
@@ -20,6 +21,7 @@ const NAV: { to: string; label: string; icon: typeof Sun; end?: boolean }[] = [
   { to: "/links", label: "Links", icon: Link2 },
   { to: "/files", label: "Files", icon: FolderOpen },
   { to: "/boards", label: "Boards", icon: Trello },
+  { to: "/tags", label: "Tags", icon: Hash },
 ];
 
 function MiniMonth({ weekStart }: { weekStart: WeekStartPref }) {
@@ -219,7 +221,12 @@ export function Sidebar() {
           </>
         )}
 
+        <TimerPill />
+
         <div className="sidebar-footer">
+          <NavLink to="/trash" className="icon-btn" aria-label="Trash" onClick={closeSidebar}>
+            <Trash2 size={15} />
+          </NavLink>
           <NavLink to="/settings" className="icon-btn" aria-label="Settings" onClick={closeSidebar}>
             <Settings2 size={16} />
           </NavLink>

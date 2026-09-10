@@ -104,6 +104,18 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authed.PATCH("/columns/:id", server.renameColumn)
 	authed.DELETE("/columns/:id", server.deleteColumn)
 	authed.POST("/cards/:id/move", server.moveCard)
+	authed.POST("/timer/start", server.startTimer)
+	authed.POST("/timer/stop", server.stopTimer)
+	authed.GET("/timer/current", server.currentTimer)
+	authed.GET("/time/summary", server.timeSummary)
+	authed.GET("/entries/:id/activity", server.entryActivity)
+	authed.GET("/trash", server.listTrash)
+	authed.POST("/trash/:id/restore", server.restoreEntry)
+	authed.DELETE("/trash/:id", server.purgeEntry)
+	authed.PATCH("/boards/:id", server.updateBoard)
+	authed.POST("/boards/:id/share", server.shareBoard)
+	authed.GET("/tags", server.tagCounts)
+	authed.GET("/agenda", server.agendaMarkdown)
 	authed.GET("/caldav", server.listCaldav)
 	authed.POST("/caldav", server.createCaldav)
 	authed.POST("/caldav/test", server.testCaldav)
@@ -120,6 +132,7 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 
 	router.GET("/api/widget/today", server.widgetToday)
 	router.GET("/api/shared/files/:token", server.serveSharedFile)
+	router.GET("/api/shared/boards/:token", server.serveSharedBoard)
 	router.GET("/api/feed.ics", server.exportICS)
 	router.POST("/api/mcp", newRateLimiter(60, time.Minute), server.mcp)
 	router.POST("/api/intake", newRateLimiter(10, time.Minute), server.intake)
@@ -243,6 +256,9 @@ func (s *Server) createEntry(c *gin.Context) {
 		return
 	}
 	go s.fireWebhooks(context.Background(), currentUser(c).ID, "entry.created", entry)
+	if input.BoardID != nil {
+		s.store.LogActivity(c.Request.Context(), currentUser(c).ID, entry.ID, "created", "card created on board")
+	}
 	c.JSON(http.StatusCreated, entry)
 }
 
@@ -271,6 +287,20 @@ func (s *Server) updateEntry(c *gin.Context) {
 		return
 	}
 	go s.fireWebhooks(context.Background(), currentUser(c).ID, "entry.updated", entry)
+	// Cheap card audit trail — only on board cards, where it matters.
+	if entry.BoardID != nil {
+		if patch.Completed != nil {
+			action := "completed"
+			if !*patch.Completed {
+				action = "reopened"
+			}
+			s.store.LogActivity(c.Request.Context(), currentUser(c).ID, entry.ID, action, "")
+		} else if patch.Title != nil {
+			s.store.LogActivity(c.Request.Context(), currentUser(c).ID, entry.ID, "renamed", *patch.Title)
+		} else {
+			s.store.LogActivity(c.Request.Context(), currentUser(c).ID, entry.ID, "edited", "")
+		}
+	}
 	c.JSON(http.StatusOK, entry)
 }
 

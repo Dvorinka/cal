@@ -3,7 +3,7 @@
 // calendar, and in Today. Drag between columns, add cards inline.
 
 import type { Board, BoardColumn, Entry } from "@cal/api-client";
-import { Check, ListOrdered, Plus, Trash2, Trello } from "lucide-react";
+import { Check, Link2, ListOrdered, Plus, Trash2, Trello } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { PageHeader } from "../components/PageHeader";
@@ -163,9 +163,40 @@ export function BoardsPage() {
 
   return (
     <>
-      <PageHeader title={board?.name ?? "Board"} sub="drag cards between columns — complete them like any task">
-        <a href="/boards" className="btn btn-secondary btn-xs">All boards</a>
+      <PageHeader
+        title={board?.name ?? "Board"}
+        sub={board?.targetDate ? `target ${board.targetDate} — drag cards between columns` : "drag cards between columns — complete them like any task"}
+      >
+        <button
+          type="button"
+          className="btn btn-secondary btn-xs"
+          onClick={() => {
+            const d = window.prompt("Board description", board?.description ?? "");
+            if (d === null) return;
+            const t = window.prompt("Target date (YYYY-MM-DD, empty clears)", board?.targetDate ?? "");
+            if (t === null) return;
+            void api.updateBoard(boardId, { description: d, targetDate: t.trim() })
+              .then(() => api.boards().then((bs) => setBoard(bs.find((b) => b.id === boardId))));
+          }}
+        >
+          Edit board
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary btn-xs"
+          onClick={() =>
+            void api.shareBoard(boardId, true).then(({ shareToken }) => {
+              const url = `${window.location.origin}/board/${shareToken}`;
+              void navigator.clipboard.writeText(url);
+              toast("Public link copied — anyone with it can view the board");
+            })
+          }
+        >
+          <Link2 size={12} /> Share
+        </button>
+        <Link to="/boards" className="btn btn-secondary btn-xs">All boards</Link>
       </PageHeader>
+      {board?.description && <p className="board-desc">{board.description}</p>}
       <div className="kanban">
         {columns.map((col) => (
           <section

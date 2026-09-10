@@ -155,6 +155,23 @@ Status legend: `[x]` shipped · `[/]` partially shipped · `[ ]` planned
       (`n/limit` badge, red when over), done-column convention (drop into
       done/completed/shipped auto-completes, dragging out reopens), board
       templates (blank/kanban/sprint/bug-tracker seed columns).
+- [x] **Focus timer** — `time_entries`, one running per user (partial
+      unique index); sidebar pill ticks live, start from a task's context
+      menu, Today shows today/week totals + per-entry breakdown.
+- [x] **Card activity log** — `card_activity` records created/moved/
+      completed/reopened/renamed/edited on board cards; an Activity pane
+      in the editor.
+- [x] **Trash** — `deleted_at` soft-delete; `/trash` restores or purges.
+- [x] **Tags page** — `/tags` counts every tag across types; click →
+      cross-type filtered list.
+- [x] **Bulk ops** — Tasks select mode → complete-all / delete-all.
+- [x] **Public boards** — `POST /boards/:id/share` mints a token;
+      `/board/<token>` renders columns+cards with no auth.
+- [x] **Board meta** — description + target date per board.
+- [x] **Agenda export** — `GET /api/agenda?days=N` markdown; copyable
+      from the palette or Settings.
+- [x] **Note templates** — meeting notes / standup / decision log /
+      project brief chips in an empty note editor.
 
 ## Deliberately out of scope
 

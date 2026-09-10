@@ -1,4 +1,4 @@
-import type { Habit, WeekReview } from "@cal/api-client";
+import type { Habit, TimeSummary, WeekReview } from "@cal/api-client";
 import {
   Check,
   Crosshair,
@@ -7,6 +7,7 @@ import {
   NotebookPen,
   Plus,
   StickyNote,
+  Timer,
   type LucideIcon,
 } from "lucide-react";
 import { Cloud, CloudDrizzle, CloudFog, CloudLightning, CloudRain, CloudSun, Snowflake, Sun } from "lucide-react";
@@ -68,6 +69,7 @@ export function TodayPage() {
   const [showReview, setShowReview] = useState(false);
   const [focus, setFocus] = useState(false);
   const [activity, setActivity] = useState<Record<string, number>>({});
+  const [time, setTime] = useState<TimeSummary | null>(null);
   const today = todayIso();
 
   useEffect(() => {
@@ -83,6 +85,7 @@ export function TodayPage() {
     void loadFeeds();
     void api.habits().then(setHabits).catch(() => {});
     void api.activity().then(setActivity).catch(() => {});
+    void api.timeSummary().then(setTime).catch(() => {});
   }, [today, loadEntries, loadFeeds, api]);
 
   useEffect(() => {
@@ -190,6 +193,18 @@ export function TodayPage() {
             {tasksTotal > 0 && (
               <div className="meter" aria-hidden>
                 <i style={{ width: `${(tasksDone / tasksTotal) * 100}%` }} />
+              </div>
+            )}
+            {time && time.todayMinutes > 0 && (
+              <div className="habit-row">
+                <span className="habit-chip on" title="Focused today">
+                  <Timer size={12} /> {time.todayMinutes}m today · {time.weekMinutes}m this week
+                </span>
+                {time.perEntry.slice(0, 3).map((p) => (
+                  <span key={p.entryId} className="habit-chip" title={p.title}>
+                    {p.title} <b>{p.minutes}m</b>
+                  </span>
+                ))}
               </div>
             )}
             {habits.length > 0 && (

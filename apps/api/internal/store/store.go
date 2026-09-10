@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -257,7 +259,7 @@ func (s *Store) ListEntries(ctx context.Context, userID, from, to, q string) ([]
 	query := `
 		SELECT ` + entryCols + `
 		FROM entries
-		WHERE user_id = $1
+		WHERE user_id = $1 AND deleted_at IS NULL
 	`
 	args := []any{userID}
 	if from != "" {
@@ -479,7 +481,7 @@ func addMonthsClamped(d time.Time, months int) time.Time {
 }
 
 func (s *Store) DeleteEntry(ctx context.Context, userID, id string) error {
-	tag, err := s.db.Exec(ctx, `DELETE FROM entries WHERE id = $1 AND user_id = $2`, id, userID)
+	tag, err := s.db.Exec(ctx, `UPDATE entries SET deleted_at = now() WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`, id, userID)
 	if err != nil {
 		return err
 	}
@@ -662,7 +664,7 @@ func (s *Store) DeleteWebhook(ctx context.Context, userID, id string) error {
 func (s *Store) Entry(ctx context.Context, userID, id string) (Entry, error) {
 	var e Entry
 	err := e.scan(s.db.QueryRow(ctx, `
-		SELECT `+entryCols+` FROM entries WHERE id = $1 AND user_id = $2
+		SELECT `+entryCols+` FROM entries WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
 	`, id, userID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Entry{}, ErrNotFound
@@ -675,7 +677,7 @@ func (s *Store) entryTx(ctx context.Context, tx pgx.Tx, userID, id string) (Entr
 	err := e.scan(tx.QueryRow(ctx, `
 		SELECT `+entryCols+`
 		FROM entries
-		WHERE id = $1 AND user_id = $2
+		WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
 	`, id, userID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Entry{}, ErrNotFound
@@ -816,7 +818,7 @@ func (s *Store) DueReminders(ctx context.Context) ([]Entry, error) {
 		       e.account_id::text, e.external_uid, e.external_href, e.external_etag, e.dirty,
 		       e.user_id::text
 		FROM entries e JOIN settings st ON st.user_id = e.user_id
-		WHERE e.remind IS NOT NULL AND e.reminded_at IS NULL AND e.start_time IS NOT NULL
+		WHERE e.deleted_at IS NULL AND e.remind IS NOT NULL AND e.reminded_at IS NULL AND e.start_time IS NOT NULL
 		  AND ((e.date + e.start_time) AT TIME ZONE st.timezone - (e.remind || ' minutes')::interval) <= now()
 	`)
 	if err != nil {
@@ -1068,7 +1070,7 @@ func (s *Store) AllGoogleTokens(ctx context.Context) ([]GoogleToken, error) {
 // AccountEntries returns all entries belonging to a CalDAV account.
 func (s *Store) AccountEntries(ctx context.Context, userID, accountID string) ([]Entry, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT `+entryCols+` FROM entries WHERE user_id = $1 AND account_id = $2
+		SELECT `+entryCols+` FROM entries WHERE user_id = $1 AND account_id = $2 AND deleted_at IS NULL
 	`, userID, accountID)
 	if err != nil {
 		return nil, err
@@ -1339,7 +1341,7 @@ func (s *Store) DeleteFile(ctx context.Context, userID, id string) (string, erro
 func (s *Store) Activity(ctx context.Context, userID string, days int) (map[string]int, error) {
 	rows, err := s.db.Query(ctx, `
 		SELECT date::text, count(*) FROM entries
-		WHERE user_id = $1 AND date >= current_date - $2::int
+		WHERE user_id = $1 AND deleted_at IS NULL AND date >= current_date - $2::int
 		GROUP BY date`, userID, days)
 	if err != nil {
 		return nil, err
@@ -1360,11 +1362,13 @@ func (s *Store) Activity(ctx context.Context, userID string, days int) (map[stri
 // --- Boards ---
 
 type Board struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Color     string    `json:"color"`
-	CreatedAt time.Time `json:"createdAt"`
-	Columns   []BoardColumn `json:"columns,omitempty"`
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Color       string    `json:"color"`
+	Description string    `json:"description"`
+	TargetDate  *string   `json:"targetDate,omitempty"`
+	ShareToken  *string   `json:"shareToken,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 type BoardColumn struct {
@@ -1377,7 +1381,8 @@ type BoardColumn struct {
 
 func (s *Store) ListBoards(ctx context.Context, userID string) ([]Board, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT id::text, name, color, created_at FROM boards WHERE user_id = $1 ORDER BY created_at`, userID)
+		SELECT id::text, name, color, description, target_date::text, share_token, created_at
+		FROM boards WHERE user_id = $1 ORDER BY created_at`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -1385,7 +1390,7 @@ func (s *Store) ListBoards(ctx context.Context, userID string) ([]Board, error) 
 	out := []Board{}
 	for rows.Next() {
 		var b Board
-		if err := rows.Scan(&b.ID, &b.Name, &b.Color, &b.CreatedAt); err != nil {
+		if err := rows.Scan(&b.ID, &b.Name, &b.Color, &b.Description, &b.TargetDate, &b.ShareToken, &b.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, b)
@@ -1397,8 +1402,8 @@ func (s *Store) CreateBoard(ctx context.Context, userID, name, color string) (Bo
 	var b Board
 	err := s.db.QueryRow(ctx, `
 		INSERT INTO boards (user_id, name, color) VALUES ($1, $2, $3)
-		RETURNING id::text, name, color, created_at`, userID, name, color).
-		Scan(&b.ID, &b.Name, &b.Color, &b.CreatedAt)
+		RETURNING id::text, name, color, description, target_date::text, share_token, created_at`, userID, name, color).
+		Scan(&b.ID, &b.Name, &b.Color, &b.Description, &b.TargetDate, &b.ShareToken, &b.CreatedAt)
 	return b, err
 }
 
@@ -1480,7 +1485,7 @@ func (s *Store) DeleteColumn(ctx context.Context, userID, id string) error {
 func (s *Store) BoardCards(ctx context.Context, userID, boardID string) ([]Entry, error) {
 	rows, err := s.db.Query(ctx, `
 		SELECT `+entryCols+` FROM entries
-		WHERE user_id = $1 AND board_id = $2
+		WHERE user_id = $1 AND board_id = $2 AND deleted_at IS NULL
 		ORDER BY column_id NULLS LAST, position NULLS LAST, created_at`, userID, boardID)
 	if err != nil {
 		return nil, err
@@ -1525,4 +1530,295 @@ func (s *Store) MoveCard(ctx context.Context, userID, entryID, boardID string, c
 		return ErrNotFound
 	}
 	return err
+}
+
+// --- Trash ---
+
+func (s *Store) ListTrash(ctx context.Context, userID string) ([]Entry, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT `+entryCols+` FROM entries
+		WHERE user_id = $1 AND deleted_at IS NOT NULL
+		ORDER BY deleted_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Entry{}
+	for rows.Next() {
+		var e Entry
+		if err := rows.Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date,
+			&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned,
+			&e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
+			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) RestoreEntry(ctx context.Context, userID, id string) error {
+	tag, err := s.db.Exec(ctx, `UPDATE entries SET deleted_at = NULL WHERE id = $1 AND user_id = $2`, id, userID)
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return err
+}
+
+func (s *Store) PurgeEntry(ctx context.Context, userID, id string) error {
+	tag, err := s.db.Exec(ctx, `DELETE FROM entries WHERE id = $1 AND user_id = $2 AND deleted_at IS NOT NULL`, id, userID)
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return err
+}
+
+// --- Time tracking (solidtime-inspired: one running timer per user) ---
+
+type TimeEntry struct {
+	ID        string     `json:"id"`
+	EntryID   *string    `json:"entryId,omitempty"`
+	Title     string     `json:"title"` // joined from entries when present
+	StartAt   time.Time  `json:"startAt"`
+	EndAt     *time.Time `json:"endAt,omitempty"`
+	Note      string     `json:"note"`
+}
+
+// StartTimer opens a running time entry; only one runs per user.
+func (s *Store) StartTimer(ctx context.Context, userID string, entryID *string, note string) (TimeEntry, error) {
+	var t TimeEntry
+	err := s.db.QueryRow(ctx, `
+		INSERT INTO time_entries (user_id, entry_id, note)
+		VALUES ($1, $2::uuid, $3)
+		ON CONFLICT (user_id) WHERE end_at IS NULL DO NOTHING
+		RETURNING id::text, entry_id::text, start_at`, userID, entryID, note).
+		Scan(&t.ID, &t.EntryID, &t.StartAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return t, fmt.Errorf("timer already running")
+	}
+	return t, err
+}
+
+func (s *Store) StopTimer(ctx context.Context, userID string) (TimeEntry, error) {
+	var t TimeEntry
+	err := s.db.QueryRow(ctx, `
+		UPDATE time_entries SET end_at = now()
+		WHERE user_id = $1 AND end_at IS NULL
+		RETURNING id::text, entry_id::text, start_at, end_at`, userID).
+		Scan(&t.ID, &t.EntryID, &t.StartAt, &t.EndAt)
+	return t, err
+}
+
+func (s *Store) CurrentTimer(ctx context.Context, userID string) (*TimeEntry, error) {
+	var t TimeEntry
+	err := s.db.QueryRow(ctx, `
+		SELECT t.id::text, t.entry_id::text, coalesce(e.title,''), t.start_at, t.note
+		FROM time_entries t LEFT JOIN entries e ON e.id = t.entry_id
+		WHERE t.user_id = $1 AND t.end_at IS NULL`, userID).
+		Scan(&t.ID, &t.EntryID, &t.Title, &t.StartAt, &t.Note)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	return &t, err
+}
+
+// TimeSummary returns minutes logged per entry today + today total + week total.
+func (s *Store) TimeSummary(ctx context.Context, userID string) (map[string]any, error) {
+	var today, week int
+	err := s.db.QueryRow(ctx, `
+		SELECT coalesce(sum(EXTRACT(EPOCH FROM coalesce(end_at, now()) - start_at))/60,0)::int
+		FROM time_entries WHERE user_id = $1 AND start_at::date = current_date`, userID).Scan(&today)
+	if err != nil {
+		return nil, err
+	}
+	_ = s.db.QueryRow(ctx, `
+		SELECT coalesce(sum(EXTRACT(EPOCH FROM coalesce(end_at, now()) - start_at))/60,0)::int
+		FROM time_entries WHERE user_id = $1 AND start_at >= current_date - 6`, userID).Scan(&week)
+	rows, err := s.db.Query(ctx, `
+		SELECT t.entry_id::text, coalesce(e.title,''),
+		       sum(EXTRACT(EPOCH FROM coalesce(t.end_at, now()) - t.start_at))/60::int AS mins
+		FROM time_entries t LEFT JOIN entries e ON e.id = t.entry_id
+		WHERE t.user_id = $1 AND t.start_at::date = current_date AND t.entry_id IS NOT NULL
+		GROUP BY t.entry_id, e.title ORDER BY mins DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	per := []map[string]any{}
+	for rows.Next() {
+		var id, title string
+		var mins int
+		if err := rows.Scan(&id, &title, &mins); err != nil {
+			return nil, err
+		}
+		per = append(per, map[string]any{"entryId": id, "title": title, "minutes": mins})
+	}
+	return map[string]any{"todayMinutes": today, "weekMinutes": week, "perEntry": per}, nil
+}
+
+// MinutesByEntry — for the card "time spent" chip.
+func (s *Store) MinutesByEntry(ctx context.Context, userID string) (map[string]int, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT entry_id::text, sum(EXTRACT(EPOCH FROM coalesce(end_at, now()) - start_at))/60::int
+		FROM time_entries WHERE user_id = $1 AND entry_id IS NOT NULL GROUP BY entry_id`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var id string
+		var m int
+		if err := rows.Scan(&id, &m); err != nil {
+			return nil, err
+		}
+		out[id] = m
+	}
+	return out, rows.Err()
+}
+
+// --- Card activity ---
+
+type Activity struct {
+	ID        string    `json:"id"`
+	Action    string    `json:"action"`
+	Detail    string    `json:"detail"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+func (s *Store) LogActivity(ctx context.Context, userID, entryID, action, detail string) {
+	_, _ = s.db.Exec(ctx, `
+		INSERT INTO card_activity (entry_id, user_id, action, detail) VALUES ($1, $2, $3, $4)`,
+		entryID, userID, action, detail)
+}
+
+func (s *Store) EntryActivity(ctx context.Context, userID, entryID string) ([]Activity, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT a.id::text, a.action, a.detail, a.created_at
+		FROM card_activity a WHERE a.entry_id = $1 AND a.user_id = $2
+		ORDER BY a.created_at DESC LIMIT 50`, entryID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Activity{}
+	for rows.Next() {
+		var a Activity
+		if err := rows.Scan(&a.ID, &a.Action, &a.Detail, &a.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// --- Board meta + public share ---
+
+func (s *Store) SetBoardMeta(ctx context.Context, userID, id string, desc *string, target *string) error {
+	tag, err := s.db.Exec(ctx, `
+		UPDATE boards SET description = coalesce($3, description),
+		target_date = CASE WHEN $4::text = '' THEN NULL ELSE coalesce($4::date, target_date) END
+		WHERE id = $1 AND user_id = $2`, id, userID, desc, target)
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return err
+}
+
+func (s *Store) SetBoardShare(ctx context.Context, userID, id string, on bool) (string, error) {
+	var token string
+	if on {
+		token = newToken(20)
+	}
+	tag, err := s.db.Exec(ctx, `UPDATE boards SET share_token = $3 WHERE id = $1 AND user_id = $2`, id, userID, nilIfEmpty(token))
+	if tag.RowsAffected() == 0 {
+		return "", ErrNotFound
+	}
+	return token, err
+}
+
+// SharedBoard resolves a public board token → name + columns + cards.
+func (s *Store) SharedBoard(ctx context.Context, token string) (map[string]any, error) {
+	var boardID, name, desc string
+	var target *string
+	err := s.db.QueryRow(ctx, `
+		SELECT id::text, name, description, target_date::text FROM boards WHERE share_token = $1`, token).
+		Scan(&boardID, &name, &desc, &target)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	colRows, err := s.db.Query(ctx, `SELECT id::text, name, position FROM board_columns WHERE board_id = $1 ORDER BY position`, boardID)
+	if err != nil {
+		return nil, err
+	}
+	cols := []map[string]any{}
+	for colRows.Next() {
+		var id, cname string
+		var pos int
+		if err := colRows.Scan(&id, &cname, &pos); err != nil {
+			colRows.Close()
+			return nil, err
+		}
+		cols = append(cols, map[string]any{"id": id, "name": cname, "position": pos})
+	}
+	colRows.Close()
+	cardRows, err := s.db.Query(ctx, `
+		SELECT column_id::text, title, completed, date::text, tags FROM entries
+		WHERE board_id = $1 AND deleted_at IS NULL ORDER BY position NULLS LAST`, boardID)
+	if err != nil {
+		return nil, err
+	}
+	cards := []map[string]any{}
+	for cardRows.Next() {
+		var colID *string
+		var title, date string
+		var done bool
+		var tags []string
+		if err := cardRows.Scan(&colID, &title, &done, &date, &tags); err != nil {
+			cardRows.Close()
+			return nil, err
+		}
+		cards = append(cards, map[string]any{"columnId": colID, "title": title, "completed": done, "date": date, "tags": tags})
+	}
+	cardRows.Close()
+	return map[string]any{"name": name, "description": desc, "targetDate": target, "columns": cols, "cards": cards}, nil
+}
+
+// TagCounts — all tags with entry counts for the /tags page.
+func (s *Store) TagCounts(ctx context.Context, userID string) (map[string]int, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT tag, count(*) FROM entries e, unnest(e.tags) tag
+		WHERE e.user_id = $1 AND e.deleted_at IS NULL GROUP BY tag ORDER BY count(*) DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var tag string
+		var n int
+		if err := rows.Scan(&tag, &n); err != nil {
+			return nil, err
+		}
+		out[tag] = n
+	}
+	return out, rows.Err()
+}
+
+
+// newToken returns n random hex chars — share tokens, etc.
+func newToken(n int) string {
+	b := make([]byte, n)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+func nilIfEmpty(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }

@@ -1,5 +1,5 @@
 import type { Accent, SessionInfo, Webhook } from "@cal/api-client";
-import { Bell, BellOff, Copy, Download, LogOut, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Bell, BellOff, Copy, Download, FileText, LogOut, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { disablePush, enablePush, pushEnabled } from "../lib/push";
@@ -667,6 +667,9 @@ export function SettingsPage() {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <a className="btn btn-secondary" href="/api/export" download>
               <Download size={14} /> Export everything (JSON)
+            </a>
+            <a className="btn btn-secondary" href="/api/agenda?days=7" target="_blank" rel="noreferrer">
+              <FileText size={14} /> Week agenda (markdown)
             </a>
             <input
               ref={restoreRef}

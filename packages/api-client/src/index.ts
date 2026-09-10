@@ -362,6 +362,50 @@ export class CalApi {
     return this.request(`/cards/${entryId}/move`, { method: "POST", body: JSON.stringify({ columnId, position }) });
   }
 
+  async startTimer(entryId?: string, note?: string): Promise<TimeEntry> {
+    return this.request("/timer/start", { method: "POST", body: JSON.stringify({ entryId, note }) });
+  }
+  async stopTimer(): Promise<TimeEntry> {
+    return this.request("/timer/stop", { method: "POST", body: "{}" });
+  }
+  async currentTimer(): Promise<TimeEntry | null> {
+    const r = await fetch(`${this.baseUrl}/timer/current`, { credentials: "include" });
+    return r.status === 204 ? null : r.json();
+  }
+  async timeSummary(): Promise<TimeSummary> {
+    return this.request("/time/summary");
+  }
+  async entryActivity(id: string): Promise<ActivityItem[]> {
+    return this.request(`/entries/${id}/activity`);
+  }
+  async trash(): Promise<Entry[]> {
+    return this.request("/trash");
+  }
+  async restoreEntry(id: string): Promise<void> {
+    return this.request(`/trash/${id}/restore`, { method: "POST", body: "{}" });
+  }
+  async purgeEntry(id: string): Promise<void> {
+    return this.request(`/trash/${id}`, { method: "DELETE" });
+  }
+  async updateBoard(id: string, patch: { description?: string; targetDate?: string }): Promise<void> {
+    return this.request(`/boards/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+  }
+  async shareBoard(id: string, on: boolean): Promise<{ shareToken: string }> {
+    return this.request(`/boards/${id}/share`, { method: "POST", body: JSON.stringify({ on }) });
+  }
+  async sharedBoard(token: string): Promise<{ name: string; description: string; targetDate?: string; columns: { id: string; name: string }[]; cards: { columnId?: string; title: string; completed: boolean; date: string; tags: string[] }[] }> {
+    const r = await fetch(`${this.baseUrl}/shared/boards/${token}`);
+    if (!r.ok) throw new Error("not found");
+    return r.json();
+  }
+  async tags(): Promise<Record<string, number>> {
+    return this.request("/tags");
+  }
+  async agenda(days = 7): Promise<string> {
+    const r = await fetch(`${this.baseUrl}/agenda?days=${days}`, { credentials: "include" });
+    return r.text();
+  }
+
   async activity(): Promise<Record<string, number>> {
     return this.request("/activity");
   }
@@ -495,6 +539,9 @@ export interface Board {
   id: string;
   name: string;
   color: string;
+  description: string;
+  targetDate?: string;
+  shareToken?: string;
   createdAt: string;
 }
 
@@ -504,4 +551,26 @@ export interface BoardColumn {
   name: string;
   position: number;
   wipLimit?: number;
+}
+
+export interface TimeEntry {
+  id: string;
+  entryId?: string;
+  title: string;
+  startAt: string;
+  endAt?: string;
+  note: string;
+}
+
+export interface ActivityItem {
+  id: string;
+  action: string;
+  detail: string;
+  createdAt: string;
+}
+
+export interface TimeSummary {
+  todayMinutes: number;
+  weekMinutes: number;
+  perEntry: { entryId: string; title: string; minutes: number }[];
 }
