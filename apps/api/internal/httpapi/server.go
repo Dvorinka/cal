@@ -59,6 +59,8 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authed.POST("/entries", server.createEntry)
 	authed.PATCH("/entries/:id", server.updateEntry)
 	authed.DELETE("/entries/:id", server.deleteEntry)
+	authed.GET("/entries/:id/revisions", server.entryRevisions)
+	authed.POST("/entries/:id/restore/:rev", server.restoreRevision)
 	authed.GET("/settings", server.settings)
 	authed.PUT("/settings", server.updateSettings)
 	authed.GET("/export", server.export)
@@ -70,6 +72,10 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authed.POST("/import", server.importICS)
 	authed.POST("/settings/widget-token", server.rotateWidgetToken)
 	authed.POST("/settings/api-token", server.rotateApiToken)
+	authed.POST("/restore", server.restoreJSON)
+	authed.GET("/sessions", server.listSessions)
+	authed.DELETE("/sessions/:id", server.revokeSession)
+	authed.POST("/password", server.changePassword)
 	authed.GET("/push/vapid", server.pushVapid)
 	authed.POST("/push/subscribe", server.subscribePush)
 	authed.POST("/push/unsubscribe", server.unsubscribePush)
@@ -80,6 +86,7 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authed.POST("/caldav/:id/sync", server.syncCaldav)
 
 	router.GET("/api/widget/today", server.widgetToday)
+	router.GET("/api/feed.ics", server.exportICS)
 	router.POST("/api/mcp", server.mcp)
 
 	return router
@@ -221,6 +228,28 @@ func (s *Server) deleteEntry(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+func (s *Server) entryRevisions(c *gin.Context) {
+	revs, err := s.store.EntryRevisions(c.Request.Context(), currentUser(c).ID, c.Param("id"))
+	if err != nil {
+		c.String(http.StatusInternalServerError, "failed")
+		return
+	}
+	c.JSON(http.StatusOK, revs)
+}
+
+func (s *Server) restoreRevision(c *gin.Context) {
+	err := s.store.RestoreRevision(c.Request.Context(), currentUser(c).ID, c.Param("id"), c.Param("rev"))
+	if errors.Is(err, store.ErrNotFound) {
+		c.String(http.StatusNotFound, "revision not found")
+		return
+	}
+	if err != nil {
+		c.String(http.StatusInternalServerError, "failed")
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
 func (s *Server) settings(c *gin.Context) {
 	settings, err := s.store.Settings(c.Request.Context(), currentUser(c).ID)
 	if err != nil {
@@ -297,11 +326,13 @@ func (s *Server) requireUser(c *gin.Context) {
 		return
 	}
 	c.Set("user", user)
+	c.Set("sessionID", sessionID)
+	s.store.TouchSession(c.Request.Context(), sessionID)
 	c.Next()
 }
 
 func (s *Server) setSession(c *gin.Context, userID string) bool {
-	sessionID, err := s.store.CreateSession(c.Request.Context(), userID)
+	sessionID, err := s.store.CreateSession(c.Request.Context(), userID, c.Request.UserAgent())
 	if err != nil {
 		c.String(http.StatusInternalServerError, "failed to create session")
 		c.Abort()
@@ -464,8 +495,67 @@ func validRecur(v string) bool {
 func validSettings(settings store.Settings) bool {
 	theme := settings.Theme
 	validTheme := theme == "light" || theme == "dark" || theme == "system"
+	if settings.Timezone != "" {
+		if _, err := time.LoadLocation(settings.Timezone); err != nil {
+			return false
+		}
+	}
 	return len(settings.Country) == 2 && validTheme &&
 		(settings.WeekStart == "monday" || settings.WeekStart == "sunday")
+}
+
+func currentSessionID(c *gin.Context) string {
+	if v, ok := c.Get("sessionID"); ok {
+		if id, ok := v.(string); ok {
+			return id
+		}
+	}
+	return ""
+}
+
+func (s *Server) listSessions(c *gin.Context) {
+	sessions, err := s.store.ListSessions(c.Request.Context(), currentUser(c).ID, currentSessionID(c))
+	if err != nil {
+		c.String(http.StatusInternalServerError, "failed")
+		return
+	}
+	c.JSON(http.StatusOK, sessions)
+}
+
+func (s *Server) revokeSession(c *gin.Context) {
+	if err := s.store.RevokeSession(c.Request.Context(), currentUser(c).ID, c.Param("id")); err != nil {
+		c.String(http.StatusInternalServerError, "failed")
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func (s *Server) changePassword(c *gin.Context) {
+	var body struct {
+		Current  string `json:"current"`
+		Password string `json:"password"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || len(body.Password) < 8 || len(body.Password) > 128 {
+		c.String(http.StatusBadRequest, "password must be 8-128 characters")
+		return
+	}
+	user, hash, err := s.store.UserByEmail(c.Request.Context(), currentUser(c).Email)
+	if err != nil || !auth.VerifyPassword(body.Current, hash) {
+		c.String(http.StatusForbidden, "current password is wrong")
+		return
+	}
+	newHash, err := auth.HashPassword(body.Password)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "failed")
+		return
+	}
+	if err := s.store.ChangePassword(c.Request.Context(), user.ID, newHash); err != nil {
+		c.String(http.StatusInternalServerError, "failed")
+		return
+	}
+	// Sign out every other session — a password change invalidates them.
+	_ = s.store.RevokeOtherSessions(c.Request.Context(), user.ID, currentSessionID(c))
+	c.Status(http.StatusNoContent)
 }
 
 func securityHeaders() gin.HandlerFunc {

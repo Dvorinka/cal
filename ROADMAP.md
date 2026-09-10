@@ -33,26 +33,28 @@ Status legend: `[x]` shipped · `[/]` partially shipped · `[ ]` planned
 - [x] Web push for reminders when the tab is closed (VAPID, sub cleanup)
 - [x] Markdown notes: write/preview editor, word count, safe custom renderer
 
-## Phase 2 — Trust (next)
+## Phase 2 — Trust (shipped 2026-09-10)
 
-The product works; this phase makes it dependable.
-
-- [ ] **Backup & restore** — JSON export exists; add one-click import that
-      re-keys entries, plus a nightly auto-backup file on disk.
-- [ ] **Entry history** — `entry_revisions` table; editor "History" pane to
-      view/restore previous versions of a note.
-- [ ] **Conflict surface for CalDAV** — when both sides changed, keep both
-      (duplicate with `conflict` tag) instead of silent remote-wins.
-- [ ] **Timezone support** — store events in UTC + display TZ; per-user
-      timezone setting; correct `VTIMEZONE` in ICS export.
-- [ ] **Real .ics export feed** — subscribable `/api/feed.ics?token=` of your
-      own Cal entries (the inverse of feed import).
-- [ ] **Push E2E test** — headless-browser push delivery check in CI
-      (web-push needs a real service; test against Mozilla's autopush dev).
-- [ ] **Password change + session list** — settings security panel: change
-      password, see/revoke active sessions.
-- [ ] **MCP resources & prompts** — expose entries as MCP resources (not just
-      tools), plus `daily-plan` / `weekly-review` prompt templates.
+- [x] **Backup & restore** — `POST /api/restore` merges an export file back
+      (ID-conflict-safe, additive); nightly `DATA_DIR/backups/` snapshots,
+      14 days kept; Restore button in Settings → Your data.
+- [x] **Entry history** — `entry_revisions` snapshot on every update;
+      editor "History" pane lists and restores versions (restores are
+      themselves snapshotted, so revertible).
+- [x] **CalDAV conflict surface** — divergence keeps both: remote wins the
+      synced object, the local edit survives as a detached `conflict` copy.
+- [x] **Timezone** — per-user IANA timezone; reminders evaluate in it, the
+      .ics export serializes timed entries in it. (VTIMEZONE blocks are
+      future work — times export as UTC, which every client accepts.)
+- [x] **Real .ics export feed** — `GET /api/feed.ics?token=` (widget token,
+      read-only) publishes tasks+events with RRULE + STATUS:COMPLETED.
+- [ ] **Push E2E test** — needs a live push service; store-level tests
+      cover the subscription lifecycle, the last hop is vendor infra.
+- [x] **Security panel** — change password (revokes other sessions),
+      session list with per-device revoke; sessions carry user-agent +
+      last-seen.
+- [x] **MCP resources & prompts** — `cal://today`, `cal://week`,
+      `cal://open-tasks` resources; `daily-plan` + `weekly-review` prompts.
 
 ## Phase 3 — Delight
 

@@ -176,8 +176,12 @@ func (s *Server) mcp(c *gin.Context) {
 	case req.Method == "initialize":
 		c.JSON(http.StatusOK, rpcResult(req.ID, gin.H{
 			"protocolVersion": mcpProtocol,
-			"capabilities":    gin.H{"tools": gin.H{"listChanged": false}},
-			"serverInfo":      gin.H{"name": "cal", "version": "1.0.0"},
+			"capabilities": gin.H{
+				"tools":     gin.H{"listChanged": false},
+				"resources": gin.H{"listChanged": false},
+				"prompts":   gin.H{"listChanged": false},
+			},
+			"serverInfo": gin.H{"name": "cal", "version": "1.0.0"},
 		}))
 	case strings.HasPrefix(req.Method, "notifications/"):
 		c.Status(http.StatusAccepted)
@@ -187,6 +191,73 @@ func (s *Server) mcp(c *gin.Context) {
 		c.JSON(http.StatusOK, rpcResult(req.ID, gin.H{"tools": mcpTools}))
 	case req.Method == "tools/call":
 		s.mcpCall(c, user, req)
+	case req.Method == "resources/list":
+		// One live resource per logical collection — entries themselves are
+		// fetched via tools so the list stays bounded.
+		c.JSON(http.StatusOK, rpcResult(req.ID, gin.H{"resources": []gin.H{
+			{"uri": "cal://today", "name": "Today", "description": "Today's agenda as JSON", "mimeType": "application/json"},
+			{"uri": "cal://week", "name": "This week", "description": "Entries for the current week", "mimeType": "application/json"},
+			{"uri": "cal://open-tasks", "name": "Open tasks", "description": "Every incomplete task", "mimeType": "application/json"},
+		}}))
+	case req.Method == "resources/read":
+		var p struct {
+			URI string `json:"uri"`
+		}
+		_ = json.Unmarshal(req.Params, &p)
+		ctx := c.Request.Context()
+		var entries []store.Entry
+		var err error
+		today := time.Now().Format(time.DateOnly)
+		switch p.URI {
+		case "cal://today":
+			entries, err = s.store.ListEntries(ctx, user.ID, today, today, "")
+		case "cal://week":
+			end := time.Now().AddDate(0, 0, 7).Format(time.DateOnly)
+			entries, err = s.store.ListEntries(ctx, user.ID, today, end, "")
+		case "cal://open-tasks":
+			entries, err = s.store.ListEntries(ctx, user.ID, "", "", "")
+			open := entries[:0]
+			for _, e := range entries {
+				if e.Type == "task" && !e.Completed {
+					open = append(open, e)
+				}
+			}
+			entries = open
+		default:
+			c.JSON(http.StatusOK, rpcError(req.ID, -32602, "unknown resource"))
+			return
+		}
+		if err != nil {
+			c.JSON(http.StatusOK, rpcError(req.ID, -32603, "query failed"))
+			return
+		}
+		data, _ := json.Marshal(entries)
+		c.JSON(http.StatusOK, rpcResult(req.ID, gin.H{"contents": []gin.H{
+			{"uri": p.URI, "mimeType": "application/json", "text": string(data)},
+		}}))
+	case req.Method == "prompts/list":
+		c.JSON(http.StatusOK, rpcResult(req.ID, gin.H{"prompts": []gin.H{
+			{"name": "daily-plan", "description": "Turn today's agenda into a realistic plan", "arguments": []gin.H{}},
+			{"name": "weekly-review", "description": "Summarize the past week and propose next week's focus", "arguments": []gin.H{}},
+		}}))
+	case req.Method == "prompts/get":
+		var p struct {
+			Name string `json:"name"`
+		}
+		_ = json.Unmarshal(req.Params, &p)
+		texts := map[string]string{
+			"daily-plan":    "Here is today's agenda (cal://today). Help me plan the day: order the timed blocks realistically, flag what's overpacked, and suggest which tasks to defer. After we agree, update entries or add new ones via the tools.",
+			"weekly-review": "Pull cal://week plus all open tasks (cal://open-tasks). Summarize what I completed, what slipped, and propose three focus items for next week. Offer to create the review as a note entry.",
+		}
+		text, ok := texts[p.Name]
+		if !ok {
+			c.JSON(http.StatusOK, rpcError(req.ID, -32602, "unknown prompt"))
+			return
+		}
+		c.JSON(http.StatusOK, rpcResult(req.ID, gin.H{
+			"description": p.Name,
+			"messages":    []gin.H{{"role": "user", "content": gin.H{"type": "text", "text": text}}},
+		}))
 	default:
 		c.JSON(http.StatusOK, rpcError(req.ID, -32601, "method not found"))
 	}

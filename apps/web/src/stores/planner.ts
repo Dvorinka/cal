@@ -66,6 +66,7 @@ interface PlannerState {
   removeFeed: (id: string) => Promise<void>;
   refreshFeed: (id: string) => Promise<void>;
   importIcs: (file: File) => Promise<void>;
+  restore: (file: File) => Promise<void>;
   rotateToken: (kind: "widget" | "api") => Promise<void>;
   updateSettings: (settings: Settings) => Promise<void>;
   toast: (message: string, action?: Toast["action"]) => void;
@@ -334,6 +335,16 @@ export const usePlanner = create<PlannerState>((set, get) => ({
       get().toast("Synced");
     } catch (error) {
       get().toast(error instanceof Error ? error.message : "Sync failed");
+    }
+  },
+
+  async restore(file) {
+    try {
+      const out = await get().api.restore(file);
+      await get().loadEntries({});
+      get().toast(`Restored ${out.restored} entr${out.restored === 1 ? "y" : "ies"}`);
+    } catch (error) {
+      get().toast(error instanceof Error ? error.message : "Restore failed");
     }
   },
 

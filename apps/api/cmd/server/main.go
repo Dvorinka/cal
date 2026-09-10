@@ -27,6 +27,7 @@ func main() {
 	go httpapi.RefreshFeedsLoop(context.Background(), s, 30*time.Minute)
 	go httpapi.PushLoop(context.Background(), s, time.Minute)
 	go caldavLoop(context.Background(), s)
+	go httpapi.BackupLoop(context.Background(), s, env("DATA_DIR", "./data"))
 
 	router := httpapi.New(s, calendar.NewHolidayCache())
 	addr := ":" + env("PORT", "8080")

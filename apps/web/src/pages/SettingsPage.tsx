@@ -1,9 +1,15 @@
-import type { Accent } from "@cal/api-client";
+import type { Accent, SessionInfo } from "@cal/api-client";
 import { Bell, BellOff, Copy, Download, LogOut, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { disablePush, enablePush, pushEnabled } from "../lib/push";
 import { usePlanner } from "../stores/planner";
+
+const timezones: string[] = (() => {
+  const zones: string[] = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
+  const local = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return local && !zones.includes(local) ? [local, ...zones] : zones;
+})();
 
 const ACCENTS: { value: Accent; label: string }[] = [
   { value: "green", label: "Forest" },
@@ -30,6 +36,8 @@ export function SettingsPage() {
   const removeFeed = usePlanner((state) => state.removeFeed);
   const refreshFeed = usePlanner((state) => state.refreshFeed);
   const importIcs = usePlanner((state) => state.importIcs);
+  const restore = usePlanner((state) => state.restore);
+  const api = usePlanner((state) => state.api);
   const rotateToken = usePlanner((state) => state.rotateToken);
   const toast = usePlanner((state) => state.toast);
   const user = usePlanner((state) => state.user);
@@ -44,7 +52,12 @@ export function SettingsPage() {
   const [davUser, setDavUser] = useState("");
   const [davPass, setDavPass] = useState("");
   const [addingAccount, setAddingAccount] = useState(false);
+  const [pwCurrent, setPwCurrent] = useState("");
+  const [pwNext, setPwNext] = useState("");
+  const [pwSaving, setPwSaving] = useState(false);
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
+  const restoreRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     void pushEnabled().then(setPushOn).catch(() => setPushOn(false));
@@ -54,6 +67,7 @@ export function SettingsPage() {
     void loadEntries({});
     void loadFeeds();
     void loadAccounts();
+    void api.sessions().then(setSessions).catch(() => {});
   }, [loadEntries, loadFeeds]);
 
   const stats = useMemo(() => {
@@ -70,6 +84,31 @@ export function SettingsPage() {
   }, [entries]);
 
   const set = (patch: Partial<typeof settings>) => void updateSettings({ ...settings, ...patch });
+
+  async function submitPassword() {
+    setPwSaving(true);
+    try {
+      await api.changePassword(pwCurrent, pwNext);
+      setPwCurrent("");
+      setPwNext("");
+      void api.sessions().then(setSessions);
+      toast("Password changed");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Failed");
+    } finally {
+      setPwSaving(false);
+    }
+  }
+
+  async function revokeSession(id: string) {
+    try {
+      await api.revokeSession(id);
+      setSessions((s) => s.filter((x) => x.id !== id));
+      toast("Session signed out");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Failed");
+    }
+  }
 
   async function submitAccount() {
     setAddingAccount(true);
@@ -100,6 +139,7 @@ export function SettingsPage() {
   }
 
   const widgetUrl = `${location.origin}/widget/today?token=${settings.widgetToken}`;
+  const icsUrl = `${location.origin}/api/feed.ics?token=${settings.widgetToken}`;
   const mcpConfig = JSON.stringify(
     { mcpServers: { cal: { url: `${location.origin}/api/mcp`, headers: { Authorization: `Bearer ${settings.apiToken}` } } } },
     null,
@@ -138,6 +178,20 @@ export function SettingsPage() {
               >
                 <option value="monday">Monday</option>
                 <option value="sunday">Sunday</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Timezone</span>
+              <select
+                className="select"
+                value={settings.timezone || "UTC"}
+                onChange={(e) => set({ timezone: e.target.value })}
+              >
+                {timezones.map((tz) => (
+                  <option key={tz} value={tz}>
+                    {tz}
+                  </option>
+                ))}
               </select>
             </label>
             <div className="field">
@@ -365,6 +419,16 @@ export function SettingsPage() {
             </button>
           </div>
           <pre className="code-block">{`<iframe src="${widgetUrl}" style="border:0;width:100%;height:320px"></iframe>`}</pre>
+          <p className="panel-note" style={{ marginTop: 10 }}>
+            Or subscribe to Cal itself in any calendar app — this URL serves a live .ics feed of your tasks and
+            events:
+          </p>
+          <div className="token-row">
+            <code className="token">{icsUrl}</code>
+            <button type="button" className="icon-btn" aria-label="Copy feed URL" onClick={() => copy(icsUrl, "URL")}>
+              <Copy size={14} />
+            </button>
+          </div>
         </section>
 
         <section className="panel">
@@ -373,9 +437,29 @@ export function SettingsPage() {
             {stats.task} tasks ({stats.done} done), {stats.event} events, {stats.note} notes, {stats.link}{" "}
             links — stored in your own database. Take them with you any time.
           </p>
-          <a className="btn btn-secondary" href="/api/export" download>
-            <Download size={14} /> Export everything (JSON)
-          </a>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <a className="btn btn-secondary" href="/api/export" download>
+              <Download size={14} /> Export everything (JSON)
+            </a>
+            <input
+              ref={restoreRef}
+              type="file"
+              accept=".json,application/json"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void restore(file);
+                e.target.value = "";
+              }}
+            />
+            <button type="button" className="btn btn-secondary" onClick={() => restoreRef.current?.click()}>
+              <Upload size={14} /> Restore from backup
+            </button>
+          </div>
+          <p className="panel-note" style={{ marginTop: 10 }}>
+            A restore merges — entries already present are kept, missing ones come back. The server also writes
+            a nightly backup to <code>DATA_DIR/backups/</code> (14 days kept).
+          </p>
         </section>
 
         <section className="panel">
@@ -384,6 +468,56 @@ export function SettingsPage() {
           <button type="button" className="btn btn-secondary" onClick={() => void logout()}>
             <LogOut size={14} /> Sign out
           </button>
+        </section>
+
+        <section className="panel">
+          <h3>Security</h3>
+          <div className="feed-add" style={{ gridTemplateColumns: "1fr 1fr auto" }}>
+            <input
+              className="input"
+              type="password"
+              placeholder="Current password"
+              value={pwCurrent}
+              onChange={(e) => setPwCurrent(e.target.value)}
+            />
+            <input
+              className="input"
+              type="password"
+              placeholder="New password (8+ chars)"
+              value={pwNext}
+              onChange={(e) => setPwNext(e.target.value)}
+            />
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={pwSaving || pwCurrent === "" || pwNext.length < 8}
+              onClick={() => void submitPassword()}
+            >
+              {pwSaving ? "Saving…" : "Change"}
+            </button>
+          </div>
+          <p className="panel-note" style={{ marginTop: 10 }}>
+            Changing the password signs out every other session.
+          </p>
+          <h4 style={{ margin: "14px 0 8px" }}>Active sessions</h4>
+          {sessions.map((s) => (
+            <div key={s.id} className="feed-row">
+              <div className="feed-meta">
+                <span className="feed-name">
+                  {s.current ? "This device" : s.userAgent || "Unknown device"}
+                </span>
+                <span className="feed-url">
+                  {s.lastSeen ? `active ${new Date(s.lastSeen).toLocaleString()}` : `since ${new Date(s.createdAt).toLocaleDateString()}`}
+                  {!s.current && s.userAgent ? ` — ${s.userAgent.slice(0, 60)}` : ""}
+                </span>
+              </div>
+              {!s.current && (
+                <button type="button" className="icon-btn" aria-label="Revoke session" onClick={() => void revokeSession(s.id)}>
+                  <Trash2 size={14} />
+                </button>
+              )}
+            </div>
+          ))}
         </section>
       </div>
     </>

@@ -1,7 +1,7 @@
-import type { EntryType, Recur } from "@cal/api-client";
+import type { EntryType, Recur, Revision } from "@cal/api-client";
 import { renderMarkdown } from "../lib/markdown";
 import { AnimatePresence, motion } from "framer-motion";
-import { CalendarClock, Check, Link2, StickyNote, Trash2 } from "lucide-react";
+import { CalendarClock, Check, History, Link2, StickyNote, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
@@ -44,6 +44,7 @@ export function EntryEditor() {
   const entries = usePlanner((state) => state.entries);
   const accounts = usePlanner((state) => state.accounts);
   const loadAccounts = usePlanner((state) => state.loadAccounts);
+  const loadEntries = usePlanner((state) => state.loadEntries);
   const open = editor.mode !== "closed";
   // Resolve against the live store so optimistic updates (e.g. Done) re-render.
   const editing =
@@ -62,9 +63,12 @@ export function EntryEditor() {
   const [tags, setTags] = useState("");
   const [content, setContent] = useState("");
   const [noteMode, setNoteMode] = useState<"write" | "preview">("write");
+  const [showHistory, setShowHistory] = useState(false);
+  const [revisions, setRevisions] = useState<Revision[]>([]);
   const [saving, setSaving] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const api = usePlanner((state) => state.api);
 
   useEffect(() => {
     if (editor.mode === "create") {
@@ -81,6 +85,8 @@ export function EntryEditor() {
       setTags("");
       setContent("");
       setNoteMode("write");
+      setShowHistory(false);
+      setRevisions([]);
     } else if (editor.mode === "edit") {
       const e = editor.entry;
       setTitle(e.title);
@@ -96,8 +102,16 @@ export function EntryEditor() {
       setTags(e.tags.join(", "));
       setContent(e.content ?? "");
       setNoteMode("write");
+      setShowHistory(false);
+      setRevisions([]);
     }
   }, [editor]);
+
+  useEffect(() => {
+    if (showHistory && editing) {
+      void api.entryRevisions(editing.id).then(setRevisions).catch(() => setRevisions([]));
+    }
+  }, [showHistory, editing, api]);
 
   useEffect(() => {
     if (!open) return;
@@ -363,6 +377,53 @@ export function EntryEditor() {
                   placeholder={type === "event" ? "Location, agenda, context…" : "Notes, context, links…"}
                 />
               </label>
+            )}
+            {editing && (
+              <div className="history-wrap">
+                <button
+                  type="button"
+                  className="history-toggle"
+                  onClick={() => setShowHistory((v) => !v)}
+                >
+                  <History size={13} /> History {showHistory ? "▴" : "▾"}
+                </button>
+                {showHistory && (
+                  <div className="history-list">
+                    {revisions.length === 0 && <p className="note-empty">No earlier versions yet.</p>}
+                    {revisions.map((r) => (
+                      <div key={r.id} className="history-row">
+                        <div className="history-meta">
+                          <span className="history-title">{r.title || "Untitled"}</span>
+                          <span className="history-when">
+                            {new Date(r.savedAt).toLocaleString(undefined, {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                            {r.content ? ` — ${r.content.slice(0, 60)}${r.content.length > 60 ? "…" : ""}` : ""}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-xs"
+                          onClick={() => {
+                            void api.restoreRevision(editing.id, r.id).then(async () => {
+                              const fresh = await api.entryRevisions(editing.id);
+                              setRevisions(fresh);
+                              await loadEntries({});
+                              close();
+                              toast("Restored an earlier version");
+                            });
+                          }}
+                        >
+                          Restore
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
             <div className="editor-foot">
               {editing?.type === "task" && (

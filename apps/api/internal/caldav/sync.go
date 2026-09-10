@@ -112,8 +112,16 @@ func (sy *Syncer) SyncAccount(ctx context.Context, userID string, a store.Caldav
 		}
 		existing, ok := byUID[uid]
 		same := ok && existing.ExternalETag != nil && *existing.ExternalETag == r.ETag && r.ETag != ""
-		if same || (ok && existing.Dirty) {
-			continue // unchanged, or local edit wins this round (pushed in step 2)
+		remoteChanged := ok && (existing.ExternalETag == nil || *existing.ExternalETag != r.ETag)
+		if same {
+			continue
+		}
+		if ok && existing.Dirty && remoteChanged {
+			// Both sides moved: remote wins the shared object, but the local
+			// edit survives as a detached copy tagged `conflict`.
+			sy.preserveConflict(ctx, userID, existing)
+		} else if ok && existing.Dirty {
+			continue // local-only change; pushed in step 2, remote copy is ours
 		}
 		evs, err := ical.Parse(r.ICS)
 		if err != nil || len(evs) == 0 {
@@ -139,6 +147,21 @@ func (sy *Syncer) SyncAccount(ctx context.Context, userID string, a store.Caldav
 	return sy.store.TouchCaldavSync(ctx, a.ID)
 }
 
+// preserveConflict writes the dirty local version back as a detached copy so
+// neither side of a divergence is lost.
+func (sy *Syncer) preserveConflict(ctx context.Context, userID string, e store.Entry) {
+	tags := append(append([]string{}, e.Tags...), "conflict")
+	_, err := sy.store.CreateEntry(ctx, userID, store.EntryInput{
+		Title: e.Title + " (conflict)", Content: e.Content, Type: e.Type,
+		LinkURL: e.LinkURL, Date: e.Date,
+		StartTime: strOr(e.StartTime), EndTime: strOr(e.EndTime),
+		Color: e.Color, Tags: tags, Recur: e.Recur, Remind: e.Remind,
+	})
+	if err != nil {
+		log.Printf("caldav conflict copy %s: %v", e.ID, err)
+	}
+}
+
 // SyncAll is the background loop tick: every account, best-effort.
 func (sy *Syncer) SyncAll(ctx context.Context) {
 	owners, err := sy.store.AllCaldavAccounts(ctx)
@@ -151,6 +174,13 @@ func (sy *Syncer) SyncAll(ctx context.Context) {
 			log.Printf("caldav sync %s: %v", o.Account.Name, err)
 		}
 	}
+}
+
+func strOr(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }
 
 func uidFor(e store.Entry) string {

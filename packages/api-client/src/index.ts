@@ -46,14 +46,40 @@ export interface EntryInput {
 
 export type EntryPatch = Partial<EntryInput & { completed: boolean }>;
 
+export interface Revision {
+  id: string;
+  entryId: string;
+  title: string;
+  content: string;
+  type: EntryType;
+  date: string;
+  startTime?: string;
+  endTime?: string;
+  completed: boolean;
+  color: string;
+  tags: string[];
+  recur: Recur;
+  remind?: number;
+  savedAt: string;
+}
+
 export interface Settings {
   country: string;
   showHolidays: boolean;
   theme: Theme;
   weekStart: WeekStart;
   accent: Accent;
+  timezone: string;
   widgetToken: string;
   apiToken: string;
+}
+
+export interface SessionInfo {
+  id: string;
+  userAgent?: string;
+  createdAt: string;
+  lastSeen?: string;
+  current: boolean;
 }
 
 export interface CaldavAccount {
@@ -190,6 +216,18 @@ export class CalApi {
     return this.request<FeedEvent[]>(`/feed-events?${search.toString()}`);
   }
 
+  async sessions(): Promise<SessionInfo[]> {
+    return this.request<SessionInfo[]>("/sessions");
+  }
+
+  async revokeSession(id: string): Promise<void> {
+    await this.request<void>(`/sessions/${id}`, { method: "DELETE" });
+  }
+
+  async changePassword(current: string, password: string): Promise<void> {
+    await this.request<void>("/password", { method: "POST", body: { current, password } });
+  }
+
   async caldavAccounts(): Promise<CaldavAccount[]> {
     return this.request<CaldavAccount[]>("/caldav");
   }
@@ -204,6 +242,28 @@ export class CalApi {
 
   async syncCaldav(id: string): Promise<void> {
     await this.request<void>(`/caldav/${id}/sync`, { method: "POST" });
+  }
+
+  async entryRevisions(id: string): Promise<Revision[]> {
+    return this.request<Revision[]>(`/entries/${id}/revisions`);
+  }
+
+  async restoreRevision(entryId: string, revId: string): Promise<void> {
+    await this.request<void>(`/entries/${entryId}/restore/${revId}`, { method: "POST" });
+  }
+
+  async restore(file: File): Promise<{ restored: number }> {
+    const response = await fetch(`${this.baseUrl}/restore`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: file,
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || `Request failed: ${response.status}`);
+    }
+    return response.json();
   }
 
   async importIcs(file: File): Promise<{ imported: number }> {

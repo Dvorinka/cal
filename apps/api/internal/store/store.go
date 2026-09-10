@@ -66,6 +66,7 @@ type Settings struct {
 	Theme        string `json:"theme"`
 	WeekStart    string `json:"weekStart"`
 	Accent       string `json:"accent"`
+	Timezone     string `json:"timezone"`
 	WidgetToken  string `json:"widgetToken"`
 	ApiToken     string `json:"apiToken"`
 }
@@ -168,14 +169,69 @@ func (s *Store) UserBySession(ctx context.Context, sessionID string) (User, erro
 	return u, err
 }
 
-func (s *Store) CreateSession(ctx context.Context, userID string) (string, error) {
+func (s *Store) CreateSession(ctx context.Context, userID, userAgent string) (string, error) {
 	_, _ = s.db.Exec(ctx, `DELETE FROM sessions WHERE expires_at < now()`)
 	id := uuid.NewString()
 	_, err := s.db.Exec(ctx, `
-		INSERT INTO sessions (id, user_id, expires_at)
-		VALUES ($1, $2, now() + interval '30 days')
-	`, id, userID)
+		INSERT INTO sessions (id, user_id, expires_at, user_agent, last_seen_at)
+		VALUES ($1, $2, now() + interval '30 days', nullif($3, ''), now())
+	`, id, userID, userAgent)
 	return id, err
+}
+
+// SessionInfo describes one live session for the security panel.
+type SessionInfo struct {
+	ID        string     `json:"id"`
+	UserAgent *string    `json:"userAgent,omitempty"`
+	CreatedAt time.Time  `json:"createdAt"`
+	LastSeen  *time.Time `json:"lastSeen,omitempty"`
+	Current   bool       `json:"current"`
+}
+
+// ListSessions returns the user's live sessions; currentID marks "this one".
+func (s *Store) ListSessions(ctx context.Context, userID, currentID string) ([]SessionInfo, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT id::text, user_agent, created_at, last_seen_at, id::text = $2
+		FROM sessions
+		WHERE user_id = $1 AND expires_at > now()
+		ORDER BY last_seen_at DESC NULLS LAST
+	`, userID, currentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []SessionInfo{}
+	for rows.Next() {
+		var si SessionInfo
+		if err := rows.Scan(&si.ID, &si.UserAgent, &si.CreatedAt, &si.LastSeen, &si.Current); err != nil {
+			return nil, err
+		}
+		out = append(out, si)
+	}
+	return out, rows.Err()
+}
+
+// TouchSession refreshes last_seen_at (cheap activity signal).
+func (s *Store) TouchSession(ctx context.Context, sessionID string) {
+	_, _ = s.db.Exec(ctx, `UPDATE sessions SET last_seen_at = now() WHERE id = $1`, sessionID)
+}
+
+// RevokeSession deletes one session owned by the user.
+func (s *Store) RevokeSession(ctx context.Context, userID, sessionID string) error {
+	_, err := s.db.Exec(ctx, `DELETE FROM sessions WHERE id = $1 AND user_id = $2`, sessionID, userID)
+	return err
+}
+
+// ChangePassword verifies the old password and sets a new hash.
+func (s *Store) ChangePassword(ctx context.Context, userID, newHash string) error {
+	_, err := s.db.Exec(ctx, `UPDATE users SET password_hash = $1 WHERE id = $2`, newHash, userID)
+	return err
+}
+
+// RevokeOtherSessions deletes every session except the caller's.
+func (s *Store) RevokeOtherSessions(ctx context.Context, userID, keepID string) error {
+	_, err := s.db.Exec(ctx, `DELETE FROM sessions WHERE user_id = $1 AND id <> $2`, userID, keepID)
+	return err
 }
 
 func (s *Store) DeleteSession(ctx context.Context, sessionID string) error {
@@ -303,6 +359,15 @@ func (s *Store) UpdateEntry(ctx context.Context, userID, id string, patch EntryP
 		return Entry{}, ErrInvalid
 	}
 
+	// Snapshot the pre-update row so every change is recoverable.
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO entry_revisions (entry_id, user_id, title, content, type, link_url, date, start_time, end_time, completed, color, tags, recur, remind)
+		SELECT id, user_id, title, content, type, link_url, date, start_time, end_time, completed, color, tags, recur, remind
+		FROM entries WHERE id = $1
+	`, id); err != nil {
+		return Entry{}, err
+	}
+
 	// Rescheduling clears the reminder so it can fire again.
 	resetRemind := patch.Remind != nil || patch.StartTime != nil || patch.Date != nil
 
@@ -395,6 +460,136 @@ func (s *Store) DeleteEntry(ctx context.Context, userID, id string) error {
 	return nil
 }
 
+// AllUserIDs returns every user id — used by the nightly backup.
+func (s *Store) AllUserIDs(ctx context.Context) ([]string, error) {
+	rows, err := s.db.Query(ctx, `SELECT id::text FROM users`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// RestoreEntries re-inserts exported entries under the user, skipping IDs that
+// already exist. Sync metadata is stripped — a restored entry is local.
+func (s *Store) RestoreEntries(ctx context.Context, userID string, entries []Entry) (int, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(ctx)
+	imported := 0
+	for _, e := range entries {
+		if e.Title == "" || e.Type == "" || e.Date == "" {
+			continue
+		}
+		tag, err := tx.Exec(ctx, `
+			INSERT INTO entries (id, user_id, title, content, type, link_url, date, start_time, end_time, completed, color, tags, recur, remind)
+			VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, nullif($8, '')::time, nullif($9, '')::time, $10, $11, $12, coalesce(nullif($13, ''), 'none'), $14)
+			ON CONFLICT (id) DO NOTHING
+		`, e.ID, userID, e.Title, e.Content, e.Type, e.LinkURL, e.Date, strOr(e.StartTime), strOr(e.EndTime), e.Completed, e.Color, e.Tags, e.Recur, e.Remind)
+		if err != nil {
+			return imported, err
+		}
+		imported += int(tag.RowsAffected())
+	}
+	return imported, tx.Commit(ctx)
+}
+
+func strOr(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
+// Revision is a point-in-time snapshot of an entry.
+type Revision struct {
+	ID        string    `json:"id"`
+	EntryID   string    `json:"entryId"`
+	Title     string    `json:"title"`
+	Content   string    `json:"content"`
+	Type      string    `json:"type"`
+	Date      string    `json:"date"`
+	StartTime *string   `json:"startTime,omitempty"`
+	EndTime   *string   `json:"endTime,omitempty"`
+	Completed bool      `json:"completed"`
+	Color     string    `json:"color"`
+	Tags      []string  `json:"tags"`
+	Recur     string    `json:"recur"`
+	Remind    *int      `json:"remind,omitempty"`
+	SavedAt   time.Time `json:"savedAt"`
+}
+
+// EntryRevisions lists snapshots for an entry, newest first (capped at 50).
+func (s *Store) EntryRevisions(ctx context.Context, userID, entryID string) ([]Revision, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT id::text, entry_id::text, title, coalesce(content, ''), type, date::text,
+		       to_char(start_time, 'HH24:MI'), to_char(end_time, 'HH24:MI'),
+		       completed, color, tags, recur, remind, saved_at
+		FROM entry_revisions
+		WHERE entry_id = $1 AND user_id = $2
+		ORDER BY saved_at DESC
+		LIMIT 50
+	`, entryID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Revision{}
+	for rows.Next() {
+		var r Revision
+		if err := rows.Scan(&r.ID, &r.EntryID, &r.Title, &r.Content, &r.Type, &r.Date, &r.StartTime, &r.EndTime,
+			&r.Completed, &r.Color, &r.Tags, &r.Recur, &r.Remind, &r.SavedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// RestoreRevision copies a snapshot's fields back onto the live entry. The
+// pre-restore state is snapshotted first so a restore is itself revertible.
+func (s *Store) RestoreRevision(ctx context.Context, userID, entryID, revID string) error {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO entry_revisions (entry_id, user_id, title, content, type, link_url, date, start_time, end_time, completed, color, tags, recur, remind)
+		SELECT id, user_id, title, content, type, link_url, date, start_time, end_time, completed, color, tags, recur, remind
+		FROM entries WHERE id = $1
+	`, entryID); err != nil {
+		return err
+	}
+	tag, err := tx.Exec(ctx, `
+		UPDATE entries e
+		SET title = r.title, content = r.content, type = r.type, link_url = r.link_url,
+		    date = r.date, start_time = r.start_time, end_time = r.end_time,
+		    completed = r.completed, color = r.color, tags = r.tags, recur = r.recur, remind = r.remind,
+		    dirty = CASE WHEN e.account_id IS NOT NULL THEN true ELSE e.dirty END,
+		    reminded_at = NULL
+		FROM entry_revisions r
+		WHERE e.id = r.entry_id AND r.id = $1 AND e.id = $2 AND e.user_id = $3
+	`, revID, entryID, userID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return tx.Commit(ctx)
+}
+
 // Entry returns one entry owned by the user.
 func (s *Store) Entry(ctx context.Context, userID, id string) (Entry, error) {
 	var e Entry
@@ -423,25 +618,26 @@ func (s *Store) entryTx(ctx context.Context, tx pgx.Tx, userID, id string) (Entr
 func (s *Store) Settings(ctx context.Context, userID string) (Settings, error) {
 	var settings Settings
 	err := s.db.QueryRow(ctx, `
-		SELECT country, show_holidays, theme, week_start, accent, widget_token, api_token FROM settings WHERE user_id = $1
-	`, userID).Scan(&settings.Country, &settings.ShowHolidays, &settings.Theme, &settings.WeekStart, &settings.Accent, &settings.WidgetToken, &settings.ApiToken)
+		SELECT country, show_holidays, theme, week_start, accent, timezone, widget_token, api_token FROM settings WHERE user_id = $1
+	`, userID).Scan(&settings.Country, &settings.ShowHolidays, &settings.Theme, &settings.WeekStart, &settings.Accent, &settings.Timezone, &settings.WidgetToken, &settings.ApiToken)
 	return settings, err
 }
 
 func (s *Store) UpdateSettings(ctx context.Context, userID string, settings Settings) (Settings, error) {
 	var out Settings
 	err := s.db.QueryRow(ctx, `
-		INSERT INTO settings (user_id, country, show_holidays, theme, week_start, accent)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO settings (user_id, country, show_holidays, theme, week_start, accent, timezone)
+		VALUES ($1, $2, $3, $4, $5, $6, coalesce(nullif($7, ''), 'UTC'))
 		ON CONFLICT (user_id) DO UPDATE
 		SET country = EXCLUDED.country,
 		    show_holidays = EXCLUDED.show_holidays,
 		    theme = EXCLUDED.theme,
 		    week_start = EXCLUDED.week_start,
-		    accent = EXCLUDED.accent
-		RETURNING country, show_holidays, theme, week_start, accent, widget_token, api_token
-	`, userID, settings.Country, settings.ShowHolidays, settings.Theme, settings.WeekStart, settings.Accent).
-		Scan(&out.Country, &out.ShowHolidays, &out.Theme, &out.WeekStart, &out.Accent, &out.WidgetToken, &out.ApiToken)
+		    accent = EXCLUDED.accent,
+		    timezone = EXCLUDED.timezone
+		RETURNING country, show_holidays, theme, week_start, accent, timezone, widget_token, api_token
+	`, userID, settings.Country, settings.ShowHolidays, settings.Theme, settings.WeekStart, settings.Accent, settings.Timezone).
+		Scan(&out.Country, &out.ShowHolidays, &out.Theme, &out.WeekStart, &out.Accent, &out.Timezone, &out.WidgetToken, &out.ApiToken)
 	return out, err
 }
 
@@ -537,10 +733,14 @@ func (s *Store) PushSubs(ctx context.Context, userID string) ([]PushSubscription
 // been pushed yet. Entry.OwnerID carries the owning user.
 func (s *Store) DueReminders(ctx context.Context) ([]Entry, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT `+entryCols+`, user_id::text FROM entries
-		WHERE remind IS NOT NULL AND reminded_at IS NULL AND start_time IS NOT NULL
-		  AND date = CURRENT_DATE
-		  AND (date + start_time - (remind || ' minutes')::interval) <= now()
+		SELECT e.id::text, e.title, e.content, e.type, e.link_url, e.date::text,
+		       to_char(e.start_time, 'HH24:MI'), to_char(e.end_time, 'HH24:MI'),
+		       e.completed, e.color, e.tags, e.recur, e.remind, e.created_at,
+		       e.account_id::text, e.external_uid, e.external_href, e.external_etag, e.dirty,
+		       e.user_id::text
+		FROM entries e JOIN settings st ON st.user_id = e.user_id
+		WHERE e.remind IS NOT NULL AND e.reminded_at IS NULL AND e.start_time IS NOT NULL
+		  AND ((e.date + e.start_time) AT TIME ZONE st.timezone - (e.remind || ' minutes')::interval) <= now()
 	`)
 	if err != nil {
 		return nil, err

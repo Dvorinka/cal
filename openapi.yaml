@@ -388,6 +388,76 @@ paths:
           description: Synced
         "502":
           description: Remote unreachable
+  /feed.ics:
+    get:
+      summary: Subscribable .ics feed of own tasks/events (widget token auth)
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: VCALENDAR of the user's tasks and events
+          content:
+            text/calendar:
+              schema:
+                type: string
+        "401":
+          description: Invalid token
+  /restore:
+    post:
+      summary: Merge an export file back into the account (additive)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [entries]
+              properties:
+                entries:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/Entry"
+      responses:
+        "200":
+          description: Number of restored entries
+  /sessions:
+    get:
+      summary: List active sessions
+      responses:
+        "200":
+          description: Sessions (current flagged)
+  /sessions/{id}:
+    delete:
+      summary: Revoke a session
+      responses:
+        "204":
+          description: Revoked
+  /password:
+    post:
+      summary: Change password; revokes other sessions
+      responses:
+        "204":
+          description: Changed
+        "403":
+          description: Wrong current password
+  /entries/{id}/revisions:
+    get:
+      summary: Point-in-time snapshots of an entry (newest first, ≤50)
+      responses:
+        "200":
+          description: Revision list
+  /entries/{id}/restore/{rev}:
+    post:
+      summary: Restore a revision onto the entry (snapshots current state first)
+      responses:
+        "204":
+          description: Restored
+        "404":
+          description: Revision not found
   /push/vapid:
     get:
       responses:

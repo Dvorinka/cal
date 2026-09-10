@@ -25,6 +25,7 @@ type Event struct {
 	Recurrence  *RRule
 	Exdates     []time.Time
 	Cancelled   bool
+	Completed   bool
 }
 
 type RRule struct {
@@ -393,8 +394,23 @@ func unescape(s string) string {
 
 // EncodeEvent serializes an Event into a minimal valid VCALENDAR/VEVENT.
 func EncodeEvent(e Event) string {
+	return EncodeCalendar([]Event{e})
+}
+
+// EncodeCalendar serializes events into one VCALENDAR document.
+func EncodeCalendar(events []Event) string {
 	var b strings.Builder
-	b.WriteString("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Cal//EN\r\nBEGIN:VEVENT\r\n")
+	b.WriteString("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Cal//EN\r\nCALSCALE:GREGORIAN\r\n")
+	for _, e := range events {
+		b.WriteString(encodeVevent(e))
+	}
+	b.WriteString("END:VCALENDAR\r\n")
+	return b.String()
+}
+
+func encodeVevent(e Event) string {
+	var b strings.Builder
+	b.WriteString("BEGIN:VEVENT\r\n")
 	b.WriteString("UID:" + fold(escapeText(e.UID)) + "\r\n")
 	b.WriteString("DTSTAMP:" + time.Now().UTC().Format("20060102T150405Z") + "\r\n")
 	b.WriteString("SUMMARY:" + fold(escapeText(e.Summary)) + "\r\n")
@@ -420,7 +436,34 @@ func EncodeEvent(e Event) string {
 			b.WriteString("DTEND:" + e.End.UTC().Format("20060102T150405Z") + "\r\n")
 		}
 	}
-	b.WriteString("END:VEVENT\r\nEND:VCALENDAR\r\n")
+	if e.Completed {
+		b.WriteString("STATUS:COMPLETED\r\n")
+	}
+	if e.Recurrence != nil && e.Recurrence.Freq != "" {
+		rr := "RRULE:FREQ=" + e.Recurrence.Freq
+		if e.Recurrence.Interval > 1 {
+			rr += fmt.Sprintf(";INTERVAL=%d", e.Recurrence.Interval)
+		}
+		if e.Recurrence.Count > 0 {
+			rr += fmt.Sprintf(";COUNT=%d", e.Recurrence.Count)
+		}
+		if e.Recurrence.HasUntil {
+			rr += ";UNTIL=" + e.Recurrence.Until.UTC().Format("20060102T150405Z")
+		}
+		if len(e.Recurrence.ByWeekday) > 0 {
+			days := []string{"SU", "MO", "TU", "WE", "TH", "FR", "SA"}
+			parts := make([]string, len(e.Recurrence.ByWeekday))
+			for i, d := range e.Recurrence.ByWeekday {
+				parts[i] = days[int(d)%7]
+			}
+			rr += ";BYDAY=" + strings.Join(parts, ",")
+		}
+		if e.Recurrence.ByMonthDay != 0 {
+			rr += fmt.Sprintf(";BYMONTHDAY=%d", e.Recurrence.ByMonthDay)
+		}
+		b.WriteString(rr + "\r\n")
+	}
+	b.WriteString("END:VEVENT\r\n")
 	return b.String()
 }
 
