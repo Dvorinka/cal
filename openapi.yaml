@@ -458,6 +458,46 @@ paths:
           description: Restored
         "404":
           description: Revision not found
+  /review/week:
+    get:
+      summary: Weekly digest — done/slipped/notes/streak/busiest
+      responses:
+        "200":
+          description: WeekReview
+  /habits:
+    get:
+      summary: Streaks for recurring #habit-tagged tasks
+      responses:
+        "200":
+          description: Habit list with streak counts
+  /unfurl:
+    get:
+      summary: Fetch a link's title/description/favicon (SSRF-guarded)
+      parameters:
+        - name: url
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Page metadata
+        "400":
+          description: Invalid or private URL
+  /files:
+    post:
+      summary: Upload an attachment (≤20 MB, multipart 'file')
+      responses:
+        "200":
+          description: "{url, name, markdown} — markdown is a ![alt](url) snippet"
+  /files/{name}:
+    get:
+      summary: Serve a caller-owned attachment
+      responses:
+        "200":
+          description: File bytes
+        "404":
+          description: Not found / not owned
   /push/vapid:
     get:
       responses:

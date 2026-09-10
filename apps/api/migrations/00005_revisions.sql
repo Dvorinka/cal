@@ -20,6 +20,7 @@ CREATE TABLE entry_revisions (
 );
 CREATE INDEX entry_revisions_entry ON entry_revisions(entry_id, saved_at DESC);
 ALTER TABLE settings ADD COLUMN timezone TEXT NOT NULL DEFAULT 'UTC';
+ALTER TABLE settings ADD COLUMN city TEXT;
 ALTER TABLE sessions
   ADD COLUMN user_agent TEXT,
   ADD COLUMN last_seen_at TIMESTAMPTZ;

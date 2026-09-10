@@ -76,6 +76,65 @@ func (s *Server) unsubscribePush(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// pushStore is what the reminder loop needs from the store — kept narrow so
+// the tick is unit-testable without a database.
+type pushStore interface {
+	DueReminders(ctx context.Context) ([]store.Entry, error)
+	PushSubs(ctx context.Context, userID string) ([]store.PushSubscription, error)
+	DeletePushSub(ctx context.Context, endpoint string) error
+	MarkReminded(ctx context.Context, id string) error
+}
+
+// pushSend delivers one notification; returns the HTTP status (0 on error).
+type pushSend func(payload []byte, sub store.PushSubscription, pub, priv string) (int, error)
+
+func sendWebpush(payload []byte, sub store.PushSubscription, pub, priv string) (int, error) {
+	resp, err := webpush.SendNotification(payload, &webpush.Subscription{
+		Endpoint: sub.Endpoint,
+		Keys:     webpush.Keys{P256dh: sub.P256dh, Auth: sub.Auth},
+	}, &webpush.Options{
+		Subscriber:      "cal@localhost",
+		VAPIDPublicKey:  pub,
+		VAPIDPrivateKey: priv,
+		TTL:             300,
+	})
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode, nil
+}
+
+// pushTick is one scheduler pass: find due reminders, push to each
+// subscriber, prune dead endpoints, mark delivered.
+func pushTick(ctx context.Context, s pushStore, pub, priv string, send pushSend) {
+	due, err := s.DueReminders(ctx)
+	if err != nil {
+		return
+	}
+	for _, entry := range due {
+		subs, err := s.PushSubs(ctx, entry.OwnerID)
+		if err != nil || len(subs) == 0 {
+			continue
+		}
+		payload, _ := json.Marshal(gin.H{
+			"title": entry.Title,
+			"body":  "Starts at " + deref(entry.StartTime),
+			"tag":   entry.ID,
+		})
+		for _, sub := range subs {
+			status, err := send(payload, sub, pub, priv)
+			if err != nil {
+				continue
+			}
+			if status == http.StatusGone || status == http.StatusNotFound {
+				_ = s.DeletePushSub(ctx, sub.Endpoint)
+			}
+		}
+		_ = s.MarkReminded(ctx, entry.ID)
+	}
+}
+
 // PushLoop fires due reminders every minute. Runs for the life of the process.
 func PushLoop(ctx context.Context, s *store.Store, every time.Duration) {
 	pub, priv, err := vapidKeys(ctx, s)
@@ -83,43 +142,7 @@ func PushLoop(ctx context.Context, s *store.Store, every time.Duration) {
 		log.Printf("push: vapid unavailable: %v", err)
 		return
 	}
-	tick := func() {
-		due, err := s.DueReminders(ctx)
-		if err != nil {
-			return
-		}
-		for _, entry := range due {
-			subs, err := s.PushSubs(ctx, entry.OwnerID)
-			if err != nil || len(subs) == 0 {
-				continue
-			}
-			payload, _ := json.Marshal(gin.H{
-				"title": entry.Title,
-				"body":  "Starts at " + deref(entry.StartTime),
-				"tag":   entry.ID,
-			})
-			for _, sub := range subs {
-				resp, err := webpush.SendNotification(payload, &webpush.Subscription{
-					Endpoint: sub.Endpoint,
-					Keys:     webpush.Keys{P256dh: sub.P256dh, Auth: sub.Auth},
-				}, &webpush.Options{
-					Subscriber:      "cal@localhost",
-					VAPIDPublicKey:  pub,
-					VAPIDPrivateKey: priv,
-					TTL:             300,
-				})
-				if err != nil {
-					continue
-				}
-				_ = resp.Body.Close()
-				if resp.StatusCode == http.StatusGone || resp.StatusCode == http.StatusNotFound {
-					_ = s.DeletePushSub(ctx, sub.Endpoint)
-				}
-			}
-			_ = s.MarkReminded(ctx, entry.ID)
-		}
-	}
-	tick()
+	pushTick(ctx, s, pub, priv, sendWebpush)
 	ticker := time.NewTicker(every)
 	defer ticker.Stop()
 	for {
@@ -127,7 +150,7 @@ func PushLoop(ctx context.Context, s *store.Store, every time.Duration) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			tick()
+			pushTick(ctx, s, pub, priv, sendWebpush)
 		}
 	}
 }

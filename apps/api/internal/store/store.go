@@ -67,6 +67,7 @@ type Settings struct {
 	WeekStart    string `json:"weekStart"`
 	Accent       string `json:"accent"`
 	Timezone     string `json:"timezone"`
+	City         string `json:"city"`
 	WidgetToken  string `json:"widgetToken"`
 	ApiToken     string `json:"apiToken"`
 }
@@ -618,26 +619,27 @@ func (s *Store) entryTx(ctx context.Context, tx pgx.Tx, userID, id string) (Entr
 func (s *Store) Settings(ctx context.Context, userID string) (Settings, error) {
 	var settings Settings
 	err := s.db.QueryRow(ctx, `
-		SELECT country, show_holidays, theme, week_start, accent, timezone, widget_token, api_token FROM settings WHERE user_id = $1
-	`, userID).Scan(&settings.Country, &settings.ShowHolidays, &settings.Theme, &settings.WeekStart, &settings.Accent, &settings.Timezone, &settings.WidgetToken, &settings.ApiToken)
+		SELECT country, show_holidays, theme, week_start, accent, timezone, coalesce(city, ''), widget_token, api_token FROM settings WHERE user_id = $1
+	`, userID).Scan(&settings.Country, &settings.ShowHolidays, &settings.Theme, &settings.WeekStart, &settings.Accent, &settings.Timezone, &settings.City, &settings.WidgetToken, &settings.ApiToken)
 	return settings, err
 }
 
 func (s *Store) UpdateSettings(ctx context.Context, userID string, settings Settings) (Settings, error) {
 	var out Settings
 	err := s.db.QueryRow(ctx, `
-		INSERT INTO settings (user_id, country, show_holidays, theme, week_start, accent, timezone)
-		VALUES ($1, $2, $3, $4, $5, $6, coalesce(nullif($7, ''), 'UTC'))
+		INSERT INTO settings (user_id, country, show_holidays, theme, week_start, accent, timezone, city)
+		VALUES ($1, $2, $3, $4, $5, $6, coalesce(nullif($7, ''), 'UTC'), nullif($8, ''))
 		ON CONFLICT (user_id) DO UPDATE
 		SET country = EXCLUDED.country,
 		    show_holidays = EXCLUDED.show_holidays,
 		    theme = EXCLUDED.theme,
 		    week_start = EXCLUDED.week_start,
 		    accent = EXCLUDED.accent,
-		    timezone = EXCLUDED.timezone
-		RETURNING country, show_holidays, theme, week_start, accent, timezone, widget_token, api_token
-	`, userID, settings.Country, settings.ShowHolidays, settings.Theme, settings.WeekStart, settings.Accent, settings.Timezone).
-		Scan(&out.Country, &out.ShowHolidays, &out.Theme, &out.WeekStart, &out.Accent, &out.Timezone, &out.WidgetToken, &out.ApiToken)
+		    timezone = EXCLUDED.timezone,
+		    city = EXCLUDED.city
+		RETURNING country, show_holidays, theme, week_start, accent, timezone, coalesce(city, ''), widget_token, api_token
+	`, userID, settings.Country, settings.ShowHolidays, settings.Theme, settings.WeekStart, settings.Accent, settings.Timezone, settings.City).
+		Scan(&out.Country, &out.ShowHolidays, &out.Theme, &out.WeekStart, &out.Accent, &out.Timezone, &out.City, &out.WidgetToken, &out.ApiToken)
 	return out, err
 }
 

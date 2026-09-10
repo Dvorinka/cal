@@ -10,7 +10,7 @@ const k = () => `m${key++}`;
 
 function inline(text: string): ReactNode[] {
   const out: ReactNode[] = [];
-  const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)|(\[[^\]]+\]\([^)]+\))/g;
+  const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)|(!\[[^\]]*\]\([^)]+\))|(\[[^\]]+\]\([^)]+\))/g;
   let last = 0;
   for (const m of text.matchAll(re)) {
     if (m.index > last) out.push(text.slice(last, m.index));
@@ -19,6 +19,16 @@ function inline(text: string): ReactNode[] {
       out.push(<code key={k()}>{tok.slice(1, -1)}</code>);
     } else if (tok.startsWith("**")) {
       out.push(<strong key={k()}>{tok.slice(2, -2)}</strong>);
+    } else if (tok.startsWith("![")) {
+      const end = tok.indexOf("](");
+      const alt = tok.slice(2, end);
+      const src = tok.slice(end + 2, -1);
+      // Only render same-origin uploads or http(s) — nothing else loads.
+      if (src.startsWith("/") || /^https?:\/\//i.test(src)) {
+        out.push(<img key={k()} src={src} alt={alt} className="md-img" />);
+      } else {
+        out.push(alt);
+      }
     } else if (tok.startsWith("[")) {
       const end = tok.indexOf("](");
       const label = tok.slice(1, end);

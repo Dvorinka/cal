@@ -69,6 +69,7 @@ func entryToEvent(e store.Entry, loc *time.Location) ical.Event {
 		Description: e.Content,
 		URL:         e.LinkURL,
 		Completed:   e.Type == "task" && e.Completed,
+		TZ:          loc,
 	}
 	day, err := time.Parse(time.DateOnly, e.Date)
 	if err != nil {

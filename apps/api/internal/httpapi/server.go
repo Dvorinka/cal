@@ -21,6 +21,7 @@ type Server struct {
 	store   *store.Store
 	holiday *calendar.HolidayCache
 	secure  bool
+	dataDir string
 }
 
 type authRequest struct {
@@ -30,7 +31,7 @@ type authRequest struct {
 
 func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	secure := os.Getenv("SESSION_SECURE") == "true"
-	server := &Server{store: st, holiday: holidays, secure: secure}
+	server := &Server{store: st, holiday: holidays, secure: secure, dataDir: env("DATA_DIR", "./data")}
 
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -76,6 +77,11 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authed.GET("/sessions", server.listSessions)
 	authed.DELETE("/sessions/:id", server.revokeSession)
 	authed.POST("/password", server.changePassword)
+	authed.GET("/review/week", server.weeklyReview)
+	authed.GET("/habits", server.habitStreaks)
+	authed.GET("/unfurl", server.unfurl)
+	authed.POST("/files", server.uploadFile)
+	authed.GET("/files/:name", server.serveFile)
 	authed.GET("/push/vapid", server.pushVapid)
 	authed.POST("/push/subscribe", server.subscribePush)
 	authed.POST("/push/unsubscribe", server.unsubscribePush)

@@ -35,6 +35,7 @@ export function readCachedSettings(): Settings {
       weekStart: "monday",
       accent: "green",
       timezone: "UTC",
+      city: "",
       widgetToken: "",
       apiToken: "",
     }

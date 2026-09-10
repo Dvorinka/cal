@@ -194,6 +194,15 @@ export function SettingsPage() {
                 ))}
               </select>
             </label>
+            <label className="field">
+              <span>Weather city</span>
+              <input
+                className="input"
+                placeholder="e.g. Prague — blank hides the strip"
+                value={settings.city}
+                onChange={(e) => set({ city: e.target.value })}
+              />
+            </label>
             <div className="field">
               <span>Accent</span>
               <div className="dots">

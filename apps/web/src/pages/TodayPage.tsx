@@ -1,11 +1,34 @@
-import { Check, Link2, Plus, StickyNote } from "lucide-react";
+import type { Habit, WeekReview } from "@cal/api-client";
+import {
+  Check,
+  Crosshair,
+  Flame,
+  Link2,
+  NotebookPen,
+  Plus,
+  StickyNote,
+  type LucideIcon,
+} from "lucide-react";
+import { Cloud, CloudDrizzle, CloudFog, CloudLightning, CloudRain, CloudSun, Snowflake, Sun } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { addDays, formatTime, iso, timeToMinutes, todayIso } from "../lib/date";
+import { fetchWeather, weatherIcon, type Weather } from "../lib/weather";
 import { usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
 
 const addDaysIso = (date: string, n: number) => iso(addDays(new Date(`${date}T12:00:00`), n));
+
+const WEATHER_ICONS: Record<string, LucideIcon> = {
+  sun: Sun,
+  "cloud-sun": CloudSun,
+  "cloud-fog": CloudFog,
+  "cloud-drizzle": CloudDrizzle,
+  "cloud-rain": CloudRain,
+  "cloud-lightning": CloudLightning,
+  snowflake: Snowflake,
+  cloud: Cloud,
+};
 
 function greeting(now: Date): string {
   const h = now.getHours();
@@ -15,6 +38,16 @@ function greeting(now: Date): string {
   return "Good evening";
 }
 
+const JOURNAL_TEMPLATE = `## Journal — {date}
+
+**Morning.** What would make today good?
+
+
+**Evening.** What happened; what did I learn?
+
+
+**Grateful for.**`;
+
 export function TodayPage() {
   const entries = usePlanner((state) => state.entries);
   const feedEvents = usePlanner((state) => state.feedEvents);
@@ -22,14 +55,22 @@ export function TodayPage() {
   const loadFeeds = usePlanner((state) => state.loadFeeds);
   const loadFeedEvents = usePlanner((state) => state.loadFeedEvents);
   const updateEntry = usePlanner((state) => state.updateEntry);
+  const createEntry = usePlanner((state) => state.createEntry);
+  const api = usePlanner((state) => state.api);
+  const settings = usePlanner((state) => state.settings);
   const openCreate = useUi((state) => state.openCreate);
   const openEdit = useUi((state) => state.openEdit);
   const selectDate = useUi((state) => state.selectDate);
   const [now, setNow] = useState(() => new Date());
+  const [weather, setWeather] = useState<Weather | null>(null);
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const [review, setReview] = useState<WeekReview | null>(null);
+  const [showReview, setShowReview] = useState(false);
+  const [focus, setFocus] = useState(false);
   const today = todayIso();
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    const timer = window.setInterval(() => setNow(new Date()), 30_000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -39,7 +80,16 @@ export function TodayPage() {
   useEffect(() => {
     void loadEntries({ from: addDaysIso(today, -14), to: addDaysIso(today, 14) });
     void loadFeeds();
-  }, [today, loadEntries, loadFeeds]);
+    void api.habits().then(setHabits).catch(() => {});
+  }, [today, loadEntries, loadFeeds, api]);
+
+  useEffect(() => {
+    if (settings.city) {
+      void fetchWeather(settings.city).then(setWeather).catch(() => setWeather(null));
+    } else {
+      setWeather(null);
+    }
+  }, [settings.city]);
 
   const feeds = usePlanner((state) => state.feeds);
   useEffect(() => {
@@ -60,126 +110,272 @@ export function TodayPage() {
   const todaysFeeds = feedEvents.filter((e) => e.date === today);
   const nextUp = timed.find((e) => (timeToMinutes(e.startTime) ?? 0) >= nowMinutes || (timeToMinutes(e.endTime) ?? 0) > nowMinutes);
 
+  const current = timed.find((e) => {
+    const s = timeToMinutes(e.startTime) ?? 0;
+    const en = timeToMinutes(e.endTime) ?? s + 60;
+    return s <= nowMinutes && nowMinutes < en;
+  });
+  const openTasks = untimedTasks.filter((e) => !e.completed);
+
+  const WeatherIcon = weather ? WEATHER_ICONS[weatherIcon(weather.code).icon] : null;
+
+  async function saveReviewAsNote() {
+    if (!review) return;
+    const lines = [
+      `## Week of ${review.from}`,
+      "",
+      `- **${review.tasksDone}** tasks done, **${review.tasksSlipped}** slipped`,
+      `- **${review.notesWritten}** notes written`,
+      `- Completion streak: **${review.streak}** day${review.streak === 1 ? "" : "s"}`,
+      review.busiestDay ? `- Busiest: ${review.busiestDay} (${review.busiestCount} done)` : "",
+      "",
+      "## Three focuses for next week",
+      "",
+      "1. ",
+      "2. ",
+      "3. ",
+    ].join("\n");
+    await createEntry({ title: `Weekly review ${review.from}`, type: "note", date: today, content: lines });
+  }
+
+  async function openJournal() {
+    const entry = await createEntry({
+      title: "Journal",
+      type: "note",
+      date: today,
+      content: JOURNAL_TEMPLATE.replace("{date}", today),
+    });
+    if (entry) openEdit(entry);
+  }
+
   return (
     <>
       <PageHeader
         title={now.toLocaleDateString(undefined, { weekday: "long" })}
         sub={now.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}
       >
+        {weather && WeatherIcon && (
+          <span className="weather-pill" title={`${settings.city}: ${weatherIcon(weather.code).label}, high ${weather.high}° low ${weather.low}°`}>
+            <WeatherIcon size={13} /> {weather.temp}° · {weather.low}–{weather.high}°
+          </span>
+        )}
+        <button type="button" className="btn btn-secondary" onClick={() => void openJournal()}>
+          <NotebookPen size={14} /> Journal
+        </button>
+        <button
+          type="button"
+          className={`btn ${focus ? "btn-primary" : "btn-secondary"}`}
+          aria-pressed={focus}
+          onClick={() => setFocus((v) => !v)}
+        >
+          <Crosshair size={14} /> Focus
+        </button>
         <button type="button" className="btn btn-primary" onClick={() => openCreate(today)}>
           <Plus size={14} strokeWidth={2.5} /> Add
         </button>
       </PageHeader>
 
       <div className="page-scroll">
-        <div className="today-hero">
-          <p className="greeting">{greeting(now)}.</p>
-          <p className="today-line">
-            {tasksTotal === 0 && timed.length === 0
-              ? "Nothing planned. A quiet page is also a plan."
-              : `${tasksDone} of ${tasksTotal} task${tasksTotal === 1 ? "" : "s"} done`}
-            {nextUp ? ` — next up at ${formatTime(nextUp.startTime!)}` : ""}
-          </p>
-          {tasksTotal > 0 && (
-            <div className="meter" aria-hidden>
-              <i style={{ width: `${(tasksDone / tasksTotal) * 100}%` }} />
-            </div>
-          )}
-        </div>
+        {!focus && (
+          <div className="today-hero">
+            <p className="greeting">{greeting(now)}.</p>
+            <p className="today-line">
+              {tasksTotal === 0 && timed.length === 0
+                ? "Nothing planned. A quiet page is also a plan."
+                : `${tasksDone} of ${tasksTotal} task${tasksTotal === 1 ? "" : "s"} done`}
+              {nextUp ? ` — next up at ${formatTime(nextUp.startTime!)}` : ""}
+            </p>
+            {tasksTotal > 0 && (
+              <div className="meter" aria-hidden>
+                <i style={{ width: `${(tasksDone / tasksTotal) * 100}%` }} />
+              </div>
+            )}
+            {habits.length > 0 && (
+              <div className="habit-row">
+                {habits.map((h) => (
+                  <span key={h.id} className={`habit-chip ${h.streak > 0 ? "on" : ""}`} title={`${h.title} — ${h.recur}, streak ${h.streak}`}>
+                    <Flame size={12} /> {h.title} <b>{h.streak}</b>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
-        <div className="today-cols">
-          <section className="panel">
-            <h3>Schedule</h3>
-            {timed.length === 0 && <p className="panel-empty">No timed entries today.</p>}
-            <ol className="agenda">
-              {todaysFeeds.map((e) => {
-                const start = timeToMinutes(e.startTime);
-                const end = timeToMinutes(e.endTime) ?? (start !== undefined ? start + 60 : undefined);
-                const live = start !== undefined && end !== undefined && start <= nowMinutes && nowMinutes < end;
-                return (
-                  <li
-                    key={e.id}
-                    className={`agenda-item feed-item color-${e.color} ${live ? "live" : ""}`}
-                    title={`${e.title} — ${e.feedName}${e.location ? ` · ${e.location}` : ""}`}
-                  >
-                    <span className="agenda-time">
-                      {e.startTime ? formatTime(e.startTime) : "all day"}
-                      <i>{e.endTime ? formatTime(e.endTime) : e.feedName}</i>
-                    </span>
-                    <span className="agenda-title">{e.title}</span>
-                    {live && <span className="live-pill">Now</span>}
+        {focus ? (
+          <div className="focus-pane">
+            {current ? (
+              <div className="focus-now">
+                <span className="focus-label">Now</span>
+                <h2 className="focus-title">{current.title}</h2>
+                <p className="focus-when">
+                  {formatTime(current.startTime!)} – {formatTime(current.endTime ?? "")}
+                  {" · "}
+                  {Math.max(0, (timeToMinutes(current.endTime) ?? 0) - nowMinutes)} min left
+                </p>
+              </div>
+            ) : nextUp ? (
+              <div className="focus-now">
+                <span className="focus-label">Next</span>
+                <h2 className="focus-title">{nextUp.title}</h2>
+                <p className="focus-when">starts {formatTime(nextUp.startTime!)}</p>
+              </div>
+            ) : (
+              <div className="focus-now">
+                <span className="focus-label">Clear</span>
+                <h2 className="focus-title">Nothing scheduled</h2>
+                <p className="focus-when">{openTasks.length} task{openTasks.length === 1 ? "" : "s"} left today</p>
+              </div>
+            )}
+            {openTasks.length > 0 && (
+              <ul className="check-list focus-tasks">
+                {openTasks.map((e) => (
+                  <li key={e.id}>
+                    <button
+                      type="button"
+                      className="tickbox"
+                      aria-label="Complete"
+                      onClick={() => void updateEntry(e.id, { completed: true })}
+                    />
+                    <button type="button" className="row-title" onClick={() => openEdit(e)}>
+                      {e.title}
+                    </button>
                   </li>
-                );
-              })}
-              {timed.map((e) => {
-                const start = timeToMinutes(e.startTime)!;
-                const end = timeToMinutes(e.endTime) ?? start + 60;
-                const live = start <= nowMinutes && nowMinutes < end;
-                const past = end <= nowMinutes;
-                return (
-                  <li
-                    key={e.id}
-                    className={`agenda-item color-${e.color} ${live ? "live" : ""} ${past ? "past" : ""} ${e.completed ? "done" : ""}`}
-                    onClick={() => openEdit(e)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(ev) => ev.key === "Enter" && openEdit(e)}
-                  >
-                    <span className="agenda-time">
-                      {formatTime(e.startTime!)}
-                      <i>{formatTime(e.endTime ?? "")}</i>
-                    </span>
-                    <span className="agenda-title">{e.title}</span>
-                    {live && <span className="live-pill">Now</span>}
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : (
+          <div className="today-cols">
+            <section className="panel">
+              <h3>Schedule</h3>
+              {timed.length === 0 && todaysFeeds.length === 0 && <p className="panel-empty">No timed entries today.</p>}
+              <ol className="agenda">
+                {todaysFeeds.map((e) => {
+                  const start = timeToMinutes(e.startTime);
+                  const end = timeToMinutes(e.endTime) ?? (start !== undefined ? start + 60 : undefined);
+                  const live = start !== undefined && end !== undefined && start <= nowMinutes && nowMinutes < end;
+                  return (
+                    <li
+                      key={e.id}
+                      className={`agenda-item feed-item color-${e.color} ${live ? "live" : ""}`}
+                      title={`${e.title} — ${e.feedName}${e.location ? ` · ${e.location}` : ""}`}
+                    >
+                      <span className="agenda-time">
+                        {e.startTime ? formatTime(e.startTime) : "all day"}
+                        <i>{e.endTime ? formatTime(e.endTime) : e.feedName}</i>
+                      </span>
+                      <span className="agenda-title">{e.title}</span>
+                      {live && <span className="live-pill">Now</span>}
+                    </li>
+                  );
+                })}
+                {timed.map((e) => {
+                  const start = timeToMinutes(e.startTime)!;
+                  const end = timeToMinutes(e.endTime) ?? start + 60;
+                  const live = start <= nowMinutes && nowMinutes < end;
+                  const past = end <= nowMinutes;
+                  return (
+                    <li
+                      key={e.id}
+                      className={`agenda-item color-${e.color} ${live ? "live" : ""} ${past ? "past" : ""} ${e.completed ? "done" : ""}`}
+                      onClick={() => openEdit(e)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(ev) => ev.key === "Enter" && openEdit(e)}
+                    >
+                      <span className="agenda-time">
+                        {formatTime(e.startTime!)}
+                        <i>{formatTime(e.endTime ?? "")}</i>
+                      </span>
+                      <span className="agenda-title">{e.title}</span>
+                      {live && <span className="live-pill">Now</span>}
+                    </li>
+                  );
+                })}
+              </ol>
+            </section>
+
+            <section className="panel">
+              <h3>Tasks</h3>
+              {untimedTasks.length === 0 && <p className="panel-empty">No untimed tasks today.</p>}
+              <ul className="check-list">
+                {untimedTasks.map((e) => (
+                  <li key={e.id} className={e.completed ? "done" : ""}>
+                    <button
+                      type="button"
+                      className="tickbox"
+                      aria-label={e.completed ? "Reopen" : "Complete"}
+                      onClick={() => void updateEntry(e.id, { completed: !e.completed })}
+                    >
+                      {e.completed && <Check size={12} strokeWidth={3} />}
+                    </button>
+                    <button type="button" className="row-title" onClick={() => openEdit(e)}>
+                      {e.title}
+                    </button>
+                    {e.tags.includes("habit") && <Flame size={12} className="row-ic" style={{ color: "var(--accent)" }} />}
+                    {e.recur !== "none" && <span className="meta-chip">{e.recur}</span>}
                   </li>
-                );
-              })}
-            </ol>
-          </section>
+                ))}
+              </ul>
 
-          <section className="panel">
-            <h3>Tasks</h3>
-            {untimedTasks.length === 0 && <p className="panel-empty">No untimed tasks today.</p>}
-            <ul className="check-list">
-              {untimedTasks.map((e) => (
-                <li key={e.id} className={e.completed ? "done" : ""}>
-                  <button
-                    type="button"
-                    className="tickbox"
-                    aria-label={e.completed ? "Reopen" : "Complete"}
-                    onClick={() => void updateEntry(e.id, { completed: !e.completed })}
-                  >
-                    {e.completed && <Check size={12} strokeWidth={3} />}
-                  </button>
-                  <button type="button" className="row-title" onClick={() => openEdit(e)}>
-                    {e.title}
-                  </button>
-                  {e.recur !== "none" && <span className="meta-chip">{e.recur}</span>}
-                </li>
-              ))}
-            </ul>
+              {(notes.length > 0 || links.length > 0) && <h3 style={{ marginTop: 18 }}>Notes & links</h3>}
+              <ul className="check-list">
+                {notes.map((e) => (
+                  <li key={e.id}>
+                    <StickyNote size={13} className="row-ic" />
+                    <button type="button" className="row-title" onClick={() => openEdit(e)}>
+                      {e.title}
+                    </button>
+                  </li>
+                ))}
+                {links.map((e) => (
+                  <li key={e.id}>
+                    <Link2 size={13} className="row-ic" />
+                    <button type="button" className="row-title" onClick={() => openEdit(e)}>
+                      {e.title}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
 
-            {(notes.length > 0 || links.length > 0) && <h3 style={{ marginTop: 18 }}>Notes & links</h3>}
-            <ul className="check-list">
-              {notes.map((e) => (
-                <li key={e.id}>
-                  <StickyNote size={13} className="row-ic" />
-                  <button type="button" className="row-title" onClick={() => openEdit(e)}>
-                    {e.title}
+            <section className="panel">
+              <h3>
+                This week
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-xs"
+                  style={{ float: "right" }}
+                  onClick={() => {
+                    const next = !showReview;
+                    setShowReview(next);
+                    if (next && !review) void api.weeklyReview().then(setReview).catch(() => {});
+                  }}
+                >
+                  {showReview ? "Hide" : "Review"}
+                </button>
+              </h3>
+              {!showReview && <p className="panel-empty">Open the weekly review for a digest of the last 7 days.</p>}
+              {showReview && review && (
+                <div className="review-body">
+                  <div className="review-grid">
+                    <div className="review-stat"><b>{review.tasksDone}</b><span>done</span></div>
+                    <div className="review-stat"><b>{review.tasksSlipped}</b><span>slipped</span></div>
+                    <div className="review-stat"><b>{review.notesWritten}</b><span>notes</span></div>
+                    <div className="review-stat"><b>{review.streak}</b><span>day streak</span></div>
+                  </div>
+                  {review.busiestDay && (
+                    <p className="panel-note">Busiest: {review.busiestDay} ({review.busiestCount} completed).</p>
+                  )}
+                  <button type="button" className="btn btn-secondary" onClick={() => void saveReviewAsNote()}>
+                    <NotebookPen size={14} /> Save as note
                   </button>
-                </li>
-              ))}
-              {links.map((e) => (
-                <li key={e.id}>
-                  <Link2 size={13} className="row-ic" />
-                  <button type="button" className="row-title" onClick={() => openEdit(e)}>
-                    {e.title}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        </div>
+                </div>
+              )}
+            </section>
+          </div>
+        )}
       </div>
     </>
   );

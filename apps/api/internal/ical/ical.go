@@ -26,6 +26,8 @@ type Event struct {
 	Exdates     []time.Time
 	Cancelled   bool
 	Completed   bool
+	// TZ, when set, emits DTSTART;TZID=… with local wall time instead of UTC.
+	TZ *time.Location
 }
 
 type RRule struct {
@@ -430,6 +432,11 @@ func encodeVevent(e Event) string {
 			end = e.Start.AddDate(0, 0, 1)
 		}
 		b.WriteString("DTEND;VALUE=DATE:" + end.Format("20060102") + "\r\n")
+	} else if e.TZ != nil {
+		b.WriteString("DTSTART;TZID=" + e.TZ.String() + ":" + e.Start.In(e.TZ).Format("20060102T150405") + "\r\n")
+		if e.End.After(e.Start) {
+			b.WriteString("DTEND;TZID=" + e.TZ.String() + ":" + e.End.In(e.TZ).Format("20060102T150405") + "\r\n")
+		}
 	} else {
 		b.WriteString("DTSTART:" + e.Start.UTC().Format("20060102T150405Z") + "\r\n")
 		if e.End.After(e.Start) {

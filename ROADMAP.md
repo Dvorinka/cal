@@ -56,24 +56,24 @@ Status legend: `[x]` shipped · `[/]` partially shipped · `[ ]` planned
 - [x] **MCP resources & prompts** — `cal://today`, `cal://week`,
       `cal://open-tasks` resources; `daily-plan` + `weekly-review` prompts.
 
-## Phase 3 — Delight
+## Phase 3 — Delight (shipped 2026-09-10)
 
-The reason to open it every morning.
-
-- [ ] **Focus mode** — Today page strips to the next block + checklist;
-      ambient timer for the current event.
-- [ ] **Weekly review page** — auto-digest: what got done, what slipped,
-      streaks; generated as a markdown note each Sunday.
-- [ ] **Habit tracker** — tasks tagged `#habit` get streak dots and a
-      "don't break the chain" strip on Today.
-- [ ] **Journal template** — one-tap daily note seeded with prompts
-      (gratitude / top-3 / tomorrow's plan).
-- [ ] **Weather strip** — optional Open-Meteo (no key) forecast on Today.
-- [ ] **Attachment support** — images/files on notes, stored under
-      `DATA_DIR/uploads`, rendered in preview.
-- [ ] **Link unfurl** — fetch `<title>`/favicon for link entries (opt-in,
-      server-side fetch with SSRF guard: http(s) only, no private ranges).
-- [ ] **Print stylesheet** — week/day views print cleanly.
+- [x] **Focus mode** — Today strips to a Now/Next card with minutes-left
+      plus the open-task checklist.
+- [x] **Weekly review** — `GET /api/review/week` computes done/slipped/
+      notes/streak/busiest-day; Today card + "Save as note" seeds a
+      next-week-focus template.
+- [x] **Habit streaks** — `GET /api/habits` walks consecutive completed
+      periods per recurring `#habit` task; flame chips on Today.
+- [x] **Journal template** — one-tap Journal button seeds morning/
+      evening/gratitude prompts and opens the note.
+- [x] **Weather strip** — Open-Meteo (keyless, geocoded from the city
+      setting) on the Today header; WMO-code icons, 30-min cache.
+- [x] **Attachments** — `POST /api/files` (20 MB cap, random names,
+      per-user dirs), markdown `![]()` inserts; images render in preview.
+- [x] **Link unfurl** — `GET /api/unfurl?url=` title/description/favicon,
+      SSRF-guarded (http(s) only, private IPs refused incl. redirects).
+- [x] **Print stylesheet** — chrome hidden, agenda/panels print clean.
 
 ## Phase 4 — Mobile & on-the-go
 

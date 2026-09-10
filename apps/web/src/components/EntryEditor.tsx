@@ -1,7 +1,7 @@
 import type { EntryType, Recur, Revision } from "@cal/api-client";
 import { renderMarkdown } from "../lib/markdown";
 import { AnimatePresence, motion } from "framer-motion";
-import { CalendarClock, Check, History, Link2, StickyNote, Trash2 } from "lucide-react";
+import { CalendarClock, Check, History, Link2, Paperclip, StickyNote, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
@@ -68,7 +68,21 @@ export function EntryEditor() {
   const [saving, setSaving] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const attachRef = useRef<HTMLInputElement>(null);
   const api = usePlanner((state) => state.api);
+
+  async function attach(file: File) {
+    try {
+      const out = await api.upload(file);
+      const el = bodyRef.current;
+      const pos = el ? el.selectionStart : content.length;
+      const next = content.slice(0, pos) + (pos > 0 && content[pos - 1] !== "\n" ? "\n" : "") + out.markdown + "\n" + content.slice(pos);
+      setContent(next);
+      toast(`Attached ${out.name}`);
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Upload failed");
+    }
+  }
 
   useEffect(() => {
     if (editor.mode === "create") {
@@ -228,9 +242,30 @@ export function EntryEditor() {
                       Preview
                     </button>
                   </div>
-                  <span className="note-count">
-                    {content.trim() === "" ? "0 words" : `${content.trim().split(/\s+/).length} words`}
-                  </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <input
+                      ref={attachRef}
+                      type="file"
+                      style={{ display: "none" }}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) void attach(f);
+                        e.target.value = "";
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      aria-label="Attach file"
+                      title="Attach file"
+                      onClick={() => attachRef.current?.click()}
+                    >
+                      <Paperclip size={14} />
+                    </button>
+                    <span className="note-count">
+                      {content.trim() === "" ? "0 words" : `${content.trim().split(/\s+/).length} words`}
+                    </span>
+                  </div>
                 </div>
                 {noteMode === "write" ? (
                   <textarea
@@ -326,13 +361,33 @@ export function EntryEditor() {
             {type === "link" && (
               <label className="field">
                 <span>URL</span>
-                <input
-                  className="input"
-                  type="url"
-                  value={linkUrl}
-                  onChange={(e) => setLinkUrl(e.target.value)}
-                  placeholder="https://…"
-                />
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input
+                    className="input"
+                    type="url"
+                    style={{ flex: 1 }}
+                    value={linkUrl}
+                    onChange={(e) => setLinkUrl(e.target.value)}
+                    placeholder="https://…"
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={!/^https?:\/\/.+/i.test(linkUrl.trim())}
+                    onClick={() =>
+                      void api
+                        .unfurl(linkUrl.trim())
+                        .then((u) => {
+                          if (title.trim() === "" && u.title) setTitle(u.title);
+                          if (content.trim() === "" && u.description) setContent(u.description);
+                          toast("Fetched page details");
+                        })
+                        .catch(() => toast("Could not fetch that page"))
+                    }
+                  >
+                    Fetch title
+                  </button>
+                </div>
               </label>
             )}
             {type === "note" && (

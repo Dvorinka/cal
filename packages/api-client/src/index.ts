@@ -70,8 +70,35 @@ export interface Settings {
   weekStart: WeekStart;
   accent: Accent;
   timezone: string;
+  city: string;
   widgetToken: string;
   apiToken: string;
+}
+
+export interface WeekReview {
+  from: string;
+  to: string;
+  tasksDone: number;
+  tasksSlipped: number;
+  notesWritten: number;
+  streak: number;
+  busiestDay: string;
+  busiestCount: number;
+  perDay: Record<string, number>;
+}
+
+export interface Habit {
+  id: string;
+  title: string;
+  recur: string;
+  streak: number;
+  lastDone?: string;
+}
+
+export interface Unfurl {
+  title: string;
+  favicon: string;
+  description: string;
 }
 
 export interface SessionInfo {
@@ -214,6 +241,30 @@ export class CalApi {
   async feedEvents(params: { from: string; to: string }): Promise<FeedEvent[]> {
     const search = new URLSearchParams({ from: params.from, to: params.to });
     return this.request<FeedEvent[]>(`/feed-events?${search.toString()}`);
+  }
+
+  async weeklyReview(): Promise<WeekReview> {
+    return this.request<WeekReview>("/review/week");
+  }
+
+  async habits(): Promise<Habit[]> {
+    return this.request<Habit[]>("/habits");
+  }
+
+  async unfurl(url: string): Promise<Unfurl> {
+    return this.request<Unfurl>(`/unfurl?url=${encodeURIComponent(url)}`);
+  }
+
+  async upload(file: File): Promise<{ url: string; name: string; markdown: string }> {
+    const form = new FormData();
+    form.append("file", file);
+    const response = await fetch(`${this.baseUrl}/files`, {
+      method: "POST",
+      credentials: "include",
+      body: form,
+    });
+    if (!response.ok) throw new Error(`Upload failed: ${response.status}`);
+    return response.json();
   }
 
   async sessions(): Promise<SessionInfo[]> {
