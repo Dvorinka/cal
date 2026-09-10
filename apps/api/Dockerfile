@@ -5,7 +5,7 @@ COPY apps/api/go.mod apps/api/go.sum* ./
 RUN go mod download
 COPY apps/api ./
 RUN go build -o /out/cal-api ./cmd/server
-RUN go install github.com/pressly/goose/v3/cmd/goose@latest
+RUN go install github.com/pressly/goose/v3/cmd/goose@v3.25.0
 
 FROM alpine:3.22
 WORKDIR /app

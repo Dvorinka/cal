@@ -1,7 +1,8 @@
 openapi: 3.1.0
 info:
   title: Cal API
-  version: 0.1.0
+  version: 0.2.0
+  description: Self-hosted minimal planner — entries, settings, holidays, cookie-session auth.
 servers:
   - url: http://localhost:8080/api
 paths:
@@ -12,6 +13,7 @@ paths:
           description: API status
   /auth/register:
     post:
+      description: Register an account. Rate-limited to 8 attempts per minute per IP.
       requestBody:
         required: true
         content:
@@ -19,14 +21,17 @@ paths:
             schema:
               $ref: "#/components/schemas/AuthRequest"
       responses:
-        "200":
+        "201":
           description: Authenticated user
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/User"
+        "429":
+          description: Too many attempts
   /auth/login:
     post:
+      description: Log in. Rate-limited to 8 attempts per minute per IP.
       requestBody:
         required: true
         content:
@@ -40,6 +45,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/User"
+        "401":
+          description: Invalid credentials
+        "429":
+          description: Too many attempts
   /auth/logout:
     post:
       responses:
@@ -54,6 +63,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/User"
+        "401":
+          description: Not authenticated
   /entries:
     get:
       parameters:
@@ -69,6 +80,7 @@ paths:
             format: date
         - name: q
           in: query
+          description: Case-insensitive title/content match, or exact tag match. When set without a range, all dates are searched.
           schema:
             type: string
       responses:
@@ -94,8 +106,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Entry"
+        "400":
+          description: Invalid entry (bad date/time order, recur on non-task, missing title)
   /entries/{id}:
     patch:
+      description: Partial update. Completing a recurring task spawns the next occurrence.
       parameters:
         - name: id
           in: path
@@ -115,6 +130,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Entry"
+        "404":
+          description: Not found
     delete:
       parameters:
         - name: id
@@ -140,7 +157,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SettingsInput"
+              $ref: "#/components/schemas/Settings"
       responses:
         "200":
           description: Settings
@@ -163,13 +180,26 @@ paths:
             type: integer
       responses:
         "200":
-          description: Holidays
+          description: Holidays for the country/year
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: "#/components/schemas/Holiday"
+        "400":
+          description: Unknown country or invalid year
+  /holidays/countries:
+    get:
+      responses:
+        "200":
+          description: Supported holiday regions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Country"
 components:
   schemas:
     AuthRequest:
@@ -192,7 +222,7 @@ components:
           type: string
     Entry:
       type: object
-      required: [id, title, type, date, completed, color, tags, createdAt]
+      required: [id, title, type, date, completed, color, tags, recur, createdAt]
       properties:
         id:
           type: string
@@ -207,6 +237,14 @@ components:
         date:
           type: string
           format: date
+        startTime:
+          type: string
+          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+          description: HH:MM 24h; absent for untimed/all-day entries
+        endTime:
+          type: string
+          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+          description: Must be after startTime when both are set
         completed:
           type: boolean
         color:
@@ -215,6 +253,8 @@ components:
           type: array
           items:
             type: string
+        recur:
+          enum: [none, daily, weekly, monthly, yearly]
         createdAt:
           type: string
           format: date-time
@@ -233,12 +273,21 @@ components:
         date:
           type: string
           format: date
+        startTime:
+          type: string
+          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+        endTime:
+          type: string
+          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
         color:
           type: string
         tags:
           type: array
           items:
             type: string
+        recur:
+          enum: [none, daily, weekly, monthly, yearly]
+          description: Only valid for type=task
     EntryPatch:
       type: object
       properties:
@@ -253,6 +302,10 @@ components:
         date:
           type: string
           format: date
+        startTime:
+          type: string
+        endTime:
+          type: string
         completed:
           type: boolean
         color:
@@ -261,9 +314,11 @@ components:
           type: array
           items:
             type: string
+        recur:
+          enum: [none, daily, weekly, monthly, yearly]
     Settings:
       type: object
-      required: [country, showHolidays, theme]
+      required: [country, showHolidays, theme, weekStart]
       properties:
         country:
           type: string
@@ -271,8 +326,8 @@ components:
           type: boolean
         theme:
           enum: [light, dark, system]
-    SettingsInput:
-      $ref: "#/components/schemas/Settings"
+        weekStart:
+          enum: [monday, sunday]
     Holiday:
       type: object
       required: [id, name, date, country]
@@ -285,4 +340,12 @@ components:
           type: string
           format: date
         country:
+          type: string
+    Country:
+      type: object
+      required: [code, name]
+      properties:
+        code:
+          type: string
+        name:
           type: string

@@ -12,3 +12,5 @@ tmp/
 apps/api/cal-api
 ref/
 .DS_Store
+
+.playwright-mcp/

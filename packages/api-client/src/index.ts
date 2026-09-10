@@ -1,5 +1,7 @@
 export type EntryType = "task" | "note" | "link";
 export type Theme = "light" | "dark" | "system";
+export type WeekStart = "monday" | "sunday";
+export type Recur = "none" | "daily" | "weekly" | "monthly" | "yearly";
 
 export interface User {
   id: string;
@@ -13,9 +15,13 @@ export interface Entry {
   type: EntryType;
   linkUrl?: string;
   date: string;
+  /** HH:MM 24h; absent means all-day / untimed */
+  startTime?: string;
+  endTime?: string;
   completed: boolean;
   color: string;
   tags: string[];
+  recur: Recur;
   createdAt: string;
 }
 
@@ -25,8 +31,11 @@ export interface EntryInput {
   type: EntryType;
   linkUrl?: string;
   date: string;
+  startTime?: string;
+  endTime?: string;
   color?: string;
   tags?: string[];
+  recur?: Recur;
 }
 
 export type EntryPatch = Partial<EntryInput & { completed: boolean }>;
@@ -35,6 +44,7 @@ export interface Settings {
   country: string;
   showHolidays: boolean;
   theme: Theme;
+  weekStart: WeekStart;
 }
 
 export interface Holiday {
@@ -42,6 +52,11 @@ export interface Holiday {
   name: string;
   date: string;
   country: string;
+}
+
+export interface Country {
+  code: string;
+  name: string;
 }
 
 export interface AuthRequest {
@@ -108,6 +123,10 @@ export class CalApi {
 
   async holidays(country: string, year: number): Promise<Holiday[]> {
     return this.request<Holiday[]>(`/holidays?country=${encodeURIComponent(country)}&year=${year}`);
+  }
+
+  async countries(): Promise<Country[]> {
+    return this.request<Country[]>("/holidays/countries");
   }
 
   private async request<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {

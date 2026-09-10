@@ -3,7 +3,7 @@ WORKDIR /src
 COPY package.json package-lock.json* ./
 COPY apps/web/package.json apps/web/package.json
 COPY packages/api-client/package.json packages/api-client/package.json
-RUN npm install
+RUN npm ci
 COPY packages/api-client packages/api-client
 COPY apps/web apps/web
 RUN npm run build -w @cal/web

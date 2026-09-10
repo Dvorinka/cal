@@ -1,161 +1,140 @@
-import { AnimatePresence, motion } from "framer-motion";
-import { CalendarDays, ChevronLeft, ChevronRight, LogOut, Moon, Search, Sun } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { CalendarDays } from "lucide-react";
+import { useEffect, useMemo } from "react";
 import { AuthPanel } from "./components/AuthPanel";
-import { CalendarGrid } from "./components/CalendarGrid";
-import { EntryComposer } from "./components/EntryComposer";
-import { addDays, formatHeading, rangeFor, todayIso, type CalendarView } from "./lib/date";
+import { CommandPalette } from "./components/CommandPalette";
+import { ContextMenu } from "./components/ContextMenu";
+import { EntryEditor } from "./components/EntryEditor";
+import { MonthView } from "./components/MonthView";
+import { Sidebar } from "./components/Sidebar";
+import { TimeGridView } from "./components/TimeGridView";
+import { Toasts } from "./components/Toasts";
+import { TopBar } from "./components/TopBar";
+import { rangeFor } from "./lib/date";
 import { usePlanner } from "./stores/planner";
+import { useUi } from "./stores/ui";
 
 export function App() {
-  const {
-    user,
-    entries,
-    holidays,
-    settings,
-    bootstrap,
-    loadEntries,
-    createEntry,
-    updateEntry,
-    deleteEntry,
-    loadHolidays,
-    updateSettings,
-    logout,
-    error,
-  } = usePlanner();
-  const [view, setView] = useState<CalendarView>("month");
-  const [anchor, setAnchor] = useState(() => new Date());
-  const [selectedDate, setSelectedDate] = useState(todayIso());
-  const [query, setQuery] = useState("");
+  const { user, booted, entries, holidays, settings, bootstrap, loadEntries, updateEntry, loadHolidays } = usePlanner();
+  const { view, anchor, selectedDate, hiddenTypes, paletteOpen, editor, contextMenu } = useUi();
+  const { setView, shift, goToday, openPalette, closePalette, openCreate, closeEditor, setContextMenu } = useUi();
 
   useEffect(() => {
     void bootstrap();
   }, [bootstrap]);
 
-  const range = useMemo(() => rangeFor(view, anchor), [view, anchor]);
+  const range = useMemo(() => rangeFor(view, anchor, settings.weekStart), [view, anchor, settings.weekStart]);
 
   useEffect(() => {
     if (!user) return;
-    void loadEntries({ ...range, q: query });
-  }, [user, range.from, range.to, query, loadEntries]);
+    void loadEntries(range);
+  }, [user, range.from, range.to, loadEntries]);
 
   useEffect(() => {
-    if (!settings.showHolidays) return;
+    if (!user || !settings.showHolidays) return;
     void loadHolidays(settings.country, anchor.getFullYear());
-  }, [settings.country, settings.showHolidays, anchor, loadHolidays]);
+  }, [user, settings.country, settings.showHolidays, anchor, loadHolidays]);
 
+  // Resolve theme: light | dark | system (follows prefers-color-scheme live).
   useEffect(() => {
-    document.documentElement.dataset.theme = settings.theme;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => {
+      document.documentElement.dataset.theme = settings.theme === "system" ? (media.matches ? "dark" : "light") : settings.theme;
+    };
+    apply();
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
   }, [settings.theme]);
 
+  // Global keyboard shortcuts.
+  useEffect(() => {
+    if (!user) return;
+    const onKey = (event: KeyboardEvent) => {
+      const tag = (event.target as HTMLElement).tagName;
+      const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        paletteOpen ? closePalette() : openPalette();
+        return;
+      }
+      if (typing || paletteOpen || editor.mode !== "closed" || contextMenu) return;
+      switch (event.key) {
+        case "1":
+          setView("month");
+          break;
+        case "2":
+          setView("week");
+          break;
+        case "3":
+          setView("day");
+          break;
+        case "t":
+          goToday();
+          break;
+        case "c":
+        case "n":
+          openCreate(selectedDate);
+          break;
+        case "/":
+          event.preventDefault();
+          openPalette();
+          break;
+        case "ArrowLeft":
+          shift(-1);
+          break;
+        case "ArrowRight":
+          shift(1);
+          break;
+        case "Escape":
+          setContextMenu(undefined);
+          break;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [user, paletteOpen, editor.mode, contextMenu, selectedDate, setView, shift, goToday, openPalette, closePalette, openCreate, setContextMenu]);
+
+  if (!booted) {
+    return (
+      <main className="splash">
+        <div className="mark">
+          <CalendarDays size={24} strokeWidth={2.2} />
+        </div>
+      </main>
+    );
+  }
   if (!user) return <AuthPanel />;
 
-  function shift(direction: -1 | 1) {
-    const days = view === "day" ? 1 : view === "week" ? 7 : 32;
-    setAnchor((current) => addDays(current, direction * days));
-  }
-
-  function showToday() {
-    const next = new Date();
-    setAnchor(next);
-    setSelectedDate(todayIso());
-  }
-
-  const selectedEntries = entries.filter((entry) => entry.date === selectedDate);
+  const visible = entries.filter((entry) => !hiddenTypes.has(entry.type));
+  const shownHolidays = settings.showHolidays ? holidays : [];
 
   return (
     <main className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <CalendarDays size={22} />
-          <span>Cal</span>
-        </div>
-        <div className="search">
-          <Search size={16} />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" aria-label="Search entries" />
-        </div>
-        <nav className="view-tabs" aria-label="Calendar views">
-          {(["month", "week", "day"] as const).map((item) => (
-            <button key={item} className={view === item ? "active" : ""} type="button" onClick={() => setView(item)}>
-              {item}
-            </button>
-          ))}
-        </nav>
-        <section className="side-section">
-          <h2>{selectedDate}</h2>
-          <EntryComposer date={selectedDate} onCreate={createEntry} />
-          <div className="mini-list">
-            <AnimatePresence initial={false}>
-              {selectedEntries.map((entry) => (
-                <motion.p key={entry.id} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-                  {entry.title}
-                </motion.p>
-              ))}
-            </AnimatePresence>
-          </div>
-        </section>
-        <section className="settings">
-          <label>
-            Country
-            <select value={settings.country} onChange={(event) => void updateSettings({ ...settings, country: event.target.value })}>
-              <option value="US">US</option>
-              <option value="CZ">CZ</option>
-            </select>
-          </label>
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={settings.showHolidays}
-              onChange={(event) => void updateSettings({ ...settings, showHolidays: event.target.checked })}
-            />
-            Holidays
-          </label>
-          <button
-            className="theme-toggle"
-            type="button"
-            onClick={() => void updateSettings({ ...settings, theme: settings.theme === "dark" ? "light" : "dark" })}
-          >
-            {settings.theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-            {settings.theme === "dark" ? "Light" : "Dark"}
-          </button>
-        </section>
-        <button className="logout" type="button" onClick={() => void logout()}>
-          <LogOut size={16} />
-          Log out
-        </button>
-      </aside>
-
+      <Sidebar />
       <section className="workspace">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">{view}</p>
-            <h1>{formatHeading(view, anchor)}</h1>
-            {error && <p className="sync-note">{error}</p>}
-          </div>
-          <div className="nav-buttons">
-            <button type="button" onClick={() => shift(-1)} aria-label="Previous">
-              <ChevronLeft size={18} />
-            </button>
-            <button type="button" onClick={showToday}>
-              Today
-            </button>
-            <button type="button" onClick={() => shift(1)} aria-label="Next">
-              <ChevronRight size={18} />
-            </button>
-          </div>
-        </header>
-        <CalendarGrid
-          view={view}
-          anchor={anchor}
-          entries={entries}
-          holidays={settings.showHolidays ? holidays : []}
-          selectedDate={selectedDate}
-          onSelectDate={setSelectedDate}
-          onMoveEntry={(id, date) => void updateEntry(id, { date })}
-          onToggleEntry={(id, completed) => void updateEntry(id, { completed })}
-          onDeleteEntry={(id) => void deleteEntry(id)}
-        />
+        <TopBar weekStart={settings.weekStart} />
+        {view === "month" ? (
+          <MonthView
+            anchor={anchor}
+            entries={visible}
+            holidays={shownHolidays}
+            weekStart={settings.weekStart}
+            onMoveEntry={(id, date) => void updateEntry(id, { date })}
+          />
+        ) : (
+          <TimeGridView
+            view={view}
+            anchor={anchor}
+            entries={visible}
+            holidays={shownHolidays}
+            weekStart={settings.weekStart}
+            onMoveEntry={(id, patch) => void updateEntry(id, patch)}
+          />
+        )}
       </section>
+      <CommandPalette />
+      <EntryEditor />
+      <ContextMenu />
+      <Toasts />
     </main>
   );
 }

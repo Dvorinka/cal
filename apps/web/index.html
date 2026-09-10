@@ -2,9 +2,22 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#101316" />
-    <title>Cal</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="Cal - a self-hosted minimal planner. Calendar, tasks, notes and links in one quiet place." />
+    <meta name="theme-color" content="#151513" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f4f3ef" media="(prefers-color-scheme: light)" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/pwa-192.svg" />
+    <title>Cal - self-hosted planner</title>
+    <script>
+      // Apply the cached theme before first paint to avoid a flash.
+      try {
+        var s = JSON.parse(localStorage.getItem("cal:settings") || "{}");
+        var t = s.theme || "system";
+        var dark = t === "dark" || (t === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

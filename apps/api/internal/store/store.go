@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -22,6 +23,12 @@ type User struct {
 	Email string `json:"email"`
 }
 
+// entryCols is the canonical SELECT/RETURNING column list for entries.
+// Times are rendered as HH:MM strings to keep the API surface simple.
+const entryCols = `id::text, title, content, type, link_url, date::text,
+	to_char(start_time, 'HH24:MI'), to_char(end_time, 'HH24:MI'),
+	completed, color, tags, recur, created_at`
+
 type Entry struct {
 	ID        string    `json:"id"`
 	Title     string    `json:"title"`
@@ -29,26 +36,38 @@ type Entry struct {
 	Type      string    `json:"type"`
 	LinkURL   string    `json:"linkUrl,omitempty"`
 	Date      string    `json:"date"`
+	StartTime *string   `json:"startTime,omitempty"`
+	EndTime   *string   `json:"endTime,omitempty"`
 	Completed bool      `json:"completed"`
 	Color     string    `json:"color"`
 	Tags      []string  `json:"tags"`
+	Recur     string    `json:"recur"`
 	CreatedAt time.Time `json:"createdAt"`
+}
+
+func (e *Entry) scan(row interface{ Scan(...any) error }) error {
+	return row.Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date,
+		&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.CreatedAt)
 }
 
 type Settings struct {
 	Country      string `json:"country"`
 	ShowHolidays bool   `json:"showHolidays"`
 	Theme        string `json:"theme"`
+	WeekStart    string `json:"weekStart"`
 }
 
 type EntryInput struct {
-	Title   string   `json:"title"`
-	Content string   `json:"content"`
-	Type    string   `json:"type"`
-	LinkURL string   `json:"linkUrl"`
-	Date    string   `json:"date"`
-	Color   string   `json:"color"`
-	Tags    []string `json:"tags"`
+	Title     string   `json:"title"`
+	Content   string   `json:"content"`
+	Type      string   `json:"type"`
+	LinkURL   string   `json:"linkUrl"`
+	Date      string   `json:"date"`
+	StartTime string   `json:"startTime"`
+	EndTime   string   `json:"endTime"`
+	Color     string   `json:"color"`
+	Tags      []string `json:"tags"`
+	Recur     string   `json:"recur"`
 }
 
 type EntryPatch struct {
@@ -57,8 +76,11 @@ type EntryPatch struct {
 	Type      *string  `json:"type"`
 	LinkURL   *string  `json:"linkUrl"`
 	Date      *string  `json:"date"`
+	StartTime *string  `json:"startTime"`
+	EndTime   *string  `json:"endTime"`
 	Completed *bool    `json:"completed"`
 	Color     *string  `json:"color"`
+	Recur     *string  `json:"recur"`
 	Tags      []string `json:"tags"`
 	HasTags   bool     `json:"-"`
 }
@@ -137,21 +159,25 @@ func (s *Store) DeleteSession(ctx context.Context, sessionID string) error {
 }
 
 func (s *Store) ListEntries(ctx context.Context, userID, from, to, q string) ([]Entry, error) {
-	if from == "" {
-		from = time.Now().AddDate(0, -1, 0).Format(time.DateOnly)
-	}
-	if to == "" {
-		to = time.Now().AddDate(0, 1, 0).Format(time.DateOnly)
-	}
 	query := `
-		SELECT id::text, title, content, type, link_url, date::text, completed, color, tags, created_at
+		SELECT ` + entryCols + `
 		FROM entries
-		WHERE user_id = $1 AND date >= $2 AND date <= $3
+		WHERE user_id = $1
 	`
-	args := []any{userID, from, to}
+	args := []any{userID}
+	if from != "" {
+		query += ` AND date >= $2`
+		args = append(args, from)
+	}
+	if to != "" {
+		query += fmt.Sprintf(" AND date <= $%d", len(args)+1)
+		args = append(args, to)
+	}
 	if strings.TrimSpace(q) != "" {
-		query += ` AND (title ILIKE $4 OR content ILIKE $4 OR $4 = ANY(tags))`
-		args = append(args, "%"+strings.TrimSpace(q)+"%")
+		query += fmt.Sprintf(" AND (title ILIKE $%d OR content ILIKE $%d OR $%d = ANY(tags))",
+			len(args)+1, len(args)+2, len(args)+3)
+		like := "%" + strings.TrimSpace(q) + "%"
+		args = append(args, like, like, strings.TrimSpace(q))
 	}
 	query += ` ORDER BY date ASC, created_at ASC`
 	rows, err := s.db.Query(ctx, query, args...)
@@ -163,7 +189,7 @@ func (s *Store) ListEntries(ctx context.Context, userID, from, to, q string) ([]
 	entries := []Entry{}
 	for rows.Next() {
 		var e Entry
-		if err := rows.Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.Completed, &e.Color, &e.Tags, &e.CreatedAt); err != nil {
+		if err := e.scan(rows); err != nil {
 			return nil, err
 		}
 		entries = append(entries, e)
@@ -180,16 +206,22 @@ func (s *Store) CreateEntry(ctx context.Context, userID string, input EntryInput
 	}
 	var e Entry
 	err := s.db.QueryRow(ctx, `
-		INSERT INTO entries (user_id, title, content, type, link_url, date, color, tags)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		RETURNING id::text, title, content, type, link_url, date::text, completed, color, tags, created_at
-	`, userID, input.Title, input.Content, input.Type, input.LinkURL, input.Date, input.Color, input.Tags).
-		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.Completed, &e.Color, &e.Tags, &e.CreatedAt)
+		INSERT INTO entries (user_id, title, content, type, link_url, date, start_time, end_time, color, tags, recur)
+		VALUES ($1, $2, $3, $4, $5, $6, nullif($7, '')::time, nullif($8, '')::time, $9, $10, coalesce(nullif($11, ''), 'none'))
+		RETURNING `+entryCols+`
+	`, userID, input.Title, input.Content, input.Type, input.LinkURL, input.Date, input.StartTime, input.EndTime, input.Color, input.Tags, input.Recur).
+		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.CreatedAt)
 	return e, err
 }
 
 func (s *Store) UpdateEntry(ctx context.Context, userID, id string, patch EntryPatch) (Entry, error) {
-	current, err := s.entry(ctx, userID, id)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return Entry{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	current, err := s.entryTx(ctx, tx, userID, id)
 	if err != nil {
 		return Entry{}, err
 	}
@@ -208,6 +240,15 @@ func (s *Store) UpdateEntry(ctx context.Context, userID, id string, patch EntryP
 	if patch.Date != nil {
 		current.Date = *patch.Date
 	}
+	if patch.StartTime != nil {
+		current.StartTime = patch.StartTime
+	}
+	if patch.EndTime != nil {
+		current.EndTime = patch.EndTime
+	}
+	if patch.Recur != nil {
+		current.Recur = *patch.Recur
+	}
 	if patch.Completed != nil {
 		current.Completed = *patch.Completed
 	}
@@ -219,15 +260,78 @@ func (s *Store) UpdateEntry(ctx context.Context, userID, id string, patch EntryP
 	}
 
 	var e Entry
-	err = s.db.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 		UPDATE entries
 		SET title = $1, content = $2, type = $3, link_url = $4, date = $5,
-		    completed = $6, color = $7, tags = $8
-		WHERE id = $9 AND user_id = $10
-		RETURNING id::text, title, content, type, link_url, date::text, completed, color, tags, created_at
-	`, current.Title, current.Content, current.Type, current.LinkURL, current.Date, current.Completed, current.Color, current.Tags, id, userID).
-		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.Completed, &e.Color, &e.Tags, &e.CreatedAt)
-	return e, err
+		    start_time = nullif($6, '')::time, end_time = nullif($7, '')::time,
+		    completed = $8, color = $9, tags = $10, recur = $11
+		WHERE id = $12 AND user_id = $13
+		RETURNING `+entryCols+`
+	`, current.Title, current.Content, current.Type, current.LinkURL, current.Date,
+		strOrEmpty(current.StartTime), strOrEmpty(current.EndTime),
+		current.Completed, current.Color, current.Tags, current.Recur, id, userID).
+		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.CreatedAt)
+	if err != nil {
+		return Entry{}, err
+	}
+
+	// Completing a recurring task spawns its next occurrence.
+	if patch.Completed != nil && *patch.Completed && e.Type == "task" && e.Recur != "none" {
+		next, ok := NextRecurDate(e.Date, e.Recur)
+		if ok {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO entries (user_id, title, content, type, link_url, date, start_time, end_time, color, tags, recur)
+				VALUES ($1, $2, $3, $4, $5, $6, nullif($7, '')::time, nullif($8, '')::time, $9, $10, $11)
+			`, userID, e.Title, e.Content, e.Type, e.LinkURL, next,
+				strOrEmpty(e.StartTime), strOrEmpty(e.EndTime), e.Color, e.Tags, e.Recur)
+			if err != nil {
+				return Entry{}, err
+			}
+		}
+	}
+
+	return e, tx.Commit(ctx)
+}
+
+func strOrEmpty(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+// NextRecurDate returns the date of the next occurrence for a recurrence rule.
+func NextRecurDate(date, recur string) (string, bool) {
+	d, err := time.Parse(time.DateOnly, date)
+	if err != nil {
+		return "", false
+	}
+	var next time.Time
+	switch recur {
+	case "daily":
+		next = d.AddDate(0, 0, 1)
+	case "weekly":
+		next = d.AddDate(0, 0, 7)
+	case "monthly":
+		next = addMonthsClamped(d, 1)
+	case "yearly":
+		next = addMonthsClamped(d, 12)
+	default:
+		return "", false
+	}
+	return next.Format(time.DateOnly), true
+}
+
+// addMonthsClamped adds months while clamping the day to the target month's
+// length, so Jan 31 + 1 month lands on Feb 28/29 rather than Mar 3.
+func addMonthsClamped(d time.Time, months int) time.Time {
+	day := d.Day()
+	next := time.Date(d.Year(), d.Month()+time.Month(months), 1, 0, 0, 0, 0, time.UTC)
+	last := next.AddDate(0, 1, -1).Day()
+	if day > last {
+		day = last
+	}
+	return time.Date(next.Year(), next.Month(), day, 0, 0, 0, 0, time.UTC)
 }
 
 func (s *Store) DeleteEntry(ctx context.Context, userID, id string) error {
@@ -241,13 +345,13 @@ func (s *Store) DeleteEntry(ctx context.Context, userID, id string) error {
 	return nil
 }
 
-func (s *Store) entry(ctx context.Context, userID, id string) (Entry, error) {
+func (s *Store) entryTx(ctx context.Context, tx pgx.Tx, userID, id string) (Entry, error) {
 	var e Entry
-	err := s.db.QueryRow(ctx, `
-		SELECT id::text, title, content, type, link_url, date::text, completed, color, tags, created_at
+	err := e.scan(tx.QueryRow(ctx, `
+		SELECT `+entryCols+`
 		FROM entries
 		WHERE id = $1 AND user_id = $2
-	`, id, userID).Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.Completed, &e.Color, &e.Tags, &e.CreatedAt)
+	`, id, userID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Entry{}, ErrNotFound
 	}
@@ -257,21 +361,23 @@ func (s *Store) entry(ctx context.Context, userID, id string) (Entry, error) {
 func (s *Store) Settings(ctx context.Context, userID string) (Settings, error) {
 	var settings Settings
 	err := s.db.QueryRow(ctx, `
-		SELECT country, show_holidays, theme FROM settings WHERE user_id = $1
-	`, userID).Scan(&settings.Country, &settings.ShowHolidays, &settings.Theme)
+		SELECT country, show_holidays, theme, week_start FROM settings WHERE user_id = $1
+	`, userID).Scan(&settings.Country, &settings.ShowHolidays, &settings.Theme, &settings.WeekStart)
 	return settings, err
 }
 
 func (s *Store) UpdateSettings(ctx context.Context, userID string, settings Settings) (Settings, error) {
 	var out Settings
 	err := s.db.QueryRow(ctx, `
-		INSERT INTO settings (user_id, country, show_holidays, theme)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO settings (user_id, country, show_holidays, theme, week_start)
+		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (user_id) DO UPDATE
 		SET country = EXCLUDED.country,
 		    show_holidays = EXCLUDED.show_holidays,
-		    theme = EXCLUDED.theme
-		RETURNING country, show_holidays, theme
-	`, userID, settings.Country, settings.ShowHolidays, settings.Theme).Scan(&out.Country, &out.ShowHolidays, &out.Theme)
+		    theme = EXCLUDED.theme,
+		    week_start = EXCLUDED.week_start
+		RETURNING country, show_holidays, theme, week_start
+	`, userID, settings.Country, settings.ShowHolidays, settings.Theme, settings.WeekStart).
+		Scan(&out.Country, &out.ShowHolidays, &out.Theme, &out.WeekStart)
 	return out, err
 }

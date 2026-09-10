@@ -45,10 +45,12 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 
 	api := router.Group("/api")
 	api.GET("/health", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) })
-	api.POST("/auth/register", server.register)
-	api.POST("/auth/login", server.login)
+	authLimited := api.Group("/auth", newRateLimiter(8, time.Minute))
+	authLimited.POST("/register", server.register)
+	authLimited.POST("/login", server.login)
 	api.POST("/auth/logout", server.logout)
 	api.GET("/holidays", server.holidays)
+	api.GET("/holidays/countries", server.holidayCountries)
 
 	authed := api.Group("")
 	authed.Use(server.requireUser)
@@ -132,7 +134,7 @@ func (s *Server) entries(c *gin.Context) {
 
 func (s *Server) createEntry(c *gin.Context) {
 	var input store.EntryInput
-	if !bind(c, &input) || !validEntry(input.Title, input.Type, input.Date) {
+	if !bind(c, &input) || !validEntry(input) {
 		c.String(http.StatusBadRequest, "invalid entry")
 		return
 	}
@@ -210,11 +212,15 @@ func (s *Server) holidays(c *gin.Context) {
 		return
 	}
 	country := strings.ToUpper(strings.TrimSpace(c.Query("country")))
-	if len(country) != 2 {
-		c.String(http.StatusBadRequest, "invalid country")
+	if len(country) != 2 || !calendar.Supported(country) {
+		c.String(http.StatusBadRequest, "unsupported country")
 		return
 	}
 	c.JSON(http.StatusOK, s.holiday.For(country, year))
+}
+
+func (s *Server) holidayCountries(c *gin.Context) {
+	c.JSON(http.StatusOK, calendar.Countries())
 }
 
 func (s *Server) requireUser(c *gin.Context) {
@@ -302,6 +308,24 @@ func parsePatch(raw map[string]json.RawMessage) (store.EntryPatch, bool) {
 				return patch, false
 			}
 			patch.Date = &v
+		case "startTime":
+			var v string
+			if json.Unmarshal(value, &v) != nil || !validTime(v) {
+				return patch, false
+			}
+			patch.StartTime = &v
+		case "endTime":
+			var v string
+			if json.Unmarshal(value, &v) != nil || !validTime(v) {
+				return patch, false
+			}
+			patch.EndTime = &v
+		case "recur":
+			var v string
+			if json.Unmarshal(value, &v) != nil || !validRecur(v) {
+				return patch, false
+			}
+			patch.Recur = &v
 		case "completed":
 			var v bool
 			if json.Unmarshal(value, &v) != nil {
@@ -332,8 +356,23 @@ func validAuth(input authRequest) bool {
 	return strings.Contains(input.Email, "@") && len(input.Email) <= 254 && len(input.Password) >= 8 && len(input.Password) <= 128
 }
 
-func validEntry(title, typ, date string) bool {
-	return strings.TrimSpace(title) != "" && validType(typ) && validDate(date)
+func validEntry(input store.EntryInput) bool {
+	if strings.TrimSpace(input.Title) == "" || !validType(input.Type) || !validDate(input.Date) {
+		return false
+	}
+	if !validTime(input.StartTime) || !validTime(input.EndTime) {
+		return false
+	}
+	if input.StartTime == "" && input.EndTime != "" {
+		return false
+	}
+	if input.StartTime != "" && input.EndTime != "" && input.EndTime <= input.StartTime {
+		return false
+	}
+	if input.Recur != "" && (!validRecur(input.Recur) || input.Type != "task") {
+		return false
+	}
+	return true
 }
 
 func validType(typ string) bool {
@@ -345,9 +384,28 @@ func validDate(date string) bool {
 	return err == nil
 }
 
+// validTime accepts "" (unset) or an HH:MM 24h clock time.
+func validTime(v string) bool {
+	if v == "" {
+		return true
+	}
+	_, err := time.Parse("15:04", v)
+	return err == nil
+}
+
+func validRecur(v string) bool {
+	switch v {
+	case "none", "daily", "weekly", "monthly", "yearly":
+		return true
+	}
+	return false
+}
+
 func validSettings(settings store.Settings) bool {
 	theme := settings.Theme
-	return len(settings.Country) == 2 && (theme == "light" || theme == "dark" || theme == "system")
+	validTheme := theme == "light" || theme == "dark" || theme == "system"
+	return len(settings.Country) == 2 && validTheme &&
+		(settings.WeekStart == "monday" || settings.WeekStart == "sunday")
 }
 
 func securityHeaders() gin.HandlerFunc {

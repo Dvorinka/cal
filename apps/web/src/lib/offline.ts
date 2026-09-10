@@ -11,7 +11,7 @@ export function cacheEntries(entries: Entry[]): void {
 }
 
 export function readCachedSettings(): Settings {
-  return read<Settings>("settings") ?? { country: "US", showHolidays: true, theme: "system" };
+  return read<Settings>("settings") ?? { country: "US", showHolidays: true, theme: "system", weekStart: "monday" };
 }
 
 export function cacheSettings(settings: Settings): void {
