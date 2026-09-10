@@ -47,7 +47,13 @@ export function ContextMenu() {
           exit={{ opacity: 0, scale: 0.97 }}
           transition={{ duration: 0.12, ease: "easeOut" }}
         >
-          <button type="button" onClick={() => openEdit(entry)}>
+          <button
+            type="button"
+            onClick={() => {
+              setMenu(undefined);
+              openEdit(entry);
+            }}
+          >
             <Pencil size={14} /> Edit
           </button>
           {entry.type === "task" && (

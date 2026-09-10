@@ -110,7 +110,18 @@ export function CommandPalette() {
       try {
         setResults(await api.entries({ q: query.trim() }));
       } catch {
-        setResults([]);
+        // Offline: fall back to the locally cached entries.
+        const q = query.trim().toLowerCase();
+        setResults(
+          usePlanner
+            .getState()
+            .entries.filter(
+              (entry) =>
+                entry.title.toLowerCase().includes(q) ||
+                (entry.content ?? "").toLowerCase().includes(q) ||
+                entry.tags.some((tag) => tag.toLowerCase() === q),
+            ),
+        );
       }
     }, 180);
     return () => window.clearTimeout(timer);
