@@ -150,6 +150,11 @@ Status legend: `[x]` shipped · `[/]` partially shipped · `[ ]` planned
       list page, editor board/column picker. `POST /api/cards/:id/move`.
 - [x] **MCP board tools** — `list_boards`, `board_view`, `create_card`,
       `move_card` — 18 tools.
+- [x] **PM depth** — due-date chips on cards (overdue red, today accent),
+      checklist progress from `- [ ]` content, WIP limits per column
+      (`n/limit` badge, red when over), done-column convention (drop into
+      done/completed/shipped auto-completes, dragging out reopens), board
+      templates (blank/kanban/sprint/bug-tracker seed columns).
 
 ## Deliberately out of scope
 

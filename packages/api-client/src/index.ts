@@ -334,8 +334,8 @@ export class CalApi {
     return this.request("/boards");
   }
 
-  async createBoard(name: string, color?: string): Promise<Board> {
-    return this.request("/boards", { method: "POST", body: JSON.stringify({ name, color }) });
+  async createBoard(name: string, color?: string, template?: string): Promise<Board> {
+    return this.request("/boards", { method: "POST", body: JSON.stringify({ name, color, template }) });
   }
 
   async deleteBoard(id: string): Promise<void> {
@@ -350,8 +350,8 @@ export class CalApi {
     return this.request(`/boards/${boardId}/columns`, { method: "POST", body: JSON.stringify({ name }) });
   }
 
-  async renameColumn(id: string, name: string): Promise<void> {
-    return this.request(`/columns/${id}`, { method: "PATCH", body: JSON.stringify({ name }) });
+  async updateColumn(id: string, patch: { name?: string; wipLimit?: number }): Promise<void> {
+    return this.request(`/columns/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
   }
 
   async deleteColumn(id: string): Promise<void> {
@@ -503,4 +503,5 @@ export interface BoardColumn {
   boardId: string;
   name: string;
   position: number;
+  wipLimit?: number;
 }

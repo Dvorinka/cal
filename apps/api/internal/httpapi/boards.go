@@ -5,8 +5,10 @@ package httpapi
 // in Today automatically, completing a card completes the task.
 
 import (
+	"context"
 	"errors"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"cal/apps/api/internal/store"
@@ -25,8 +27,9 @@ func (s *Server) listBoards(c *gin.Context) {
 
 func (s *Server) createBoard(c *gin.Context) {
 	var body struct {
-		Name  string `json:"name"`
-		Color string `json:"color"`
+		Name     string `json:"name"`
+		Color    string `json:"color"`
+		Template string `json:"template"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || strings.TrimSpace(body.Name) == "" {
 		c.String(http.StatusBadRequest, "name required")
@@ -40,7 +43,19 @@ func (s *Server) createBoard(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "failed")
 		return
 	}
+	// Templates seed sensible columns — "blank" gets none.
+	for i, name := range boardTemplates[body.Template] {
+		if _, err := s.store.CreateColumn(c.Request.Context(), currentUser(c).ID, board.ID, name, i); err != nil {
+			break
+		}
+	}
 	c.JSON(http.StatusCreated, board)
+}
+
+var boardTemplates = map[string][]string{
+	"kanban": {"Backlog", "Todo", "Doing", "Done"},
+	"sprint": {"Backlog", "This sprint", "In progress", "Review", "Done"},
+	"bugs":   {"Reported", "Triaged", "Fixing", "Done"},
 }
 
 func (s *Server) deleteBoard(c *gin.Context) {
@@ -98,13 +113,18 @@ func (s *Server) createColumn(c *gin.Context) {
 
 func (s *Server) renameColumn(c *gin.Context) {
 	var body struct {
-		Name string `json:"name"`
+		Name     string `json:"name"`
+		WipLimit *int   `json:"wipLimit"`
 	}
-	if err := c.ShouldBindJSON(&body); err != nil || strings.TrimSpace(body.Name) == "" {
-		c.String(http.StatusBadRequest, "name required")
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.String(http.StatusBadRequest, "invalid")
 		return
 	}
-	if err := s.store.RenameColumn(c.Request.Context(), currentUser(c).ID, c.Param("id"), strings.TrimSpace(body.Name)); errors.Is(err, store.ErrNotFound) {
+	var name *string
+	if n := strings.TrimSpace(body.Name); n != "" {
+		name = &n
+	}
+	if err := s.store.UpdateColumn(c.Request.Context(), currentUser(c).ID, c.Param("id"), name, body.WipLimit); errors.Is(err, store.ErrNotFound) {
 		c.String(http.StatusNotFound, "not found")
 		return
 	} else if err != nil {
@@ -155,5 +175,28 @@ func (s *Server) moveCard(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "failed")
 		return
 	}
+	// Done-column convention: dropping into a done-ish column completes the
+	// task; dragging it back out reopens it.
+	cols, _ := s.store.BoardColumns(c.Request.Context(), userID, boardID)
+	targetDone := false
+	sourceDone := false
+	for _, col := range cols {
+		if body.ColumnID != nil && col.ID == *body.ColumnID {
+			targetDone = doneishColumn(col.Name)
+		}
+		if entry.ColumnID != nil && col.ID == *entry.ColumnID {
+			sourceDone = doneishColumn(col.Name)
+		}
+	}
+	if targetDone != sourceDone {
+		done := targetDone
+		if _, err := s.store.UpdateEntry(c.Request.Context(), userID, entryID, store.EntryPatch{Completed: &done}); err == nil {
+			go s.fireWebhooks(context.Background(), userID, "entry.updated", nil)
+		}
+	}
 	c.Status(http.StatusNoContent)
 }
+
+var reDoneCol = regexp.MustCompile(`(?i)\b(done|complete|finished|shipped|closed)\b`)
+
+func doneishColumn(name string) bool { return reDoneCol.MatchString(name) }

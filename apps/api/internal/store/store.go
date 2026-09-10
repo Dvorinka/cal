@@ -1372,6 +1372,7 @@ type BoardColumn struct {
 	BoardID  string `json:"boardId"`
 	Name     string `json:"name"`
 	Position int    `json:"position"`
+	WipLimit *int   `json:"wipLimit,omitempty"`
 }
 
 func (s *Store) ListBoards(ctx context.Context, userID string) ([]Board, error) {
@@ -1412,7 +1413,7 @@ func (s *Store) DeleteBoard(ctx context.Context, userID, id string) error {
 // BoardColumns returns a board's columns ordered by position.
 func (s *Store) BoardColumns(ctx context.Context, userID, boardID string) ([]BoardColumn, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT c.id::text, c.board_id::text, c.name, c.position
+		SELECT c.id::text, c.board_id::text, c.name, c.position, c.wip_limit
 		FROM board_columns c JOIN boards b ON b.id = c.board_id
 		WHERE c.board_id = $1 AND b.user_id = $2
 		ORDER BY c.position`, boardID, userID)
@@ -1423,7 +1424,7 @@ func (s *Store) BoardColumns(ctx context.Context, userID, boardID string) ([]Boa
 	out := []BoardColumn{}
 	for rows.Next() {
 		var col BoardColumn
-		if err := rows.Scan(&col.ID, &col.BoardID, &col.Name, &col.Position); err != nil {
+		if err := rows.Scan(&col.ID, &col.BoardID, &col.Name, &col.Position, &col.WipLimit); err != nil {
 			return nil, err
 		}
 		out = append(out, col)
@@ -1436,9 +1437,23 @@ func (s *Store) CreateColumn(ctx context.Context, userID, boardID, name string, 
 	err := s.db.QueryRow(ctx, `
 		INSERT INTO board_columns (board_id, name, position)
 		SELECT $1, $2, $3 FROM boards WHERE id = $1 AND user_id = $4
-		RETURNING id::text, board_id::text, name, position`, boardID, name, position, userID).
-		Scan(&col.ID, &col.BoardID, &col.Name, &col.Position)
+		RETURNING id::text, board_id::text, name, position, wip_limit`, boardID, name, position, userID).
+		Scan(&col.ID, &col.BoardID, &col.Name, &col.Position, &col.WipLimit)
 	return col, err
+}
+
+// UpdateColumn renames and/or sets the WIP limit (0 clears).
+func (s *Store) UpdateColumn(ctx context.Context, userID, id string, name *string, wip *int) error {
+	tag, err := s.db.Exec(ctx, `
+		UPDATE board_columns c SET
+			name = coalesce($3, c.name),
+			wip_limit = CASE WHEN $4 THEN NULL ELSE coalesce($5, c.wip_limit) END
+		FROM boards b
+		WHERE c.id = $1 AND c.board_id = b.id AND b.user_id = $2`, id, userID, name, wip != nil && *wip == 0, wip)
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return err
 }
 
 func (s *Store) RenameColumn(ctx context.Context, userID, id, name string) error {

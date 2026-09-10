@@ -12,6 +12,7 @@ CREATE TABLE board_columns (
   name     TEXT NOT NULL,
   position INT  NOT NULL
 );
+ALTER TABLE board_columns ADD COLUMN wip_limit INT;
 CREATE INDEX board_columns_board ON board_columns(board_id, position);
 ALTER TABLE entries
   ADD COLUMN board_id  UUID REFERENCES boards(id) ON DELETE SET NULL,
@@ -20,5 +21,6 @@ ALTER TABLE entries
 CREATE INDEX entries_board ON entries(board_id, column_id, position) WHERE board_id IS NOT NULL;
 -- +goose Down
 ALTER TABLE entries DROP COLUMN IF EXISTS board_id, DROP COLUMN IF EXISTS column_id, DROP COLUMN IF EXISTS position;
+ALTER TABLE board_columns DROP COLUMN IF EXISTS wip_limit;
 DROP TABLE IF EXISTS board_columns;
 DROP TABLE IF EXISTS boards;

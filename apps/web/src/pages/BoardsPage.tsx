@@ -3,11 +3,11 @@
 // calendar, and in Today. Drag between columns, add cards inline.
 
 import type { Board, BoardColumn, Entry } from "@cal/api-client";
-import { Check, Plus, Trash2, Trello } from "lucide-react";
+import { Check, ListOrdered, Plus, Trash2, Trello } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { PageHeader } from "../components/PageHeader";
-import { todayIso } from "../lib/date";
+import { formatDayShort, todayIso } from "../lib/date";
 import { usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
 
@@ -23,6 +23,7 @@ export function BoardsPage() {
   const [columns, setColumns] = useState<BoardColumn[]>([]);
   const [cards, setCards] = useState<Entry[]>([]);
   const [newBoard, setNewBoard] = useState("");
+  const [template, setTemplate] = useState("kanban");
   const [newCol, setNewCol] = useState("");
   const [newCard, setNewCard] = useState<Record<string, string>>({});
   const [dragId, setDragId] = useState<string>();
@@ -64,7 +65,7 @@ export function BoardsPage() {
   async function addBoard() {
     const name = newBoard.trim();
     if (!name) return;
-    await api.createBoard(name).then((b) => {
+    await api.createBoard(name, undefined, template).then((b) => {
       setBoards((bs) => [...bs, b]);
       setNewBoard("");
       toast("Board created");
@@ -114,6 +115,17 @@ export function BoardsPage() {
               onKeyDown={(e) => e.key === "Enter" && void addBoard()}
               aria-label="New board name"
             />
+            <select
+              className="select"
+              value={template}
+              onChange={(e) => setTemplate(e.target.value)}
+              aria-label="Board template"
+            >
+              <option value="blank">Blank</option>
+              <option value="kanban">Kanban</option>
+              <option value="sprint">Sprint</option>
+              <option value="bugs">Bug tracker</option>
+            </select>
             <button type="button" className="btn btn-primary" onClick={() => void addBoard()}>
               <Plus size={14} /> Create board
             </button>
@@ -174,7 +186,28 @@ export function BoardsPage() {
           >
             <header className="kanban-head">
               <span className="kanban-name">{col.name}</span>
-              <span className="kanban-count">{(byColumn.get(col.id) ?? []).length}</span>
+              <span
+                className={`kanban-count ${col.wipLimit && (byColumn.get(col.id) ?? []).length > col.wipLimit ? "over" : ""}`}
+                title={col.wipLimit ? `WIP limit ${col.wipLimit}` : undefined}
+              >
+                {(byColumn.get(col.id) ?? []).length}
+                {col.wipLimit ? `/${col.wipLimit}` : ""}
+              </span>
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label={`WIP limit for ${col.name}`}
+                title="Set WIP limit (0 clears)"
+                onClick={() => {
+                  const v = window.prompt(`WIP limit for "${col.name}" (empty clears)`, String(col.wipLimit ?? ""));
+                  if (v === null) return;
+                  const n = v.trim() === "" ? 0 : parseInt(v, 10);
+                  if (Number.isNaN(n) || n < 0) return;
+                  void api.updateColumn(col.id, { wipLimit: n }).then(() => boardId && loadView(boardId));
+                }}
+              >
+                <ListOrdered size={12} />
+              </button>
               <button
                 type="button"
                 className="icon-btn"
@@ -207,6 +240,8 @@ export function BoardsPage() {
                     {card.title}
                   </button>
                   <div className="kanban-card-meta">
+                    <CardDue date={card.date} done={card.completed} />
+                    <CardChecklist content={card.content} />
                     {card.tags.slice(0, 3).map((t) => (
                       <span key={t} className="stream-tag">#{t}</span>
                     ))}
@@ -239,5 +274,30 @@ export function BoardsPage() {
         </div>
       </div>
     </>
+  );
+}
+
+// CardDue — date chip on the card face; red when past due and not done.
+function CardDue({ date, done }: { date: string; done: boolean }) {
+  if (!date) return null;
+  const overdue = !done && date < todayIso();
+  const today = date === todayIso();
+  return (
+    <span className={`card-due ${overdue ? "over" : ""} ${today ? "today" : ""}`}>
+      {formatDayShort(date)}
+    </span>
+  );
+}
+
+// CardChecklist — "2/5" chip counting `- [ ]` / `- [x]` lines in content.
+function CardChecklist({ content }: { content?: string }) {
+  if (!content) return null;
+  const total = (content.match(/^\s*[-*]\s+\[[ x]\]/gim) ?? []).length;
+  const done = (content.match(/^\s*[-*]\s+\[x\]/gim) ?? []).length;
+  if (!total) return null;
+  return (
+    <span className={`card-checks ${done === total ? "all" : ""}`}>
+      <Check size={10} /> {done}/{total}
+    </span>
   );
 }
