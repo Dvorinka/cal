@@ -15,6 +15,7 @@ import { TagsPage } from "./pages/TagsPage";
 import { TimePage } from "./pages/TimePage";
 import { TrashPage } from "./pages/TrashPage";
 import { FilesPage } from "./pages/FilesPage";
+import { GitHubPage } from "./pages/GitHubPage";
 import { LinksPage } from "./pages/LinksPage";
 import { NotesPage } from "./pages/NotesPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -136,6 +137,7 @@ function Shell() {
           <Route path="/trash" element={<TrashPage />} />
           <Route path="/tags" element={<TagsPage />} />
           <Route path="/time" element={<TimePage />} />
+          <Route path="/github" element={<GitHubPage />} />
           <Route path="/share" element={<ShareTarget />} />
           <Route path="/entry/:id" element={<EntryDeepLink />} />
           <Route path="*" element={<Navigate to="/" replace />} />

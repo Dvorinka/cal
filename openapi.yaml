@@ -565,6 +565,21 @@ paths:
   /time/log/{id}:
     delete:
       summary: Delete a session
+  /time/export:
+    get:
+      summary: solidtime-shaped CSV or JSON (?format=) of sessions
+  /search:
+    get:
+      summary: Global search — entries + files
+  /github/inbox:
+    get:
+      summary: Open issues+PRs involving the user (needs settings.githubToken)
+  /github/activity:
+    get:
+      summary: Login + events this week
+  /github/import:
+    post:
+      summary: Import an issue/PR url as a board card {url, boardId?, columnId?}
   /activity:
     get:
       summary: Date -> entry count map, last 120 days

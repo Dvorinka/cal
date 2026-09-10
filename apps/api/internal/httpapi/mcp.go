@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -173,6 +174,35 @@ var mcpTools = []gin.H{
 	{
 		"name":        "list_boards",
 		"description": "List kanban boards.",
+		"inputSchema": gin.H{"type": "object", "properties": gin.H{}},
+	},
+	{
+		"name":        "start_timer",
+		"description": "Start the focus timer, optionally on a task entry or project board.",
+		"inputSchema": gin.H{
+			"type": "object",
+			"properties": gin.H{
+				"entryId":   gin.H{"type": "string"},
+				"note":      gin.H{"type": "string"},
+				"planned":   gin.H{"type": "integer", "description": "pomodoro minutes"},
+				"billable":  gin.H{"type": "boolean"},
+				"projectId": gin.H{"type": "string", "description": "board id"},
+			},
+		},
+	},
+	{
+		"name":        "stop_timer",
+		"description": "Stop the running focus timer.",
+		"inputSchema": gin.H{"type": "object", "properties": gin.H{}},
+	},
+	{
+		"name":        "time_summary",
+		"description": "Minutes tracked today/this week + billable amount + per-task breakdown.",
+		"inputSchema": gin.H{"type": "object", "properties": gin.H{}},
+	},
+	{
+		"name":        "github_inbox",
+		"description": "Open GitHub issues and PRs involving the user (needs a PAT in settings).",
 		"inputSchema": gin.H{"type": "object", "properties": gin.H{}},
 	},
 	{
@@ -557,6 +587,68 @@ func (s *Server) mcpCall(c *gin.Context, user store.User, req rpcRequest) {
 			return
 		}
 		data, _ := json.Marshal(boards)
+		respond(toolText(string(data), false))
+
+	case "start_timer":
+		var args struct {
+			EntryID   string `json:"entryId"`
+			Note      string `json:"note"`
+			Planned   int    `json:"planned"`
+			Billable  bool   `json:"billable"`
+			ProjectID string `json:"projectId"`
+		}
+		_ = json.Unmarshal(params.Arguments, &args)
+		var ePtr, pPtr *string
+		if args.EntryID != "" {
+			ePtr = &args.EntryID
+		}
+		if args.ProjectID != "" {
+			pPtr = &args.ProjectID
+		}
+		var rate *float64
+		if st, err := s.store.Settings(ctx, user.ID); err == nil {
+			rate = st.DefaultRate
+		}
+		t, err := s.store.StartTimer(ctx, user.ID, ePtr, args.Note, args.Planned, args.Billable, rate, pPtr)
+		if err != nil {
+			fail("a timer is already running")
+			return
+		}
+		data, _ := json.Marshal(t)
+		respond(toolText(string(data), false))
+
+	case "stop_timer":
+		t, err := s.store.StopTimer(ctx, user.ID)
+		if err != nil {
+			fail("no running timer")
+			return
+		}
+		data, _ := json.Marshal(t)
+		respond(toolText(string(data), false))
+
+	case "time_summary":
+		sum, err := s.store.TimeSummary(ctx, user.ID)
+		if err != nil {
+			fail("query failed")
+			return
+		}
+		data, _ := json.Marshal(sum)
+		respond(toolText(string(data), false))
+
+	case "github_inbox":
+		st, err := s.store.Settings(ctx, user.ID)
+		if err != nil || st.GithubToken == "" {
+			fail("no github token in settings")
+			return
+		}
+		var res struct {
+			Items []ghIssue `json:"items"`
+		}
+		if err := ghGet(ctx, st.GithubToken, "/search/issues?q="+url.QueryEscape("is:open involves:@me")+"&per_page=50", &res); err != nil {
+			fail("github fetch failed")
+			return
+		}
+		data, _ := json.Marshal(res.Items)
 		respond(toolText(string(data), false))
 
 	case "board_view":

@@ -1,6 +1,6 @@
 import type { Entry } from "@cal/api-client";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, CalendarDays, Check, Link2, Moon, Plus, Search, StickyNote, Sun } from "lucide-react";
+import { ArrowRight, CalendarDays, Check, FolderOpen, Link2, Moon, Plus, Search, StickyNote, Sun } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { formatDayShort } from "../lib/date";
@@ -30,6 +30,7 @@ export function CommandPalette() {
 
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Entry[]>([]);
+  const [fileResults, setFileResults] = useState<{ id: string; origName: string; name: string }[]>([]);
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -195,7 +196,9 @@ export function CommandPalette() {
     }
     const timer = window.setTimeout(async () => {
       try {
-        setResults(await api.entries({ q: query.trim() }));
+        const out = await api.search(query.trim());
+        setResults(out.entries);
+        setFileResults(out.files);
       } catch {
         // Offline: fall back to the locally cached entries.
         const q = query.trim().toLowerCase();
@@ -224,8 +227,9 @@ export function CommandPalette() {
     () => [
       ...filteredActions.map((action) => ({ kind: "action" as const, action })),
       ...results.map((entry) => ({ kind: "entry" as const, entry })),
+      ...fileResults.map((file) => ({ kind: "file" as const, file })),
     ],
-    [filteredActions, results],
+    [filteredActions, results, fileResults],
   );
 
   useEffect(() => setCursor(0), [items.length]);
@@ -239,6 +243,9 @@ export function CommandPalette() {
     if (!item) return;
     if (item.kind === "action") {
       item.action.run();
+    } else if (item.kind === "file") {
+      close();
+      window.open(`/api/files/${item.file.name}`, "_blank");
     } else {
       close();
       selectDate(item.entry.date);
@@ -328,7 +335,23 @@ export function CommandPalette() {
                   </button>
                 );
               })}
-              {query.trim() && filteredActions.length === 0 && results.length === 0 && (
+              {fileResults.length > 0 && <div className="palette-group">Files</div>}
+              {fileResults.map((file) => {
+                const index = filteredActions.length + results.length + fileResults.indexOf(file);
+                return (
+                  <button
+                    key={file.id}
+                    type="button"
+                    className={`palette-item ${cursor === index ? "active" : ""}`}
+                    onMouseEnter={() => setCursor(index)}
+                    onClick={() => choose(index)}
+                  >
+                    <span className="icon"><FolderOpen size={14} /></span>
+                    {file.origName}
+                  </button>
+                );
+              })}
+              {query.trim() && filteredActions.length === 0 && results.length === 0 && fileResults.length === 0 && (
                 <div className="palette-empty">No matches for “{query.trim()}”</div>
               )}
             </div>

@@ -261,6 +261,28 @@ export function SettingsPage() {
               </select>
             </label>
             <label className="field">
+              <span>GitHub token</span>
+              <input
+                type="password"
+                className="input"
+                placeholder="Personal access token — issues & PRs"
+                value={settings.githubToken ?? ""}
+                onChange={(e) => set({ githubToken: e.target.value })}
+              />
+            </label>
+            <label className="field">
+              <span>Default hourly rate</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                className="input"
+                placeholder="$/h for billable timers"
+                value={settings.defaultRate ?? ""}
+                onChange={(e) => set({ defaultRate: e.target.value === "" ? undefined : Number(e.target.value) })}
+              />
+            </label>
+            <label className="field">
               <span>Morning digest push</span>
               <input
                 type="time"

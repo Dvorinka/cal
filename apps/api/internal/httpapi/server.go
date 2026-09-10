@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"log"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -110,6 +111,7 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authed.GET("/time/summary", server.timeSummary)
 	authed.GET("/time/log", server.timeLog)
 	authed.DELETE("/time/log/:id", server.deleteTimeEntry)
+	authed.GET("/time/export", server.timeExport)
 	authed.GET("/entries/:id/activity", server.entryActivity)
 	authed.GET("/trash", server.listTrash)
 	authed.POST("/trash/:id/restore", server.restoreEntry)
@@ -118,6 +120,10 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authed.POST("/boards/:id/share", server.shareBoard)
 	authed.GET("/tags", server.tagCounts)
 	authed.GET("/agenda", server.agendaMarkdown)
+	authed.GET("/search", server.globalSearch)
+	authed.GET("/github/inbox", server.githubInbox)
+	authed.GET("/github/activity", server.githubActivity)
+	authed.POST("/github/import", server.githubImport)
 	authed.GET("/caldav", server.listCaldav)
 	authed.POST("/caldav", server.createCaldav)
 	authed.POST("/caldav/test", server.testCaldav)
@@ -254,12 +260,16 @@ func (s *Server) createEntry(c *gin.Context) {
 	}
 	entry, err := s.store.CreateEntry(c.Request.Context(), currentUser(c).ID, input)
 	if err != nil {
+		log.Printf("create entry: %v", err)
 		c.String(http.StatusInternalServerError, "failed to create entry")
 		return
 	}
 	go s.fireWebhooks(context.Background(), currentUser(c).ID, "entry.created", entry)
 	if input.BoardID != nil {
 		s.store.LogActivity(c.Request.Context(), currentUser(c).ID, entry.ID, "created", "card created on board")
+	}
+	if entry.LinkURL != "" {
+		go s.enrichLink(currentUser(c).ID, entry.ID, entry.LinkURL)
 	}
 	c.JSON(http.StatusCreated, entry)
 }
@@ -291,6 +301,13 @@ func (s *Server) updateEntry(c *gin.Context) {
 	go s.fireWebhooks(context.Background(), currentUser(c).ID, "entry.updated", entry)
 	// Cheap card audit trail — only on board cards, where it matters.
 	if entry.BoardID != nil {
+		if patch.Completed != nil && *patch.Completed && entry.LinkURL != "" && strings.Contains(entry.LinkURL, "github.com") {
+			go func() {
+				if st, err := s.store.Settings(context.Background(), currentUser(c).ID); err == nil && st.GithubToken != "" {
+					ghCloseIssue(context.Background(), st.GithubToken, entry.LinkURL)
+				}
+			}()
+		}
 		if patch.Completed != nil {
 			action := "completed"
 			if !*patch.Completed {
@@ -302,6 +319,9 @@ func (s *Server) updateEntry(c *gin.Context) {
 		} else {
 			s.store.LogActivity(c.Request.Context(), currentUser(c).ID, entry.ID, "edited", "")
 		}
+	}
+	if patch.LinkURL != nil && entry.LinkURL != "" {
+		go s.enrichLink(currentUser(c).ID, entry.ID, entry.LinkURL)
 	}
 	c.JSON(http.StatusOK, entry)
 }
@@ -528,6 +548,12 @@ func parsePatch(raw map[string]json.RawMessage) (store.EntryPatch, bool) {
 				return patch, false
 			}
 			patch.Pinned = &v
+		case "watched":
+			var v bool
+			if json.Unmarshal(value, &v) != nil {
+				return patch, false
+			}
+			patch.Watched = &v
 		case "boardId", "columnId":
 			var v *string
 			if json.Unmarshal(value, &v) != nil {

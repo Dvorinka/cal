@@ -177,6 +177,17 @@ Status legend: `[x]` shipped · `[/]` partially shipped · `[ ]` planned
 - [x] **Daily digest push** — `digest_time` in Settings; the push loop
       sends one morning summary (open tasks + events) per day.
 - [x] **Board progress** — done/total chip on every board tile.
+- [x] **Billable time** — rate + project on sessions, `$` chips, default
+      rate in Settings, solidtime-shaped CSV/JSON export.
+- [x] **Rich link cards** — unfurl + YouTube oEmbed on save; cards with
+      thumbnails, favicon list view, watched toggle on videos.
+- [x] **Global search** — `/api/search` across entries + files; the
+      palette returns both.
+- [x] **GitHub** — PAT in Settings; `/github` inbox groups open
+      issues+PRs by repo, one-click import to a board, weekly event
+      count; completing a linked card closes the issue; a 15-min loop
+      closes cards whose issues were closed remotely and moves them to
+      the done column.
 
 ## Deliberately out of scope
 

@@ -29,10 +29,28 @@ ALTER TABLE boards
   ADD COLUMN share_token TEXT UNIQUE;
 ALTER TABLE time_entries ADD COLUMN planned_minutes INT;
 ALTER TABLE settings ADD COLUMN digest_time TIME, ADD COLUMN digest_last DATE;
+ALTER TABLE time_entries
+  ADD COLUMN billable BOOLEAN DEFAULT false,
+  ADD COLUMN hourly_rate NUMERIC(10,2),
+  ADD COLUMN project_id UUID REFERENCES boards(id) ON DELETE SET NULL;
+ALTER TABLE settings ADD COLUMN default_rate NUMERIC(10,2);
+CREATE INDEX time_entries_project ON time_entries (project_id) WHERE end_at IS NOT NULL;
+ALTER TABLE entries
+  ADD COLUMN link_image TEXT,
+  ADD COLUMN link_desc TEXT,
+  ADD COLUMN link_favicon TEXT,
+  ADD COLUMN watched BOOLEAN DEFAULT false,
+  ADD COLUMN link_video_id TEXT;
 -- +goose Down
-ALTER TABLE time_entries DROP COLUMN IF EXISTS planned_minutes;
-ALTER TABLE settings DROP COLUMN IF EXISTS digest_time, DROP COLUMN IF EXISTS digest_last;
+ALTER TABLE time_entries DROP COLUMN IF EXISTS planned_minutes,
+  DROP COLUMN IF EXISTS billable, DROP COLUMN IF EXISTS hourly_rate,
+  DROP COLUMN IF EXISTS project_id;
+ALTER TABLE settings DROP COLUMN IF EXISTS digest_time, DROP COLUMN IF EXISTS digest_last,
+  DROP COLUMN IF EXISTS default_rate;
 DROP TABLE IF EXISTS time_entries;
 DROP TABLE IF EXISTS card_activity;
-ALTER TABLE entries DROP COLUMN IF EXISTS deleted_at;
+ALTER TABLE entries DROP COLUMN IF EXISTS deleted_at,
+  DROP COLUMN IF EXISTS link_image, DROP COLUMN IF EXISTS link_desc,
+  DROP COLUMN IF EXISTS link_favicon, DROP COLUMN IF EXISTS watched,
+  DROP COLUMN IF EXISTS link_video_id;
 ALTER TABLE boards DROP COLUMN IF EXISTS description, DROP COLUMN IF EXISTS target_date, DROP COLUMN IF EXISTS share_token;

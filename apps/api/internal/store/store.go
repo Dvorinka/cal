@@ -31,6 +31,7 @@ type User struct {
 const entryCols = `id::text, title, content, type, link_url, date::text,
 	to_char(start_time, 'HH24:MI'), to_char(end_time, 'HH24:MI'),
 	completed, color, tags, recur, remind, pinned,
+	watched, link_image, link_desc, link_favicon, link_video_id,
 	board_id::text, column_id::text, position, created_at,
 	account_id::text, external_uid, external_href, external_etag, dirty`
 
@@ -45,6 +46,11 @@ type Entry struct {
 	EndTime      *string   `json:"endTime,omitempty"`
 	Completed    bool      `json:"completed"`
 	Pinned       bool      `json:"pinned"`
+	Watched      bool      `json:"watched"`
+	LinkImage    *string   `json:"linkImage,omitempty"`
+	LinkDesc     *string   `json:"linkDesc,omitempty"`
+	LinkFavicon  *string   `json:"linkFavicon,omitempty"`
+	LinkVideoID  *string   `json:"linkVideoId,omitempty"`
 	Color        string    `json:"color"`
 	BoardID      *string   `json:"boardId,omitempty"`
 	ColumnID     *string   `json:"columnId,omitempty"`
@@ -63,7 +69,7 @@ type Entry struct {
 
 func (e *Entry) scan(row interface{ Scan(...any) error }) error {
 	return row.Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date,
-		&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
+		&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.Watched, &e.LinkImage, &e.LinkDesc, &e.LinkFavicon, &e.LinkVideoID, &e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
 		&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty)
 }
 
@@ -75,8 +81,10 @@ type Settings struct {
 	Accent       string `json:"accent"`
 	Timezone     string `json:"timezone"`
 	City         string `json:"city"`
-	QuotaMB      int    `json:"quotaMb"`
-	DigestTime   string `json:"digestTime"` // "HH:MM" or ""
+	QuotaMB      int       `json:"quotaMb"`
+	DigestTime   string    `json:"digestTime"` // "HH:MM" or ""
+	DefaultRate  *float64  `json:"defaultRate,omitempty"`
+	GithubToken  string    `json:"githubToken"` // PAT; never logged
 	WidgetToken  string `json:"widgetToken"`
 	ApiToken     string `json:"apiToken"`
 }
@@ -117,6 +125,7 @@ type EntryPatch struct {
 	EndTime   *string  `json:"endTime"`
 	Completed *bool    `json:"completed"`
 	Pinned    *bool    `json:"pinned"`
+	Watched   *bool    `json:"watched"`
 	BoardID   *string  `json:"boardId"`
 	ColumnID  *string  `json:"columnId"`
 	ClearBoard bool    `json:"-"`
@@ -308,7 +317,7 @@ func (s *Store) CreateEntry(ctx context.Context, userID string, input EntryInput
 		VALUES ($1, $2, $3, $4, $5, $6, nullif($7, '')::time, nullif($8, '')::time, $9, $10, coalesce(nullif($11, ''), 'none'), $12, $13::uuid, $14::uuid, $15::uuid, $16, $13 IS NOT NULL)
 		RETURNING `+entryCols+`
 	`, userID, input.Title, input.Content, input.Type, input.LinkURL, input.Date, input.StartTime, input.EndTime, input.Color, input.Tags, input.Recur, input.Remind, input.AccountID, input.BoardID, input.ColumnID, input.Position).
-		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
+		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.Watched, &e.LinkImage, &e.LinkDesc, &e.LinkFavicon, &e.LinkVideoID, &e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
 			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty)
 	return e, err
 }
@@ -353,6 +362,9 @@ func (s *Store) UpdateEntry(ctx context.Context, userID, id string, patch EntryP
 	}
 	if patch.Pinned != nil {
 		current.Pinned = *patch.Pinned
+	}
+	if patch.Watched != nil {
+		current.Watched = *patch.Watched
 	}
 	if patch.ClearBoard {
 		current.BoardID = nil
@@ -416,7 +428,7 @@ func (s *Store) UpdateEntry(ctx context.Context, userID, id string, patch EntryP
 	`, current.Title, current.Content, current.Type, current.LinkURL, current.Date,
 		strOrEmpty(current.StartTime), strOrEmpty(current.EndTime),
 		current.Completed, current.Color, current.Tags, current.Recur, current.Remind, id, userID, resetRemind, current.Pinned, current.BoardID, current.ColumnID).
-		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
+		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.Watched, &e.LinkImage, &e.LinkDesc, &e.LinkFavicon, &e.LinkVideoID, &e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
 			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty)
 	if err != nil {
 		return Entry{}, err
@@ -690,16 +702,16 @@ func (s *Store) Settings(ctx context.Context, userID string) (Settings, error) {
 	var settings Settings
 	err := s.db.QueryRow(ctx, `
 		SELECT country, show_holidays, theme, week_start, accent, timezone, coalesce(city, ''), quota_mb,
-		       coalesce(digest_time::text, ''), widget_token, api_token FROM settings WHERE user_id = $1
-	`, userID).Scan(&settings.Country, &settings.ShowHolidays, &settings.Theme, &settings.WeekStart, &settings.Accent, &settings.Timezone, &settings.City, &settings.QuotaMB, &settings.DigestTime, &settings.WidgetToken, &settings.ApiToken)
+		       coalesce(to_char(digest_time,'HH24:MI'), ''), widget_token, api_token, default_rate, coalesce(github_token,'') FROM settings WHERE user_id = $1
+	`, userID).Scan(&settings.Country, &settings.ShowHolidays, &settings.Theme, &settings.WeekStart, &settings.Accent, &settings.Timezone, &settings.City, &settings.QuotaMB, &settings.DigestTime, &settings.WidgetToken, &settings.ApiToken, &settings.DefaultRate, &settings.GithubToken)
 	return settings, err
 }
 
 func (s *Store) UpdateSettings(ctx context.Context, userID string, settings Settings) (Settings, error) {
 	var out Settings
 	err := s.db.QueryRow(ctx, `
-		INSERT INTO settings (user_id, country, show_holidays, theme, week_start, accent, timezone, city, digest_time)
-		VALUES ($1, $2, $3, $4, $5, $6, coalesce(nullif($7, ''), 'UTC'), nullif($8, ''), nullif($9, '')::time)
+		INSERT INTO settings (user_id, country, show_holidays, theme, week_start, accent, timezone, city, digest_time, default_rate, github_token)
+		VALUES ($1, $2, $3, $4, $5, $6, coalesce(nullif($7, ''), 'UTC'), nullif($8, ''), nullif($9, '')::time, $10, nullif($11, ''))
 		ON CONFLICT (user_id) DO UPDATE
 		SET country = EXCLUDED.country,
 		    show_holidays = EXCLUDED.show_holidays,
@@ -708,11 +720,13 @@ func (s *Store) UpdateSettings(ctx context.Context, userID string, settings Sett
 		    accent = EXCLUDED.accent,
 		    timezone = EXCLUDED.timezone,
 		    city = EXCLUDED.city,
-		    digest_time = EXCLUDED.digest_time
+		    digest_time = EXCLUDED.digest_time,
+		    default_rate = EXCLUDED.default_rate,
+		    github_token = EXCLUDED.github_token
 		RETURNING country, show_holidays, theme, week_start, accent, timezone, coalesce(city, ''), quota_mb,
-		          coalesce(digest_time::text, ''), widget_token, api_token
-	`, userID, settings.Country, settings.ShowHolidays, settings.Theme, settings.WeekStart, settings.Accent, settings.Timezone, settings.City, settings.DigestTime).
-		Scan(&out.Country, &out.ShowHolidays, &out.Theme, &out.WeekStart, &out.Accent, &out.Timezone, &out.City, &out.QuotaMB, &out.DigestTime, &out.WidgetToken, &out.ApiToken)
+		          coalesce(to_char(digest_time,'HH24:MI'), ''), widget_token, api_token, default_rate, coalesce(github_token,'')
+	`, userID, settings.Country, settings.ShowHolidays, settings.Theme, settings.WeekStart, settings.Accent, settings.Timezone, settings.City, settings.DigestTime, settings.DefaultRate, settings.GithubToken).
+		Scan(&out.Country, &out.ShowHolidays, &out.Theme, &out.WeekStart, &out.Accent, &out.Timezone, &out.City, &out.QuotaMB, &out.DigestTime, &out.WidgetToken, &out.ApiToken, &out.DefaultRate, &out.GithubToken)
 	return out, err
 }
 
@@ -818,6 +832,7 @@ func (s *Store) DueReminders(ctx context.Context) ([]Entry, error) {
 		SELECT e.id::text, e.title, e.content, e.type, e.link_url, e.date::text,
 		       to_char(e.start_time, 'HH24:MI'), to_char(e.end_time, 'HH24:MI'),
 		       e.completed, e.color, e.tags, e.recur, e.remind, e.pinned,
+		       e.watched, e.link_image, e.link_desc, e.link_favicon, e.link_video_id,
 		       e.board_id::text, e.column_id::text, e.position, e.created_at,
 		       e.account_id::text, e.external_uid, e.external_href, e.external_etag, e.dirty,
 		       e.user_id::text
@@ -833,7 +848,7 @@ func (s *Store) DueReminders(ctx context.Context) ([]Entry, error) {
 	for rows.Next() {
 		var e Entry
 		if err := rows.Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date,
-			&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
+			&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.Watched, &e.LinkImage, &e.LinkDesc, &e.LinkFavicon, &e.LinkVideoID, &e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
 			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty, &e.OwnerID); err != nil {
 			return nil, err
 		}
@@ -1504,7 +1519,7 @@ func (s *Store) BoardCards(ctx context.Context, userID, boardID string) ([]Entry
 	for rows.Next() {
 		var e Entry
 		if err := rows.Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date,
-			&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned,
+			&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.Watched, &e.LinkImage, &e.LinkDesc, &e.LinkFavicon, &e.LinkVideoID,
 			&e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
 			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty); err != nil {
 			return nil, err
@@ -1556,7 +1571,7 @@ func (s *Store) ListTrash(ctx context.Context, userID string) ([]Entry, error) {
 	for rows.Next() {
 		var e Entry
 		if err := rows.Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date,
-			&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned,
+			&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.Watched, &e.LinkImage, &e.LinkDesc, &e.LinkFavicon, &e.LinkVideoID,
 			&e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
 			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty); err != nil {
 			return nil, err
@@ -1592,16 +1607,20 @@ type TimeEntry struct {
 	EndAt     *time.Time `json:"endAt,omitempty"`
 	Note      string     `json:"note"`
 	Planned   *int       `json:"planned,omitempty"`
+	Billable  bool       `json:"billable"`
+	Rate      *float64   `json:"rate,omitempty"`
+	ProjectID *string    `json:"projectId,omitempty"`
+	Project   string     `json:"project,omitempty"` // board name, joined
 }
 
 // StartTimer opens a running time entry; only one runs per user.
-func (s *Store) StartTimer(ctx context.Context, userID string, entryID *string, note string, planned int) (TimeEntry, error) {
+func (s *Store) StartTimer(ctx context.Context, userID string, entryID *string, note string, planned int, billable bool, rate *float64, projectID *string) (TimeEntry, error) {
 	var t TimeEntry
 	err := s.db.QueryRow(ctx, `
-		INSERT INTO time_entries (user_id, entry_id, note, planned_minutes)
-		VALUES ($1, $2::uuid, $3, nullif($4, 0))
+		INSERT INTO time_entries (user_id, entry_id, note, planned_minutes, billable, hourly_rate, project_id)
+		VALUES ($1, $2::uuid, $3, nullif($4, 0), $5, $6, $7::uuid)
 		ON CONFLICT (user_id) WHERE end_at IS NULL DO NOTHING
-		RETURNING id::text, entry_id::text, start_at`, userID, entryID, note, planned).
+		RETURNING id::text, entry_id::text, start_at`, userID, entryID, note, planned, billable, rate, projectID).
 		Scan(&t.ID, &t.EntryID, &t.StartAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return t, fmt.Errorf("timer already running")
@@ -1622,10 +1641,10 @@ func (s *Store) StopTimer(ctx context.Context, userID string) (TimeEntry, error)
 func (s *Store) CurrentTimer(ctx context.Context, userID string) (*TimeEntry, error) {
 	var t TimeEntry
 	err := s.db.QueryRow(ctx, `
-		SELECT t.id::text, t.entry_id::text, coalesce(e.title,''), t.start_at, t.note, t.planned_minutes
+		SELECT t.id::text, t.entry_id::text, coalesce(e.title,''), t.start_at, t.note, t.planned_minutes, t.billable, t.hourly_rate, t.project_id::text
 		FROM time_entries t LEFT JOIN entries e ON e.id = t.entry_id
 		WHERE t.user_id = $1 AND t.end_at IS NULL`, userID).
-		Scan(&t.ID, &t.EntryID, &t.Title, &t.StartAt, &t.Note, &t.Planned)
+		Scan(&t.ID, &t.EntryID, &t.Title, &t.StartAt, &t.Note, &t.Planned, &t.Billable, &t.Rate, &t.ProjectID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -1635,9 +1654,12 @@ func (s *Store) CurrentTimer(ctx context.Context, userID string) (*TimeEntry, er
 // TimeSummary returns minutes logged per entry today + today total + week total.
 func (s *Store) TimeSummary(ctx context.Context, userID string) (map[string]any, error) {
 	var today, week int
+	var billableAmount float64
 	err := s.db.QueryRow(ctx, `
-		SELECT coalesce(sum(EXTRACT(EPOCH FROM coalesce(end_at, now()) - start_at))/60,0)::int
-		FROM time_entries WHERE user_id = $1 AND start_at::date = current_date`, userID).Scan(&today)
+		SELECT coalesce(sum(EXTRACT(EPOCH FROM coalesce(end_at, now()) - start_at))/60,0)::int,
+		       coalesce(sum(CASE WHEN billable AND hourly_rate IS NOT NULL
+		            THEN EXTRACT(EPOCH FROM coalesce(end_at, now()) - start_at)/3600 * hourly_rate END),0)
+		FROM time_entries WHERE user_id = $1 AND start_at::date = current_date`, userID).Scan(&today, &billableAmount)
 	if err != nil {
 		return nil, err
 	}
@@ -1663,7 +1685,7 @@ func (s *Store) TimeSummary(ctx context.Context, userID string) (map[string]any,
 		}
 		per = append(per, map[string]any{"entryId": id, "title": title, "minutes": mins})
 	}
-	return map[string]any{"todayMinutes": today, "weekMinutes": week, "perEntry": per}, nil
+	return map[string]any{"todayMinutes": today, "weekMinutes": week, "billableAmount": billableAmount, "perEntry": per}, nil
 }
 
 // MinutesByEntry — for the card "time spent" chip.
@@ -1838,8 +1860,11 @@ func nilIfEmpty(s string) *string {
 // TimeLog lists finished sessions in a range (timesheet view).
 func (s *Store) TimeLog(ctx context.Context, userID, from, to string) ([]TimeEntry, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT t.id::text, t.entry_id::text, coalesce(e.title, t.note), t.start_at, t.end_at, t.note, t.planned_minutes
-		FROM time_entries t LEFT JOIN entries e ON e.id = t.entry_id
+		SELECT t.id::text, t.entry_id::text, coalesce(e.title, t.note), t.start_at, t.end_at, t.note, t.planned_minutes,
+		       t.billable, t.hourly_rate, t.project_id::text, coalesce(b.name, '')
+		FROM time_entries t
+		LEFT JOIN entries e ON e.id = t.entry_id
+		LEFT JOIN boards b ON b.id = t.project_id
 		WHERE t.user_id = $1 AND t.start_at::date >= $2::date AND t.start_at::date <= $3::date
 		ORDER BY t.start_at DESC`, userID, from, to)
 	if err != nil {
@@ -1849,7 +1874,7 @@ func (s *Store) TimeLog(ctx context.Context, userID, from, to string) ([]TimeEnt
 	out := []TimeEntry{}
 	for rows.Next() {
 		var t TimeEntry
-		if err := rows.Scan(&t.ID, &t.EntryID, &t.Title, &t.StartAt, &t.EndAt, &t.Note, &t.Planned); err != nil {
+		if err := rows.Scan(&t.ID, &t.EntryID, &t.Title, &t.StartAt, &t.EndAt, &t.Note, &t.Planned, &t.Billable, &t.Rate, &t.ProjectID, &t.Project); err != nil {
 			return nil, err
 		}
 		out = append(out, t)
@@ -1906,4 +1931,95 @@ func (s *Store) DigestDue(ctx context.Context) ([]struct {
 
 func (s *Store) MarkDigestSent(ctx context.Context, userID string) {
 	_, _ = s.db.Exec(ctx, `UPDATE settings SET digest_last = (now() AT TIME ZONE timezone)::date WHERE user_id = $1`, userID)
+}
+
+// SetLinkMeta stores the unfurl/enrich results on a link entry.
+func (s *Store) SetLinkMeta(ctx context.Context, userID, id string, desc, image, favicon, videoID string) {
+	_, _ = s.db.Exec(ctx, `
+		UPDATE entries SET link_desc = nullif($3,''), link_image = nullif($4,''),
+		  link_favicon = nullif($5,''), link_video_id = nullif($6,'')
+		WHERE id = $1 AND user_id = $2`, id, userID, desc, image, favicon, videoID)
+}
+
+// GlobalSearch — one query across entries (title+content), file names,
+// link URLs. Returns capped rows for the palette.
+func (s *Store) GlobalSearch(ctx context.Context, userID, q string) ([]Entry, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT `+entryCols+` FROM entries
+		WHERE user_id = $1 AND deleted_at IS NULL
+		  AND (title ILIKE $2 OR content ILIKE $2 OR link_url ILIKE $2 OR $3 = ANY(tags))
+		ORDER BY date DESC LIMIT 60`, userID, "%"+q+"%", q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Entry{}
+	for rows.Next() {
+		var e Entry
+		if err := e.scan(rows); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// SearchFiles — file-name match for the global search.
+func (s *Store) SearchFiles(ctx context.Context, userID, q string) ([]File, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT id::text, name, orig_name, size, mime, share_token, created_at
+		FROM files WHERE user_id = $1 AND orig_name ILIKE $2 ORDER BY created_at DESC LIMIT 20`,
+		userID, "%"+q+"%")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []File{}
+	for rows.Next() {
+		var f File
+		if err := rows.Scan(&f.ID, &f.Name, &f.OrigName, &f.Size, &f.Mime, &f.ShareToken, &f.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
+// GitHubLinkedCards — open task entries whose linkUrl is a github issue/PR.
+func (s *Store) GitHubLinkedCards(ctx context.Context, userID string) ([]Entry, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT `+entryCols+` FROM entries
+		WHERE user_id = $1 AND deleted_at IS NULL AND link_url LIKE '%github.com%/%/issues/%'
+		   OR user_id = $1 AND deleted_at IS NULL AND link_url LIKE '%github.com%/%/pull/%'`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Entry
+	for rows.Next() {
+		var e Entry
+		if err := e.scan(rows); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// GitHubUsers — everyone with a token set (the sync loop iterates them).
+func (s *Store) GitHubUsers(ctx context.Context) ([]struct{ UserID, Token string }, error) {
+	rows, err := s.db.Query(ctx, `SELECT user_id::text, github_token FROM settings WHERE github_token IS NOT NULL AND github_token <> ''`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []struct{ UserID, Token string }
+	for rows.Next() {
+		var r struct{ UserID, Token string }
+		if err := rows.Scan(&r.UserID, &r.Token); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }

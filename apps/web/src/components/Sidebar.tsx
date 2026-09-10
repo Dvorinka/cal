@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronLeft, ChevronRight, FolderOpen, Hash, Link2, ListChecks, Plus, Search, Settings2, StickyNote, Sun, Timer as TimerIcon, Trash2, Trello } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, FolderOpen, Github as GithubIcon, Hash, Link2, ListChecks, Plus, Search, Settings2, StickyNote, Sun, Timer as TimerIcon, Trash2, Trello } from "lucide-react";
 import { TimerPill } from "./TimerPill";
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
@@ -23,6 +23,7 @@ const NAV: { to: string; label: string; icon: typeof Sun; end?: boolean }[] = [
   { to: "/boards", label: "Boards", icon: Trello },
   { to: "/tags", label: "Tags", icon: Hash },
   { to: "/time", label: "Time", icon: TimerIcon },
+  { to: "/github", label: "GitHub", icon: GithubIcon },
 ];
 
 function MiniMonth({ weekStart }: { weekStart: WeekStartPref }) {

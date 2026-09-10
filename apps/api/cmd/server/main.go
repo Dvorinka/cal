@@ -28,6 +28,7 @@ func main() {
 	go httpapi.PushLoop(context.Background(), s, time.Minute)
 	go caldavLoop(context.Background(), s)
 	go httpapi.GoogleSyncLoop(context.Background(), s, 15*time.Minute)
+	go httpapi.GitHubSyncLoop(context.Background(), s, 15*time.Minute)
 	go httpapi.BackupLoop(context.Background(), s, env("DATA_DIR", "./data"))
 
 	router := httpapi.New(s, calendar.NewHolidayCache())

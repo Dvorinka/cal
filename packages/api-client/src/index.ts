@@ -21,6 +21,11 @@ export interface Entry {
   endTime?: string;
   completed: boolean;
   pinned: boolean;
+  watched?: boolean;
+  linkImage?: string;
+  linkDesc?: string;
+  linkFavicon?: string;
+  linkVideoId?: string;
   color: string;
   boardId?: string;
   columnId?: string;
@@ -50,7 +55,7 @@ export interface EntryInput {
   columnId?: string;
 }
 
-export type EntryPatch = Partial<EntryInput & { completed: boolean; pinned: boolean }>;
+export type EntryPatch = Partial<EntryInput & { completed: boolean; pinned: boolean; watched: boolean }>;
 
 export interface Revision {
   id: string;
@@ -79,6 +84,8 @@ export interface Settings {
   city: string;
   quotaMb?: number;
   digestTime?: string;
+  defaultRate?: number;
+  githubToken?: string;
   widgetToken: string;
   apiToken: string;
 }
@@ -366,8 +373,8 @@ export class CalApi {
     return this.request(`/cards/${entryId}/move`, { method: "POST", body: JSON.stringify({ columnId, position }) });
   }
 
-  async startTimer(entryId?: string, note?: string, planned?: number): Promise<TimeEntry> {
-    return this.request("/timer/start", { method: "POST", body: JSON.stringify({ entryId, note, planned }) });
+  async startTimer(opts: { entryId?: string; note?: string; planned?: number; billable?: boolean; rate?: number; projectId?: string } = {}): Promise<TimeEntry> {
+    return this.request("/timer/start", { method: "POST", body: JSON.stringify(opts) });
   }
   async stopTimer(): Promise<TimeEntry> {
     return this.request("/timer/stop", { method: "POST", body: "{}" });
@@ -413,6 +420,19 @@ export class CalApi {
     return this.request(`/time/log/${id}`, { method: "DELETE" });
   }
 
+  async githubInbox(): Promise<{ number: number; title: string; state: string; url: string; repo: string; isPR: boolean; labels: string[] }[]> {
+    return this.request("/github/inbox");
+  }
+  async githubActivity(): Promise<{ login: string; eventsThisWeek: number }> {
+    return this.request("/github/activity");
+  }
+  async githubImport(url: string, boardId?: string, columnId?: string): Promise<Entry> {
+    return this.request("/github/import", { method: "POST", body: JSON.stringify({ url, boardId, columnId }) });
+  }
+
+  async search(q: string): Promise<{ entries: Entry[]; files: { id: string; name: string; origName: string }[] }> {
+    return this.request(`/search?q=${encodeURIComponent(q)}`);
+  }
   async agenda(days = 7): Promise<string> {
     const r = await fetch(`${this.baseUrl}/agenda?days=${days}`, { credentials: "include" });
     return r.text();
@@ -575,6 +595,10 @@ export interface TimeEntry {
   endAt?: string;
   note: string;
   planned?: number;
+  billable?: boolean;
+  rate?: number;
+  projectId?: string;
+  project?: string;
 }
 
 export interface ActivityItem {
@@ -587,5 +611,6 @@ export interface ActivityItem {
 export interface TimeSummary {
   todayMinutes: number;
   weekMinutes: number;
+  billableAmount: number;
   perEntry: { entryId: string; title: string; minutes: number }[];
 }

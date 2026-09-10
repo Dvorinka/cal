@@ -11,6 +11,7 @@ export function ContextMenu() {
   const updateEntry = usePlanner((state) => state.updateEntry);
   const deleteEntry = usePlanner((state) => state.deleteEntry);
   const api = usePlanner((state) => state.api);
+  const settings = usePlanner((state) => state.settings);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -73,7 +74,7 @@ export function ContextMenu() {
             <button
               type="button"
               onClick={() => {
-                void api.startTimer(entry.id).then(() => setMenu(undefined)).catch(() => setMenu(undefined));
+                void api.startTimer({ entryId: entry.id }).then(() => setMenu(undefined)).catch(() => setMenu(undefined));
               }}
             >
               <Timer size={14} /> Start timer
@@ -83,10 +84,20 @@ export function ContextMenu() {
             <button
               type="button"
               onClick={() => {
-                void api.startTimer(entry.id, undefined, 25).then(() => setMenu(undefined)).catch(() => setMenu(undefined));
+                void api.startTimer({ entryId: entry.id, planned: 25 }).then(() => setMenu(undefined)).catch(() => setMenu(undefined));
               }}
             >
               <Timer size={14} /> Pomodoro (25m)
+            </button>
+          )}
+          {entry.type === "task" && settings.defaultRate != null && (
+            <button
+              type="button"
+              onClick={() => {
+                void api.startTimer({ entryId: entry.id, billable: true }).then(() => setMenu(undefined)).catch(() => setMenu(undefined));
+              }}
+            >
+              <Timer size={14} /> Billable timer (${settings.defaultRate}/h)
             </button>
           )}
           {isLink && (

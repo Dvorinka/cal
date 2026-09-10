@@ -58,54 +58,69 @@ var (
 	reOGRev = regexp.MustCompile(`(?is)<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["'](?:og:title|twitter:title)["']`)
 	reIcon  = regexp.MustCompile(`(?is)<link[^>]+rel=["'](?:icon|shortcut icon|apple-touch-icon)["'][^>]+href=["']([^"']+)["']`)
 	reDesc  = regexp.MustCompile(`(?is)<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']`)
+	reOGImage = regexp.MustCompile(`(?is)<meta[^>]+(?:property|name)=["'](?:og:image|twitter:image)["'][^>]+content=["']([^"']+)["']`)
 )
 
-func (s *Server) unfurl(c *gin.Context) {
-	raw := strings.TrimSpace(c.Query("url"))
+type linkPreview struct {
+	Title       string
+	Favicon     string
+	Description string
+	Image       string
+}
+
+// unfurlURL fetches a page and extracts title/favicon/description/og:image.
+func unfurlURL(ctx context.Context, raw string) (linkPreview, error) {
+	var out linkPreview
 	u, err := url.Parse(raw)
 	if err != nil || checkURL(u) != nil {
-		c.String(http.StatusBadRequest, "invalid url")
-		return
+		return out, errors.New("invalid url")
 	}
-	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, raw, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, raw, nil)
 	if err != nil {
-		c.String(http.StatusBadRequest, "invalid url")
-		return
+		return out, err
 	}
 	req.Header.Set("User-Agent", "Cal-LinkPreview/1.0")
 	req.Header.Set("Accept", "text/html")
 	resp, err := unfurlClient.Do(req)
 	if err != nil {
-		c.String(http.StatusBadGateway, "fetch failed")
-		return
+		return out, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
-		c.String(http.StatusBadGateway, "fetch failed")
-		return
+		return out, errors.New("fetch failed")
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 512*1024))
 	if err != nil {
-		c.String(http.StatusBadGateway, "read failed")
-		return
+		return out, err
 	}
 	html := string(body)
-	title := first(reOG.FindStringSubmatch(html), reOGRev.FindStringSubmatch(html), reTitle.FindStringSubmatch(html))
-	icon := ""
+	out.Title = decodeEntities(strings.TrimSpace(first(reOG.FindStringSubmatch(html), reOGRev.FindStringSubmatch(html), reTitle.FindStringSubmatch(html))))
 	if m := reIcon.FindStringSubmatch(html); m != nil {
-		icon = resolveURL(u, m[1])
+		out.Favicon = resolveURL(u, m[1])
 	}
-	if icon == "" {
-		icon = u.Scheme + "://" + u.Host + "/favicon.ico"
+	if out.Favicon == "" {
+		out.Favicon = u.Scheme + "://" + u.Host + "/favicon.ico"
 	}
-	desc := ""
+	if m := reOGImage.FindStringSubmatch(html); m != nil {
+		out.Image = resolveURL(u, m[1])
+	}
 	if m := reDesc.FindStringSubmatch(html); m != nil {
-		desc = decodeEntities(strings.TrimSpace(m[1]))
+		out.Description = decodeEntities(strings.TrimSpace(m[1]))
+	}
+	return out, nil
+}
+
+func (s *Server) unfurl(c *gin.Context) {
+	p, err := unfurlURL(c.Request.Context(), strings.TrimSpace(c.Query("url")))
+	if err != nil {
+		c.String(http.StatusBadGateway, "fetch failed")
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"title":       decodeEntities(strings.TrimSpace(title)),
-		"favicon":     icon,
-		"description": desc,
+		"title":       p.Title,
+		"favicon":     p.Favicon,
+		"description": p.Description,
+		"image":       p.Image,
 	})
 }
 
