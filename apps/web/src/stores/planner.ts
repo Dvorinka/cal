@@ -44,7 +44,7 @@ interface PlannerState {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  loadEntries: (params: { from: string; to: string; q?: string }) => Promise<void>;
+  loadEntries: (params: { from?: string; to?: string; q?: string }) => Promise<void>;
   createEntry: (input: EntryInput) => Promise<Entry | undefined>;
   updateEntry: (id: string, patch: EntryPatch) => Promise<void>;
   deleteEntry: (id: string) => Promise<void>;

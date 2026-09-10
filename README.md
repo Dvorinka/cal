@@ -13,6 +13,7 @@ and it's yours.
 
 ## Features
 
+- **Six pages** — Today (agenda, checklist, progress), Calendar, Tasks (grouped, quick-add, tag filters), Notes, Links, Settings
 - **Three real views** — month grid, week and day time grids with an all-day row
   and a live now-line
 - **Tasks, notes, links** — with colors, tags, details and optional start/end
@@ -96,6 +97,7 @@ Auth is a secure, HttpOnly session cookie (`SESSION_SECURE=true` in production).
 | `POST /api/auth/register` `/login` `/logout`, `GET /api/me` | session auth (login/register rate-limited) |
 | `GET/POST /api/entries`, `PATCH/DELETE /api/entries/:id` | entries; `q`, `from`, `to` filters |
 | `GET/PUT /api/settings` | theme, week start, holiday region + toggle |
+| `GET /api/export` | full JSON export (user, settings, entries) |
 | `GET /api/holidays?country=&year=` | computed holidays |
 | `GET /api/holidays/countries` | supported regions |
 

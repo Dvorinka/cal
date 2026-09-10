@@ -165,6 +165,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Settings"
+  /export:
+    get:
+      summary: Download all user data as JSON
+      responses:
+        "200":
+          description: Full export (user, settings, entries)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  exportedAt:
+                    type: string
+                    format: date-time
+                  user:
+                    $ref: "#/components/schemas/User"
+                  settings:
+                    $ref: "#/components/schemas/Settings"
+                  entries:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Entry"
   /holidays:
     get:
       parameters:

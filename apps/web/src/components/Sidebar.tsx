@@ -1,5 +1,6 @@
-import { CalendarDays, ChevronLeft, ChevronRight, LogOut, Plus, Search, Settings2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { CalendarDays, ChevronLeft, ChevronRight, Link2, ListChecks, Plus, Search, Settings2, StickyNote, Sun } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { NavLink, useNavigate } from "react-router-dom";
 import { addMonths, fromIso, iso, monthMatrix, todayIso, weekdayNames, type WeekStartPref } from "../lib/date";
 import { usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
@@ -10,10 +11,19 @@ const FILTERS = [
   { type: "link", label: "Links", color: "var(--c-violet)" },
 ] as const;
 
+const NAV: { to: string; label: string; icon: typeof Sun; end?: boolean }[] = [
+  { to: "/today", label: "Today", icon: Sun },
+  { to: "/", label: "Calendar", icon: CalendarDays, end: true },
+  { to: "/tasks", label: "Tasks", icon: ListChecks },
+  { to: "/notes", label: "Notes", icon: StickyNote },
+  { to: "/links", label: "Links", icon: Link2 },
+];
+
 function MiniMonth({ weekStart }: { weekStart: WeekStartPref }) {
   const selectedDate = useUi((state) => state.selectedDate);
   const selectDate = useUi((state) => state.selectDate);
   const closeSidebar = useUi((state) => state.closeSidebar);
+  const navigate = useNavigate();
   const entries = usePlanner((state) => state.entries);
   const [cursor, setCursor] = useState(() => fromIso(selectedDate));
   const today = todayIso();
@@ -65,6 +75,7 @@ function MiniMonth({ weekStart }: { weekStart: WeekStartPref }) {
               onClick={() => {
                 selectDate(date);
                 closeSidebar();
+                navigate("/");
               }}
             >
               {day.getDate()}
@@ -83,77 +94,7 @@ function MiniMonth({ weekStart }: { weekStart: WeekStartPref }) {
   );
 }
 
-function SettingsPopover() {
-  const settings = usePlanner((state) => state.settings);
-  const updateSettings = usePlanner((state) => state.updateSettings);
-  const countries = usePlanner((state) => state.countries);
-  const logout = usePlanner((state) => state.logout);
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const close = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
-    };
-    window.addEventListener("mousedown", close);
-    return () => window.removeEventListener("mousedown", close);
-  }, [open]);
-
-  const set = (patch: Partial<typeof settings>) => void updateSettings({ ...settings, ...patch });
-
-  return (
-    <div className="popover-wrap" ref={ref}>
-      {open && (
-        <div className="popover" role="dialog" aria-label="Settings">
-          <label className="field">
-            <span>Theme</span>
-            <select className="select" value={settings.theme} onChange={(e) => set({ theme: e.target.value as typeof settings.theme })}>
-              <option value="system">System</option>
-              <option value="dark">Dark</option>
-              <option value="light">Light</option>
-            </select>
-          </label>
-          <label className="field">
-            <span>Week starts on</span>
-            <select
-              className="select"
-              value={settings.weekStart}
-              onChange={(e) => set({ weekStart: e.target.value as typeof settings.weekStart })}
-            >
-              <option value="monday">Monday</option>
-              <option value="sunday">Sunday</option>
-            </select>
-          </label>
-          <label className="switch-row">
-            Show holidays
-            <span className="switch">
-              <input type="checkbox" checked={settings.showHolidays} onChange={(e) => set({ showHolidays: e.target.checked })} />
-              <i />
-            </span>
-          </label>
-          <label className="field">
-            <span>Holiday region</span>
-            <select className="select" value={settings.country} onChange={(e) => set({ country: e.target.value })}>
-              {countries.length === 0 && <option value={settings.country}>{settings.country}</option>}
-              {countries.map((country) => (
-                <option key={country.code} value={country.code}>
-                  {country.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="button" className="btn btn-secondary" onClick={() => void logout()}>
-            <LogOut size={13} /> Sign out
-          </button>
-        </div>
-      )}
-      <button type="button" className="icon-btn" aria-label="Settings" onClick={() => setOpen(!open)}>
-        <Settings2 size={16} />
-      </button>
-    </div>
-  );
-}
 
 export function Sidebar() {
   const user = usePlanner((state) => state.user);
@@ -210,6 +151,21 @@ export function Sidebar() {
           <kbd>⌘K</kbd>
         </button>
 
+        <nav className="side-nav" aria-label="Primary">
+          {NAV.map(({ to, label, icon: Icon, end }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
+              onClick={closeSidebar}
+            >
+              <Icon size={15} />
+              {label}
+            </NavLink>
+          ))}
+        </nav>
+
         <MiniMonth weekStart={settings.weekStart} />
 
         <div className="side-label">Lists</div>
@@ -238,7 +194,9 @@ export function Sidebar() {
         </div>
 
         <div className="sidebar-footer">
-          <SettingsPopover />
+          <NavLink to="/settings" className="icon-btn" aria-label="Settings" onClick={closeSidebar}>
+            <Settings2 size={16} />
+          </NavLink>
         </div>
       </aside>
     </>

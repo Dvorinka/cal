@@ -1,51 +1,31 @@
 import { CalendarDays } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { AuthPanel } from "./components/AuthPanel";
+import { BottomNav } from "./components/BottomNav";
 import { CommandPalette } from "./components/CommandPalette";
 import { ContextMenu } from "./components/ContextMenu";
 import { EntryEditor } from "./components/EntryEditor";
-import { MonthView } from "./components/MonthView";
 import { Sidebar } from "./components/Sidebar";
-import { TimeGridView } from "./components/TimeGridView";
 import { Toasts } from "./components/Toasts";
-import { TopBar } from "./components/TopBar";
-import { rangeFor } from "./lib/date";
+import { CalendarPage } from "./pages/CalendarPage";
+import { LinksPage } from "./pages/LinksPage";
+import { NotesPage } from "./pages/NotesPage";
+import { SettingsPage } from "./pages/SettingsPage";
+import { TasksPage } from "./pages/TasksPage";
+import { TodayPage } from "./pages/TodayPage";
 import { usePlanner } from "./stores/planner";
 import { useUi } from "./stores/ui";
 
-export function App() {
-  const { user, booted, entries, holidays, settings, bootstrap, loadEntries, updateEntry, loadHolidays } = usePlanner();
-  const { view, anchor, selectedDate, hiddenTypes, paletteOpen, editor, contextMenu } = useUi();
-  const { setView, shift, goToday, openPalette, closePalette, openCreate, setContextMenu } = useUi();
+function Shell() {
+  const { user } = usePlanner();
+  const { paletteOpen, editor, contextMenu, selectedDate } = useUi();
+  const { setView, shift, goToday, openPalette, closePalette, openCreate, setContextMenu, closeSidebar } = useUi();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const onCalendar = location.pathname === "/";
 
-  useEffect(() => {
-    void bootstrap();
-  }, [bootstrap]);
-
-  const range = useMemo(() => rangeFor(view, anchor, settings.weekStart), [view, anchor, settings.weekStart]);
-
-  useEffect(() => {
-    if (!user) return;
-    void loadEntries(range);
-  }, [user, range.from, range.to, loadEntries]);
-
-  useEffect(() => {
-    if (!user || !settings.showHolidays) return;
-    void loadHolidays(settings.country, anchor.getFullYear());
-  }, [user, settings.country, settings.showHolidays, anchor, loadHolidays]);
-
-  // Resolve theme: light | dark | system (follows prefers-color-scheme live).
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => {
-      document.documentElement.dataset.theme = settings.theme === "system" ? (media.matches ? "dark" : "light") : settings.theme;
-    };
-    apply();
-    media.addEventListener("change", apply);
-    return () => media.removeEventListener("change", apply);
-  }, [settings.theme]);
-
-  // Global keyboard shortcuts.
+  // Global keyboard shortcuts. View-specific ones apply on the calendar only.
   useEffect(() => {
     if (!user) return;
     const onKey = (event: KeyboardEvent) => {
@@ -59,16 +39,13 @@ export function App() {
       if (typing || paletteOpen || editor.mode !== "closed" || contextMenu) return;
       switch (event.key) {
         case "1":
-          setView("month");
-          break;
         case "2":
-          setView("week");
-          break;
         case "3":
-          setView("day");
+          if (onCalendar) setView(event.key === "1" ? "month" : event.key === "2" ? "week" : "day");
           break;
         case "t":
-          goToday();
+          if (onCalendar) goToday();
+          else navigate("/today");
           break;
         case "c":
         case "n":
@@ -79,19 +56,61 @@ export function App() {
           openPalette();
           break;
         case "ArrowLeft":
-          shift(-1);
-          break;
         case "ArrowRight":
-          shift(1);
+          if (onCalendar) shift(event.key === "ArrowLeft" ? -1 : 1);
           break;
         case "Escape":
           setContextMenu(undefined);
+          closeSidebar();
           break;
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [user, paletteOpen, editor.mode, contextMenu, selectedDate, setView, shift, goToday, openPalette, closePalette, openCreate, setContextMenu]);
+  }, [user, paletteOpen, editor.mode, contextMenu, selectedDate, onCalendar, navigate, setView, shift, goToday, openPalette, closePalette, openCreate, setContextMenu, closeSidebar]);
+
+  if (!user) return <AuthPanel />;
+
+  return (
+    <main className="app-shell">
+      <Sidebar />
+      <section className="workspace">
+        <Routes>
+          <Route path="/" element={<CalendarPage />} />
+          <Route path="/today" element={<TodayPage />} />
+          <Route path="/tasks" element={<TasksPage />} />
+          <Route path="/notes" element={<NotesPage />} />
+          <Route path="/links" element={<LinksPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </section>
+      <BottomNav />
+      <CommandPalette />
+      <EntryEditor />
+      <ContextMenu />
+      <Toasts />
+    </main>
+  );
+}
+
+export function App() {
+  const { booted, bootstrap, settings } = usePlanner();
+
+  useEffect(() => {
+    void bootstrap();
+  }, [bootstrap]);
+
+  // Resolve theme: light | dark | system (follows prefers-color-scheme live).
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => {
+      document.documentElement.dataset.theme = settings.theme === "system" ? (media.matches ? "dark" : "light") : settings.theme;
+    };
+    apply();
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, [settings.theme]);
 
   if (!booted) {
     return (
@@ -102,39 +121,10 @@ export function App() {
       </main>
     );
   }
-  if (!user) return <AuthPanel />;
-
-  const visible = entries.filter((entry) => !hiddenTypes.has(entry.type));
-  const shownHolidays = settings.showHolidays ? holidays : [];
 
   return (
-    <main className="app-shell">
-      <Sidebar />
-      <section className="workspace">
-        <TopBar weekStart={settings.weekStart} />
-        {view === "month" ? (
-          <MonthView
-            anchor={anchor}
-            entries={visible}
-            holidays={shownHolidays}
-            weekStart={settings.weekStart}
-            onMoveEntry={(id, date) => void updateEntry(id, { date })}
-          />
-        ) : (
-          <TimeGridView
-            view={view}
-            anchor={anchor}
-            entries={visible}
-            holidays={shownHolidays}
-            weekStart={settings.weekStart}
-            onMoveEntry={(id, patch) => void updateEntry(id, patch)}
-          />
-        )}
-      </section>
-      <CommandPalette />
-      <EntryEditor />
-      <ContextMenu />
-      <Toasts />
-    </main>
+    <BrowserRouter>
+      <Shell />
+    </BrowserRouter>
   );
 }

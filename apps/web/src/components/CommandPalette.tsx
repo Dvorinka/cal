@@ -2,6 +2,7 @@ import type { Entry } from "@cal/api-client";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, CalendarDays, Check, Link2, Moon, Plus, Search, StickyNote, Sun } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { formatDayShort } from "../lib/date";
 import { usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
@@ -25,6 +26,7 @@ export function CommandPalette() {
   const settings = usePlanner((state) => state.settings);
   const updateSettings = usePlanner((state) => state.updateSettings);
   const selectedDate = useUi((state) => state.selectedDate);
+  const navigate = useNavigate();
 
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Entry[]>([]);
@@ -50,6 +52,43 @@ export function CommandPalette() {
         run: () => {
           close();
           goToday();
+          navigate("/today");
+        },
+      },
+      {
+        id: "calendar",
+        label: "Go to calendar",
+        icon: <ArrowRight size={15} />,
+        run: () => {
+          close();
+          navigate("/");
+        },
+      },
+      {
+        id: "tasks",
+        label: "Go to tasks",
+        icon: <ArrowRight size={15} />,
+        run: () => {
+          close();
+          navigate("/tasks");
+        },
+      },
+      {
+        id: "notes",
+        label: "Go to notes",
+        icon: <ArrowRight size={15} />,
+        run: () => {
+          close();
+          navigate("/notes");
+        },
+      },
+      {
+        id: "links",
+        label: "Go to links",
+        icon: <ArrowRight size={15} />,
+        run: () => {
+          close();
+          navigate("/links");
         },
       },
       {
@@ -58,6 +97,7 @@ export function CommandPalette() {
         icon: <ArrowRight size={15} />,
         run: () => {
           close();
+          navigate("/");
           setView("month");
         },
       },
@@ -67,6 +107,7 @@ export function CommandPalette() {
         icon: <ArrowRight size={15} />,
         run: () => {
           close();
+          navigate("/");
           setView("week");
         },
       },
@@ -76,6 +117,7 @@ export function CommandPalette() {
         icon: <ArrowRight size={15} />,
         run: () => {
           close();
+          navigate("/");
           setView("day");
         },
       },
@@ -89,7 +131,7 @@ export function CommandPalette() {
         },
       },
     ],
-    [close, goToday, openCreate, selectedDate, setView, settings, updateSettings],
+    [close, goToday, openCreate, selectedDate, setView, settings, updateSettings, navigate],
   );
 
   useEffect(() => {

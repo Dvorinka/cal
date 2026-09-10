@@ -61,6 +61,7 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authed.DELETE("/entries/:id", server.deleteEntry)
 	authed.GET("/settings", server.settings)
 	authed.PUT("/settings", server.updateSettings)
+	authed.GET("/export", server.export)
 
 	return router
 }
@@ -207,6 +208,27 @@ func (s *Server) updateSettings(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, settings)
+}
+
+func (s *Server) export(c *gin.Context) {
+	user := currentUser(c)
+	entries, err := s.store.ListEntries(c.Request.Context(), user.ID, "", "", "")
+	if err != nil {
+		c.String(http.StatusInternalServerError, "failed to export entries")
+		return
+	}
+	settings, err := s.store.Settings(c.Request.Context(), user.ID)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "failed to export settings")
+		return
+	}
+	c.Header("Content-Disposition", `attachment; filename="cal-export.json"`)
+	c.JSON(http.StatusOK, gin.H{
+		"exportedAt": time.Now().UTC().Format(time.RFC3339),
+		"user":       user,
+		"settings":   settings,
+		"entries":    entries,
+	})
 }
 
 func (s *Server) holidays(c *gin.Context) {
