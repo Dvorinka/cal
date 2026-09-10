@@ -194,6 +194,9 @@ export function TimeGridView({ view, anchor, entries, holidays, weekStart, onMov
                       right: `calc(${((laneCount - lane - 1) / laneCount) * 100}% + 3px)`,
                     }}
                     draggable
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`${entry.title}, ${entry.startTime ?? "all day"}`}
                     onDragStart={(event) => {
                       event.stopPropagation();
                       startEntryDrag(event, entry.id);
@@ -203,6 +206,13 @@ export function TimeGridView({ view, anchor, entries, holidays, weekStart, onMov
                     onClick={(event) => {
                       event.stopPropagation();
                       openEdit(entry);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        openEdit(entry);
+                      }
                     }}
                     onContextMenu={(event) => {
                       event.preventDefault();

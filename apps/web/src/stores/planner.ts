@@ -142,7 +142,8 @@ export const usePlanner = create<PlannerState>((set, get) => ({
   },
 
   async updateEntry(id, patch) {
-    const optimistic = get().entries.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry));
+    const before = get().entries;
+    const optimistic = before.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry));
     set({ entries: optimistic });
     cacheEntries(optimistic);
     try {
@@ -161,8 +162,8 @@ export const usePlanner = create<PlannerState>((set, get) => ({
         set({ entries });
       }
     } catch (error) {
-      const entries = get().entries;
-      set({ entries });
+      set({ entries: before });
+      cacheEntries(before);
       get().toast(error instanceof Error ? error.message : "Failed to save entry");
     }
   },

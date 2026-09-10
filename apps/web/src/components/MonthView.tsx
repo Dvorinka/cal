@@ -74,7 +74,13 @@ export function MonthView({ anchor, entries, holidays, weekStart, onMoveEntry }:
             <div
               key={date}
               className={`day-cell ${date === today ? "today" : ""} ${date === selectedDate ? "selected" : ""} ${isOutside ? "outside" : ""}`}
+              role="button"
+              tabIndex={0}
+              aria-label={date}
               onClick={() => selectDate(date)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") openCreate(date);
+              }}
               onDoubleClick={() => openCreate(date)}
               {...dropTargetProps((event) => {
                 const id = draggedEntryId(event);
