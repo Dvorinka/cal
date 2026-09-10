@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"cal/apps/api/internal/store"
@@ -49,6 +50,7 @@ func (s *Server) pushVapid(c *gin.Context) {
 func (s *Server) subscribePush(c *gin.Context) {
 	var body struct {
 		Endpoint string `json:"endpoint"`
+		Label    string `json:"label"`
 		Keys     struct {
 			P256dh string `json:"p256dh"`
 			Auth   string `json:"auth"`
@@ -58,11 +60,66 @@ func (s *Server) subscribePush(c *gin.Context) {
 		c.String(http.StatusBadRequest, "invalid subscription")
 		return
 	}
-	if err := s.store.UpsertPushSub(c.Request.Context(), currentUser(c).ID, body.Endpoint, body.Keys.P256dh, body.Keys.Auth); err != nil {
+	label := body.Label
+	if label == "" {
+		label = deviceLabel(c.GetHeader("User-Agent"))
+	}
+	if err := s.store.UpsertPushSub(c.Request.Context(), currentUser(c).ID, body.Endpoint, body.Keys.P256dh, body.Keys.Auth, label); err != nil {
 		c.String(http.StatusInternalServerError, "failed to save subscription")
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+// pushSubscriptions lists the user's devices (label + endpoint tail).
+func (s *Server) pushSubscriptions(c *gin.Context) {
+	subs, err := s.store.PushSubs(c.Request.Context(), currentUser(c).ID)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "failed")
+		return
+	}
+	type out struct {
+		ID       string `json:"id"`
+		Label    string `json:"label"`
+		Endpoint string `json:"endpoint"`
+	}
+	list := make([]out, 0, len(subs))
+	for _, sub := range subs {
+		ep := sub.Endpoint
+		if len(ep) > 60 {
+			ep = ep[:57] + "…"
+		}
+		list = append(list, out{ID: sub.ID, Label: sub.Label, Endpoint: ep})
+	}
+	c.JSON(http.StatusOK, list)
+}
+
+// deletePushSubscription removes one device by id (ownership-checked).
+func (s *Server) deletePushSubscription(c *gin.Context) {
+	_ = s.store.DeletePushSubByID(c.Request.Context(), currentUser(c).ID, c.Param("id"))
+	c.Status(http.StatusNoContent)
+}
+
+// deviceLabel distills a user-agent into "Chrome on Android"-style text.
+func deviceLabel(ua string) string {
+	os := "device"
+	for _, cand := range []string{"Android", "iPhone", "iPad", "Windows", "Mac OS", "Linux"} {
+		if strings.Contains(ua, cand) {
+			os = cand
+			break
+		}
+	}
+	browser := "Browser"
+	for _, cand := range []string{"Edg", "Firefox", "Chrome", "Safari"} {
+		if strings.Contains(ua, cand) {
+			browser = map[string]string{"Edg": "Edge"}[cand]
+			if browser == "" {
+				browser = cand
+			}
+			break
+		}
+	}
+	return browser + " on " + os
 }
 
 func (s *Server) unsubscribePush(c *gin.Context) {

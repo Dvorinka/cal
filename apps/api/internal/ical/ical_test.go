@@ -137,3 +137,13 @@ END:VCALENDAR`
 		}
 	}
 }
+
+func TestValarm(t *testing.T) {
+	events, err := Parse("BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:a\r\nSUMMARY:Dentist\r\nDTSTART:20250910T140000Z\r\nBEGIN:VALARM\r\nTRIGGER:-PT15M\r\nEND:VALARM\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
+	if err != nil || len(events) != 1 {
+		t.Fatal(err)
+	}
+	if events[0].AlarmMin == nil || *events[0].AlarmMin != 15 {
+		t.Fatalf("alarm = %v", events[0].AlarmMin)
+	}
+}

@@ -12,10 +12,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -44,6 +46,15 @@ func (s *Server) addWebhook(c *gin.Context) {
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") {
 		c.String(http.StatusBadRequest, "http(s) url required")
 		return
+	}
+	// SSRF guard — private/loopback refused unless explicitly opted into for
+	// local testing (CAL_ALLOW_PRIVATE_WEBHOOKS=1). Webhooks are user-provided
+	// URLs; without this a registered hook becomes an internal probe.
+	if os.Getenv("CAL_ALLOW_PRIVATE_WEBHOOKS") == "" {
+		if err := checkURL(u); err != nil {
+			c.String(http.StatusBadRequest, "webhook url not allowed: "+err.Error())
+			return
+		}
 	}
 	secret := make([]byte, 16)
 	_, _ = rand.Read(secret)
@@ -74,25 +85,52 @@ func (s *Server) fireWebhooks(ctx context.Context, userID, event string, entry a
 	for _, h := range hooks {
 		h := h
 		go func() {
-			req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.URL, bytes.NewReader(payload))
-			if err != nil {
-				return
-			}
-			mac := hmac.New(sha256.New, []byte(h.Secret))
-			mac.Write(payload)
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("X-Cal-Event", event)
-			req.Header.Set("X-Cal-Signature", hex.EncodeToString(mac.Sum(nil)))
-			resp, err := webhookClient.Do(req)
-			if err != nil {
-				log.Printf("webhook %s: %v", h.URL, err)
-				return
-			}
-			_, _ = io.Copy(io.Discard, resp.Body)
-			_ = resp.Body.Close()
-			if resp.StatusCode >= 400 {
-				log.Printf("webhook %s: %d", h.URL, resp.StatusCode)
+			if err := deliverWebhook(ctx, h.URL, h.Secret, event, payload); err != nil {
+				log.Printf("webhook %s: %v — retrying in 30s", h.URL, err)
+				timer := time.NewTimer(30 * time.Second)
+				select {
+				case <-ctx.Done():
+					timer.Stop()
+					return
+				case <-timer.C:
+				}
+				if err := deliverWebhook(ctx, h.URL, h.Secret, event, payload); err != nil {
+					log.Printf("webhook %s: retry failed: %v", h.URL, err)
+				}
 			}
 		}()
 	}
+}
+
+// deliverWebhook sends one signed POST; returns error on transport failure or
+// a >=400 status (both worth one retry).
+func deliverWebhook(ctx context.Context, hookURL, secret, event string, payload []byte) error {
+	u, err := url.Parse(hookURL)
+	if err != nil {
+		return err
+	}
+	if os.Getenv("CAL_ALLOW_PRIVATE_WEBHOOKS") == "" {
+		if err := checkURL(u); err != nil {
+			return err
+		}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(payload)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Cal-Event", event)
+	req.Header.Set("X-Cal-Signature", hex.EncodeToString(mac.Sum(nil)))
+	resp, err := webhookClient.Do(req)
+	if err != nil {
+		return err
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return errors.New("status " + resp.Status)
+	}
+	return nil
 }

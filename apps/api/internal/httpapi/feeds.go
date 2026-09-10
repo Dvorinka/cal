@@ -7,10 +7,12 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
 	"cal/apps/api/internal/ical"
+	"cal/apps/api/internal/rss"
 	"cal/apps/api/internal/store"
 
 	"github.com/gin-gonic/gin"
@@ -32,14 +34,22 @@ type feedEvent struct {
 	Details   string  `json:"details,omitempty"`
 }
 
-// fetchICS downloads a feed body with a size cap and scheme check.
+// fetchICS downloads a feed body — SSRF-guarded like unfurl — and converts
+// RSS/Atom documents to ICS so the cache pipeline stays format-agnostic.
 func fetchICS(rawURL string) (string, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
 		return "", errors.New("feed URL must be http(s)")
 	}
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(u.String())
+	// SSRF guard — refused for private/loopback unless opted into for local
+	// testing (CAL_ALLOW_PRIVATE_FEEDS=1). Also enforced per-redirect via
+	// unfurlClient's CheckRedirect.
+	if os.Getenv("CAL_ALLOW_PRIVATE_FEEDS") == "" {
+		if err := checkURL(u); err != nil {
+			return "", errors.New("feed URL not allowed: " + err.Error())
+		}
+	}
+	resp, err := unfurlClient.Get(u.String())
 	if err != nil {
 		return "", err
 	}
@@ -50,6 +60,13 @@ func fetchICS(rawURL string) (string, error) {
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
 		return "", err
+	}
+	if rss.LooksLikeFeed(string(body)) {
+		ics, err := rss.ToICS(string(body))
+		if err != nil {
+			return "", errors.New("feed not parseable as RSS/Atom")
+		}
+		return ics, nil
 	}
 	return string(body), nil
 }
@@ -215,6 +232,9 @@ func (s *Server) importICS(c *gin.Context) {
 		if !e.AllDay {
 			input.StartTime = e.Start.Format("15:04")
 			input.EndTime = e.End.Format("15:04")
+		}
+		if e.AlarmMin != nil {
+			input.Remind = e.AlarmMin
 		}
 		if input.Title = strings.TrimSpace(input.Title); input.Title == "" {
 			input.Title = "Untitled event"

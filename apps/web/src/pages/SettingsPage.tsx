@@ -62,6 +62,7 @@ export function SettingsPage() {
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
   const [hookUrl, setHookUrl] = useState("");
   const [storage, setStorage] = useState<{ usedBytes: number; quotaBytes: number }>();
+  const [pushDevices, setPushDevices] = useState<{ id: string; label: string; endpoint: string }[]>([]);
   const [pwCurrent, setPwCurrent] = useState("");
   const [pwNext, setPwNext] = useState("");
   const [pwSaving, setPwSaving] = useState(false);
@@ -81,6 +82,7 @@ export function SettingsPage() {
     void api.webhooks().then(setWebhooks).catch(() => {});
     void api.googleStatus().then(setGoogle).catch(() => {});
     void api.storage().then(setStorage).catch(() => {});
+    void api.pushSubscriptions().then(setPushDevices).catch(() => {});
   }, [loadEntries, loadFeeds, loadAccounts, api]);
 
   const stats = useMemo(() => {
@@ -178,6 +180,12 @@ export function SettingsPage() {
     } catch (error) {
       toast(error instanceof Error ? error.message : "Failed");
     }
+  }
+
+  async function removePushDevice(id: string) {
+    await api.deletePushSubscription(id).catch(() => {});
+    setPushDevices((d) => d.filter((x) => x.id !== id));
+    toast("Device removed");
   }
 
   async function removeWebhook(id: string) {
@@ -282,8 +290,9 @@ export function SettingsPage() {
         <section className="panel">
           <h3>Calendar feeds</h3>
           <p className="panel-note">
-            Subscribe to any iCalendar (.ics) URL — Google Calendar's secret address, iCloud public
-            calendars, Nextcloud shared links, Outlook published calendars. Read-only, refreshed on demand.
+            Subscribe to any iCalendar (.ics) or RSS/Atom URL — Google Calendar's secret address,
+            iCloud public calendars, Nextcloud shared links, blog feeds. RSS items land as dated,
+            read-only entries.
           </p>
           {feeds.map((feed) => (
             <div key={feed.id} className="feed-row">
@@ -560,6 +569,29 @@ export function SettingsPage() {
             {pushOn ? <BellOff size={14} /> : <Bell size={14} />}
             {pushOn ? "Disable push notifications" : "Enable push notifications"}
           </button>
+          {pushDevices.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <span className="panel-note" style={{ display: "block", marginBottom: 6 }}>
+                Devices receiving push:
+              </span>
+              {pushDevices.map((d) => (
+                <div key={d.id} className="feed-row">
+                  <div className="feed-meta">
+                    <span className="feed-name">{d.label || "Device"}</span>
+                    <span className="feed-url">{d.endpoint}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label="Revoke device"
+                    onClick={() => void removePushDevice(d.id)}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="panel">

@@ -302,6 +302,14 @@ export class CalApi {
     return this.request("/storage");
   }
 
+  async pushSubscriptions(): Promise<{ id: string; label: string; endpoint: string }[]> {
+    return this.request("/push/subscriptions");
+  }
+
+  async deletePushSubscription(id: string): Promise<void> {
+    return this.request(`/push/subscriptions/${id}`, { method: "DELETE" });
+  }
+
   async upload(file: File): Promise<{ url: string; name: string; markdown: string }> {
     const form = new FormData();
     form.append("file", file);

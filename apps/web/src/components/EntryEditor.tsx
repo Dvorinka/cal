@@ -2,7 +2,7 @@ import type { EntryType, Recur, Revision } from "@cal/api-client";
 import { renderMarkdown } from "../lib/markdown";
 import { AnimatePresence, motion } from "framer-motion";
 import { CalendarClock, Check, History, Link2, Paperclip, StickyNote, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
 
@@ -49,6 +49,15 @@ export function EntryEditor() {
   // Resolve against the live store so optimistic updates (e.g. Done) re-render.
   const editing =
     editor.mode === "edit" ? (entries.find((e) => e.id === editor.entry.id) ?? editor.entry) : undefined;
+
+  // Backlinks: notes whose body links [[this title]].
+  const linkedFrom = useMemo(() => {
+    if (!editing?.id || !editing.title) return [];
+    const needle = `[[${editing.title.toLowerCase()}]]`;
+    return entries.filter(
+      (e) => e.id !== editing.id && e.type === "note" && (e.content ?? "").toLowerCase().includes(needle),
+    );
+  }, [entries, editing?.id, editing?.title]);
 
   const [title, setTitle] = useState("");
   const [type, setType] = useState<EntryType>("task");
@@ -274,12 +283,44 @@ export function EntryEditor() {
                     className="note-body"
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
-                    placeholder={"# Heading\nWrite in markdown — **bold**, `code`, - [ ] todos, [links](url)"}
+                    placeholder={"# Heading\nWrite in markdown — **bold**, `code`, - [ ] todos, [links](url), [[wiki links]]"}
                     aria-label="Note body"
                   />
                 ) : (
                   <div className="note-preview">
-                    {content.trim() === "" ? <p className="note-empty">Nothing to preview.</p> : renderMarkdown(content)}
+                    {content.trim() === "" ? (
+                      <p className="note-empty">Nothing to preview.</p>
+                    ) : (
+                      renderMarkdown(content, (title) => {
+                        const target = entries.find(
+                          (e) => e.type === "note" && e.title.toLowerCase() === title.toLowerCase(),
+                        );
+                        if (target) {
+                          close();
+                          useUi.getState().openEdit(target);
+                        } else {
+                          toast(`No note titled “${title}”`);
+                        }
+                      })
+                    )}
+                  </div>
+                )}
+                {linkedFrom.length > 0 && (
+                  <div className="note-backlinks">
+                    <span className="note-backlinks-label">Linked from</span>
+                    {linkedFrom.map((b) => (
+                      <button
+                        key={b.id}
+                        type="button"
+                        className="note-backlink"
+                        onClick={() => {
+                          close();
+                          useUi.getState().openEdit(b);
+                        }}
+                      >
+                        {b.title}
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>

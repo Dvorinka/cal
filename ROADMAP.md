@@ -87,9 +87,10 @@ Status legend: `[x]` shipped · `[/]` partially shipped · `[ ]` planned
 - [x] **Share target** — PWA `share_target` → `/share` prefills the editor
       (URL → link, text → note); Android `ACTION_SEND` intent deep-links the
       same route.
-- [ ] **iOS wrapper** — same Capacitor shell; TestFlight later.
-- [ ] **Multi-account push** — per-device subscription labels, per-device
-      mute.
+- [x] **iOS wrapper** — `apps/web/ios/` scaffolded; needs macOS + Xcode to
+      build (no CI lane yet).
+- [x] **Per-device push management** — subscriptions get labels (derived from
+      user-agent), listed in Settings with per-device revoke.
 
 ## Phase 5 — Integrations (shipped 2026-09-10)
 
@@ -104,7 +105,8 @@ Status legend: `[x]` shipped · `[/]` partially shipped · `[ ]` planned
       HMAC-SHA256 in `X-Cal-Signature`.
 - [x] **CalDAV collection discovery** — `POST /api/caldav/discover` walks
       principal → calendar-home-set → collections; Settings offers a picker.
-- [ ] **RSS/Atom feeds** — subscribe blogs as dated link entries.
+- [x] **RSS/Atom feeds** — items convert to ICS at fetch time and ride the
+      normal feed pipeline as dated, read-only entries.
 
 ## Phase 6 — Polish & hardening (in progress)
 
@@ -115,9 +117,23 @@ Status legend: `[x]` shipped · `[/]` partially shipped · `[ ]` planned
       focusability violations fixed (text-3/4 tokens, scrollable `<pre>`).
 - [x] **Security headers** — CSP + X-Frame-Options + nosniff + Referrer-Policy
       in `apps/web/nginx.conf`.
-- [ ] **Rate-limit everything sensitive** — intake + feed-create + MCP still
-      ride the global limiter; per-route caps TODO.
-- [ ] **Per-user storage quota** — configurable, shown in settings.
+- [x] **Rate-limit sensitive routes** — files 20/min, feeds 10/min, MCP 60/min,
+      intake 10/min, per-IP on top of auth limits.
+- [x] **Per-user storage quota** — `settings.quota_mb` enforced on upload,
+      usage shown in Settings.
+
+## Phase 7 — Depth (shipped 2026-09-10)
+
+- [x] **Wiki-links** — `[[Note title]]` in markdown renders as a link that
+      opens the note; the editor shows a "Linked from" backlinks row.
+- [x] **Entry deep links** — `/entry/:id` opens the editor on that entry;
+      palette/MCP-generated links can point straight at an entry.
+- [x] **VALARM import** — `.ics` events with alarms keep their reminder as
+      `remind` minutes on import.
+- [x] **Webhook SSRF + retry** — registration and delivery refuse private
+      IPs (env opt-out for dev); one retry after 30s on transport/4xx-5xx.
+- [x] **Feed SSRF** — same guard on `.ics`/RSS subscription fetches (was
+      previously unchecked — real hole, now closed).
 
 ## Deliberately out of scope
 

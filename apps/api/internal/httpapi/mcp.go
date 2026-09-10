@@ -146,6 +146,25 @@ var mcpTools = []gin.H{
 		"description": "List connected CalDAV calendar accounts.",
 		"inputSchema": gin.H{"type": "object", "properties": gin.H{}},
 	},
+	{
+		"name":        "complete_task",
+		"description": "Mark a task done; recurring tasks spawn their next occurrence.",
+		"inputSchema": gin.H{
+			"type":       "object",
+			"properties": gin.H{"id": gin.H{"type": "string"}},
+			"required":   []string{"id"},
+		},
+	},
+	{
+		"name":        "weekly_review",
+		"description": "Digest of the past week: tasks done, slipped, notes written, streak, busiest day.",
+		"inputSchema": gin.H{"type": "object", "properties": gin.H{}},
+	},
+	{
+		"name":        "list_habits",
+		"description": "Habit streaks for recurring tasks tagged #habit.",
+		"inputSchema": gin.H{"type": "object", "properties": gin.H{}},
+	},
 }
 
 func (s *Server) mcpAuth(c *gin.Context) (store.User, bool) {
@@ -432,6 +451,47 @@ func (s *Server) mcpCall(c *gin.Context, user store.User, req rpcRequest) {
 			return
 		}
 		data, _ := json.Marshal(accounts)
+		respond(toolText(string(data), false))
+
+	case "complete_task":
+		var args struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(params.Arguments, &args)
+		entry, err := s.store.Entry(ctx, user.ID, args.ID)
+		if err != nil {
+			fail("entry not found")
+			return
+		}
+		if entry.Type != "task" {
+			fail("only tasks can be completed")
+			return
+		}
+		done := true
+		updated, err := s.store.UpdateEntry(ctx, user.ID, args.ID, store.EntryPatch{Completed: &done})
+		if err != nil {
+			fail("update failed")
+			return
+		}
+		data, _ := json.Marshal(updated)
+		respond(toolText(string(data), false))
+
+	case "weekly_review":
+		review, err := s.weekReview(ctx, user.ID)
+		if err != nil {
+			fail("review failed")
+			return
+		}
+		data, _ := json.Marshal(review)
+		respond(toolText(string(data), false))
+
+	case "list_habits":
+		habits, err := s.habitStreakList(ctx, user.ID)
+		if err != nil {
+			fail("query failed")
+			return
+		}
+		data, _ := json.Marshal(habits)
 		respond(toolText(string(data), false))
 
 	default:

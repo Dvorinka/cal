@@ -26,6 +26,8 @@ type Event struct {
 	Exdates     []time.Time
 	Cancelled   bool
 	Completed   bool
+	// AlarmMin is minutes-before-start from VALARM/TRIGGER (negative duration).
+	AlarmMin *int
 	// TZ, when set, emits DTSTART;TZID=… with local wall time instead of UTC.
 	TZ *time.Location
 }
@@ -50,6 +52,7 @@ type prop struct {
 func Parse(data string) ([]Event, error) {
 	var events []Event
 	var cur *Event
+	inAlarm := false
 	for _, line := range unfold(data) {
 		p := splitProp(line)
 		if p == nil {
@@ -58,6 +61,18 @@ func Parse(data string) ([]Event, error) {
 		switch {
 		case p.name == "BEGIN" && p.value == "VEVENT":
 			cur = &Event{}
+		case p.name == "BEGIN" && p.value == "VALARM":
+			inAlarm = true
+		case p.name == "END" && p.value == "VALARM":
+			inAlarm = false
+		case p.name == "TRIGGER" && inAlarm && cur != nil:
+			// Negative duration = before start → remind minutes.
+			if d, err := parseDuration(strings.TrimPrefix(p.value, "-")); err == nil && strings.HasPrefix(p.value, "-") {
+				mins := int(d.Minutes())
+				if cur.AlarmMin == nil || mins < *cur.AlarmMin {
+					cur.AlarmMin = &mins
+				}
+			}
 		case p.name == "END" && p.value == "VEVENT" && cur != nil:
 			if !cur.Start.IsZero() {
 				events = append(events, *cur)

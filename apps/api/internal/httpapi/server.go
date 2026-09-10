@@ -90,6 +90,8 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authed.GET("/push/vapid", server.pushVapid)
 	authed.POST("/push/subscribe", server.subscribePush)
 	authed.POST("/push/unsubscribe", server.unsubscribePush)
+	authed.GET("/push/subscriptions", server.pushSubscriptions)
+	authed.DELETE("/push/subscriptions/:id", server.deletePushSubscription)
 	authed.GET("/caldav", server.listCaldav)
 	authed.POST("/caldav", server.createCaldav)
 	authed.POST("/caldav/test", server.testCaldav)

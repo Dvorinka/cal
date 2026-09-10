@@ -738,14 +738,21 @@ type PushSubscription struct {
 	Endpoint string `json:"endpoint"`
 	P256dh   string `json:"p256dh"`
 	Auth     string `json:"auth"`
+	Label    string `json:"label"`
 }
 
-func (s *Store) UpsertPushSub(ctx context.Context, userID, endpoint, p256dh, auth string) error {
+func (s *Store) UpsertPushSub(ctx context.Context, userID, endpoint, p256dh, auth, label string) error {
 	_, err := s.db.Exec(ctx, `
-		INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth)
-		VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (endpoint) DO UPDATE SET p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth, user_id = EXCLUDED.user_id
-	`, uuid.NewString(), userID, endpoint, p256dh, auth)
+		INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, label)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (endpoint) DO UPDATE SET p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth, user_id = EXCLUDED.user_id, label = EXCLUDED.label
+	`, uuid.NewString(), userID, endpoint, p256dh, auth, label)
+	return err
+}
+
+// DeletePushSubByID removes a subscription owned by the user.
+func (s *Store) DeletePushSubByID(ctx context.Context, userID, id string) error {
+	_, err := s.db.Exec(ctx, `DELETE FROM push_subscriptions WHERE id = $1 AND user_id = $2`, id, userID)
 	return err
 }
 
@@ -755,7 +762,7 @@ func (s *Store) DeletePushSub(ctx context.Context, endpoint string) error {
 }
 
 func (s *Store) PushSubs(ctx context.Context, userID string) ([]PushSubscription, error) {
-	rows, err := s.db.Query(ctx, `SELECT id::text, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = $1`, userID)
+	rows, err := s.db.Query(ctx, `SELECT id::text, endpoint, p256dh, auth, coalesce(label, '') FROM push_subscriptions WHERE user_id = $1`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -763,7 +770,7 @@ func (s *Store) PushSubs(ctx context.Context, userID string) ([]PushSubscription
 	subs := []PushSubscription{}
 	for rows.Next() {
 		var sub PushSubscription
-		if err := rows.Scan(&sub.ID, &sub.Endpoint, &sub.P256dh, &sub.Auth); err != nil {
+		if err := rows.Scan(&sub.ID, &sub.Endpoint, &sub.P256dh, &sub.Auth, &sub.Label); err != nil {
 			return nil, err
 		}
 		subs = append(subs, sub)

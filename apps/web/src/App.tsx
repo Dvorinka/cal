@@ -1,6 +1,6 @@
 import { CalendarDays } from "lucide-react";
-import { useEffect } from "react";
-import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AuthPanel } from "./components/AuthPanel";
 import { BottomNav } from "./components/BottomNav";
 import { CommandPalette } from "./components/CommandPalette";
@@ -116,6 +116,7 @@ function Shell() {
           <Route path="/links" element={<LinksPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/share" element={<ShareTarget />} />
+          <Route path="/entry/:id" element={<EntryDeepLink />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </section>
@@ -147,6 +148,30 @@ function ShareTarget() {
     });
     navigate("/", { replace: true });
   }, [params, openCreate, navigate]);
+  return null;
+}
+
+// EntryDeepLink resolves /entry/:id → opens the editor on that entry, then
+// returns to the calendar. Entries may not be loaded yet on cold nav.
+function EntryDeepLink() {
+  const { id } = useParams();
+  const entries = usePlanner((s) => s.entries);
+  const openEdit = useUi((s) => s.openEdit);
+  const navigate = useNavigate();
+  const [attempted, setAttempted] = useState(false);
+  useEffect(() => {
+    if (!id) return;
+    const entry = entries.find((e) => e.id === id);
+    if (entry) {
+      openEdit(entry);
+      navigate("/", { replace: true });
+    } else if (!attempted) {
+      setAttempted(true);
+      void usePlanner.getState().loadEntries({});
+    } else {
+      navigate("/", { replace: true }); // not found → calendar
+    }
+  }, [id, entries, attempted, openEdit, navigate]);
   return null;
 }
 

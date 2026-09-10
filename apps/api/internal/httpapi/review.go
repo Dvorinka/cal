@@ -4,6 +4,7 @@ package httpapi
 // tasks, notes written, busiest day, and the completion streak.
 
 import (
+	"context"
 	"net/http"
 	"sort"
 	"time"
@@ -13,19 +14,27 @@ import (
 
 func (s *Server) weeklyReview(c *gin.Context) {
 	userID := currentUser(c).ID
-	now := time.Now()
-	from := now.AddDate(0, 0, -6).Format(time.DateOnly)
-	to := now.Format(time.DateOnly)
-	entries, err := s.store.ListEntries(c.Request.Context(), userID, from, to, "")
+	out, err := s.weekReview(c.Request.Context(), userID)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "failed")
 		return
 	}
-	// Slipped tasks may predate the window — look back further for open tasks.
-	older, err := s.store.ListEntries(c.Request.Context(), userID, "", from, "")
+	c.JSON(http.StatusOK, out)
+}
+
+// weekReview computes the digest — shared by the HTTP route and MCP tool.
+func (s *Server) weekReview(ctx context.Context, userID string) (gin.H, error) {
+	now := time.Now()
+	from := now.AddDate(0, 0, -6).Format(time.DateOnly)
+	to := now.Format(time.DateOnly)
+	entries, err := s.store.ListEntries(ctx, userID, from, to, "")
 	if err != nil {
-		c.String(http.StatusInternalServerError, "failed")
-		return
+		return nil, err
+	}
+	// Slipped tasks may predate the window — look back further for open tasks.
+	older, err := s.store.ListEntries(ctx, userID, "", from, "")
+	if err != nil {
+		return nil, err
 	}
 
 	done := 0
@@ -68,7 +77,7 @@ func (s *Server) weeklyReview(c *gin.Context) {
 			busiest, busiestCount = day, n
 		}
 	}
-	c.JSON(http.StatusOK, gin.H{
+	return gin.H{
 		"from":         from,
 		"to":           to,
 		"tasksDone":    done,
@@ -78,18 +87,34 @@ func (s *Server) weeklyReview(c *gin.Context) {
 		"busiestDay":   busiest,
 		"busiestCount": busiestCount,
 		"perDay":       perDay,
-	})
+	}, nil
 }
 
 // habitStreaks returns current streaks for recurring tasks tagged "habit".
 // A streak counts consecutive periods (day/week/month/year) where at least
 // one occurrence was completed.
 func (s *Server) habitStreaks(c *gin.Context) {
-	userID := currentUser(c).ID
-	entries, err := s.store.ListEntries(c.Request.Context(), userID, "", "", "")
+	out, err := s.habitStreakList(c.Request.Context(), currentUser(c).ID)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "failed")
 		return
+	}
+	c.JSON(http.StatusOK, out)
+}
+
+type habit struct {
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Recur    string `json:"recur"`
+	Streak   int    `json:"streak"`
+	LastDone string `json:"lastDone,omitempty"`
+}
+
+// habitStreakList computes streaks — shared by the HTTP route and MCP tool.
+func (s *Server) habitStreakList(ctx context.Context, userID string) ([]habit, error) {
+	entries, err := s.store.ListEntries(ctx, userID, "", "", "")
+	if err != nil {
+		return nil, err
 	}
 	// Group completed task occurrences by (title, recur).
 	type key struct{ title, recur string }
@@ -103,13 +128,6 @@ func (s *Server) habitStreaks(c *gin.Context) {
 			done[k] = map[string]bool{}
 		}
 		done[k][e.Date] = true
-	}
-	type habit struct {
-		ID       string `json:"id"`
-		Title    string `json:"title"`
-		Recur    string `json:"recur"`
-		Streak   int    `json:"streak"`
-		LastDone string `json:"lastDone,omitempty"`
 	}
 	out := []habit{}
 	seen := map[string]bool{}
@@ -141,7 +159,7 @@ func (s *Server) habitStreaks(c *gin.Context) {
 		out = append(out, habit{ID: e.ID, Title: e.Title, Recur: e.Recur, Streak: streak, LastDone: lastDone})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Streak > out[j].Streak })
-	c.JSON(http.StatusOK, out)
+	return out, nil
 }
 
 type step struct{ years, months, days int }

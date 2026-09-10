@@ -25,6 +25,7 @@ ALTER TABLE settings ADD COLUMN quota_mb INTEGER NOT NULL DEFAULT 500;
 ALTER TABLE sessions
   ADD COLUMN user_agent TEXT,
   ADD COLUMN last_seen_at TIMESTAMPTZ;
+ALTER TABLE push_subscriptions ADD COLUMN label TEXT;
 CREATE TABLE webhooks (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -60,5 +61,6 @@ DROP TABLE IF EXISTS carddav_accounts;
 DROP TABLE IF EXISTS webhooks;
 DROP TABLE IF EXISTS entry_revisions;
 ALTER TABLE sessions DROP COLUMN IF EXISTS user_agent, DROP COLUMN IF EXISTS last_seen_at;
+ALTER TABLE push_subscriptions DROP COLUMN IF EXISTS label;
 ALTER TABLE settings DROP COLUMN IF EXISTS city, DROP COLUMN IF EXISTS timezone, DROP COLUMN IF EXISTS quota_mb;
 -- +goose StatementEnd

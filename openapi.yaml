@@ -560,6 +560,15 @@ paths:
   /google:
     delete:
       summary: Disconnect Google (removes tokens + synthetic feed)
+  /push/subscriptions:
+    get:
+      summary: List push devices (label + endpoint tail)
+    responses:
+      "200":
+        description: devices
+  /push/subscriptions/{id}:
+    delete:
+      summary: Revoke one device
   /push/vapid:
     get:
       responses:

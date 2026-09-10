@@ -2442,3 +2442,10 @@ button {
 .feed-row.as-btn { width: 100%; text-align: left; background: none; border: none; border-bottom: 1px solid var(--line); cursor: pointer; padding: 10px 12px; }
 .feed-row.as-btn:last-child { border-bottom: 0; }
 .feed-row.as-btn:hover { background: var(--bg-field); }
+
+.md-wiki { color: var(--accent); text-decoration: none; border-bottom: 1px dashed var(--accent); }
+.md-wiki:hover { border-bottom-style: solid; }
+.note-backlinks { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--line); }
+.note-backlinks-label { display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); margin-bottom: 8px; }
+.note-backlink { display: inline-block; margin: 0 6px 6px 0; padding: 4px 10px; font-size: 12px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg-field); color: var(--text-1); cursor: pointer; }
+.note-backlink:hover { border-color: var(--accent); }

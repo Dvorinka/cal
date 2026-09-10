@@ -8,15 +8,30 @@ import type { ReactNode } from "react";
 let key = 0;
 const k = () => `m${key++}`;
 
-function inline(text: string): ReactNode[] {
+function inline(text: string, onWiki?: (title: string) => void): ReactNode[] {
   const out: ReactNode[] = [];
-  const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)|(!\[[^\]]*\]\([^)]+\))|(\[[^\]]+\]\([^)]+\))/g;
+  const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)|(!\[[^\]]*\]\([^)]+\))|(\[\[[^\]]+\]\])|(\[[^\]]+\]\([^)]+\))/g;
   let last = 0;
   for (const m of text.matchAll(re)) {
     if (m.index > last) out.push(text.slice(last, m.index));
     const tok = m[0];
     if (tok.startsWith("`")) {
       out.push(<code key={k()}>{tok.slice(1, -1)}</code>);
+    } else if (tok.startsWith("[[")) {
+      const title = tok.slice(2, -2).trim();
+      out.push(
+        <a
+          key={k()}
+          href="#"
+          className="md-wiki"
+          onClick={(e) => {
+            e.preventDefault();
+            onWiki?.(title);
+          }}
+        >
+          {title}
+        </a>,
+      );
     } else if (tok.startsWith("**")) {
       out.push(<strong key={k()}>{tok.slice(2, -2)}</strong>);
     } else if (tok.startsWith("![")) {
@@ -47,8 +62,9 @@ function inline(text: string): ReactNode[] {
   return out;
 }
 
-export function renderMarkdown(src: string): ReactNode[] {
+export function renderMarkdown(src: string, onWiki?: (title: string) => void): ReactNode[] {
   key = 0;
+  const run = (t: string) => inline(t, onWiki);
   const blocks: ReactNode[] = [];
   const lines = src.replace(/\r\n?/g, "\n").split("\n");
   let i = 0;
@@ -76,7 +92,7 @@ export function renderMarkdown(src: string): ReactNode[] {
     if (h) {
       const level = h[1].length;
       const Tag = `h${Math.min(level, 4)}` as "h1" | "h2" | "h3" | "h4";
-      blocks.push(<Tag key={k()}>{inline(h[2])}</Tag>);
+      blocks.push(<Tag key={k()}>{run(h[2])}</Tag>);
       i++;
       continue;
     }
@@ -93,7 +109,7 @@ export function renderMarkdown(src: string): ReactNode[] {
         buf.push(lines[i].trimStart().slice(1).trimStart());
         i++;
       }
-      blocks.push(<blockquote key={k()}>{inline(buf.join(" "))}</blockquote>);
+      blocks.push(<blockquote key={k()}>{run(buf.join(" "))}</blockquote>);
       continue;
     }
     // lists (incl. - [ ] todos)
@@ -110,10 +126,10 @@ export function renderMarkdown(src: string): ReactNode[] {
         it.todo ? (
           <li key={j} className={`todo ${it.done ? "done" : ""}`}>
             <span className="box" aria-hidden />
-            <span>{inline(it.text)}</span>
+            <span>{run(it.text)}</span>
           </li>
         ) : (
-          <li key={j}>{inline(it.text)}</li>
+          <li key={j}>{run(it.text)}</li>
         ),
       );
       blocks.push(ordered ? <ol key={k()}>{items_}</ol> : <ul key={k()}>{items_}</ul>);
@@ -126,7 +142,7 @@ export function renderMarkdown(src: string): ReactNode[] {
       buf.push(lines[i]);
       i++;
     }
-    blocks.push(<p key={k()}>{inline(buf.join(" "))}</p>);
+    blocks.push(<p key={k()}>{run(buf.join(" "))}</p>);
   }
   return blocks;
 }
