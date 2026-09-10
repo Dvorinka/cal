@@ -194,6 +194,7 @@ export const usePlanner = create<PlannerState>((set, get) => ({
         startTime: input.startTime || undefined,
         endTime: input.endTime || undefined,
         completed: false,
+        pinned: false,
         color: input.color ?? "slate",
         tags: input.tags ?? [],
         recur: input.recur ?? "none",

@@ -10,13 +10,19 @@ const k = () => `m${key++}`;
 
 function inline(text: string, onWiki?: (title: string) => void): ReactNode[] {
   const out: ReactNode[] = [];
-  const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)|(!\[[^\]]*\]\([^)]+\))|(\[\[[^\]]+\]\])|(\[[^\]]+\]\([^)]+\))/g;
+  const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)|(!\[[^\]]*\]\([^)]+\))|(\[\[[^\]]+\]\])|(\[[^\]]+\]\([^)]+\))|(?<!\w)(#[a-z0-9_-]+)/gi;
   let last = 0;
   for (const m of text.matchAll(re)) {
     if (m.index > last) out.push(text.slice(last, m.index));
     const tok = m[0];
     if (tok.startsWith("`")) {
       out.push(<code key={k()}>{tok.slice(1, -1)}</code>);
+    } else if (tok.startsWith("#")) {
+      out.push(
+        <span key={k()} className="md-tag">
+          {tok}
+        </span>,
+      );
     } else if (tok.startsWith("[[")) {
       const title = tok.slice(2, -2).trim();
       out.push(

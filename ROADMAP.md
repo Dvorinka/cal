@@ -134,6 +134,15 @@ Status legend: `[x]` shipped · `[/]` partially shipped · `[ ]` planned
       IPs (env opt-out for dev); one retry after 30s on transport/4xx-5xx.
 - [x] **Feed SSRF** — same guard on `.ics`/RSS subscription fetches (was
       previously unchecked — real hole, now closed).
+- [x] **Files** — uploads now land in a `files` table; Files page with
+      drag-drop, type icons, image preview, per-file public share links
+      (`/api/shared/files/<token>`), delete. Self-hosted file bin.
+- [x] **Memos-flavored notes** — stream view (Today/Yesterday/date groups),
+      pinned notes (`pinned` column, pin toggle, sorted first), inline `#tag`
+      chips extracted from content + tag filter row.
+- [x] **Activity heatmap** — `GET /api/activity` date→count map; 17-week
+      contributions grid on Today.
+- [x] **MCP `list_files`** — 14 tools.
 
 ## Deliberately out of scope
 

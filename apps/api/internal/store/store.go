@@ -28,7 +28,7 @@ type User struct {
 // Times are rendered as HH:MM strings to keep the API surface simple.
 const entryCols = `id::text, title, content, type, link_url, date::text,
 	to_char(start_time, 'HH24:MI'), to_char(end_time, 'HH24:MI'),
-	completed, color, tags, recur, remind, created_at,
+	completed, color, tags, recur, remind, pinned, created_at,
 	account_id::text, external_uid, external_href, external_etag, dirty`
 
 type Entry struct {
@@ -41,6 +41,7 @@ type Entry struct {
 	StartTime    *string   `json:"startTime,omitempty"`
 	EndTime      *string   `json:"endTime,omitempty"`
 	Completed    bool      `json:"completed"`
+	Pinned       bool      `json:"pinned"`
 	Color        string    `json:"color"`
 	Tags         []string  `json:"tags"`
 	Recur        string    `json:"recur"`
@@ -56,7 +57,7 @@ type Entry struct {
 
 func (e *Entry) scan(row interface{ Scan(...any) error }) error {
 	return row.Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date,
-		&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.CreatedAt,
+		&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.CreatedAt,
 		&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty)
 }
 
@@ -105,6 +106,7 @@ type EntryPatch struct {
 	StartTime *string  `json:"startTime"`
 	EndTime   *string  `json:"endTime"`
 	Completed *bool    `json:"completed"`
+	Pinned    *bool    `json:"pinned"`
 	Color     *string  `json:"color"`
 	Recur     *string  `json:"recur"`
 	Remind    *int     `json:"remind"`
@@ -293,7 +295,7 @@ func (s *Store) CreateEntry(ctx context.Context, userID string, input EntryInput
 		VALUES ($1, $2, $3, $4, $5, $6, nullif($7, '')::time, nullif($8, '')::time, $9, $10, coalesce(nullif($11, ''), 'none'), $12, $13::uuid, $13 IS NOT NULL)
 		RETURNING `+entryCols+`
 	`, userID, input.Title, input.Content, input.Type, input.LinkURL, input.Date, input.StartTime, input.EndTime, input.Color, input.Tags, input.Recur, input.Remind, input.AccountID).
-		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.CreatedAt,
+		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.CreatedAt,
 			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty)
 	return e, err
 }
@@ -335,6 +337,9 @@ func (s *Store) UpdateEntry(ctx context.Context, userID, id string, patch EntryP
 	}
 	if patch.Completed != nil {
 		current.Completed = *patch.Completed
+	}
+	if patch.Pinned != nil {
+		current.Pinned = *patch.Pinned
 	}
 	if patch.Color != nil {
 		current.Color = *patch.Color
@@ -379,14 +384,15 @@ func (s *Store) UpdateEntry(ctx context.Context, userID, id string, patch EntryP
 		SET title = $1, content = $2, type = $3, link_url = $4, date = $5,
 		    start_time = nullif($6, '')::time, end_time = nullif($7, '')::time,
 		    completed = $8, color = $9, tags = $10, recur = $11, remind = $12,
+		    pinned = $16,
 		    dirty = CASE WHEN account_id IS NOT NULL THEN true ELSE dirty END,
 		    reminded_at = CASE WHEN $15 THEN NULL ELSE reminded_at END
 		WHERE id = $13 AND user_id = $14
 		RETURNING `+entryCols+`
 	`, current.Title, current.Content, current.Type, current.LinkURL, current.Date,
 		strOrEmpty(current.StartTime), strOrEmpty(current.EndTime),
-		current.Completed, current.Color, current.Tags, current.Recur, current.Remind, id, userID, resetRemind).
-		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.CreatedAt,
+		current.Completed, current.Color, current.Tags, current.Recur, current.Remind, id, userID, resetRemind, current.Pinned).
+		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.CreatedAt,
 			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty)
 	if err != nil {
 		return Entry{}, err
@@ -799,7 +805,7 @@ func (s *Store) DueReminders(ctx context.Context) ([]Entry, error) {
 	for rows.Next() {
 		var e Entry
 		if err := rows.Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date,
-			&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.CreatedAt,
+			&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.CreatedAt,
 			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty, &e.OwnerID); err != nil {
 			return nil, err
 		}
@@ -1228,4 +1234,103 @@ func (s *Store) RefreshFeedCache(ctx context.Context, userID, feedID, ics string
 		UPDATE feeds SET ics_cache = $3, fetched_at = now() WHERE id = $1 AND user_id = $2
 	`, feedID, userID, ics)
 	return err
+}
+
+// --- Files ---
+
+type File struct {
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`       // random name on disk
+	OrigName   string    `json:"origName"`   // client filename for display
+	Size       int64     `json:"size"`
+	Mime       string    `json:"mime"`
+	ShareToken *string   `json:"shareToken,omitempty"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
+func (s *Store) CreateFile(ctx context.Context, userID, name, origName, mime string, size int64) (File, error) {
+	var f File
+	err := s.db.QueryRow(ctx, `
+		INSERT INTO files (user_id, name, orig_name, size, mime)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id::text, name, orig_name, size, mime, share_token, created_at
+	`, userID, name, origName, size, mime).
+		Scan(&f.ID, &f.Name, &f.OrigName, &f.Size, &f.Mime, &f.ShareToken, &f.CreatedAt)
+	return f, err
+}
+
+func (s *Store) ListFiles(ctx context.Context, userID string) ([]File, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT id::text, name, orig_name, size, mime, share_token, created_at
+		FROM files WHERE user_id = $1 ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []File{}
+	for rows.Next() {
+		var f File
+		if err := rows.Scan(&f.ID, &f.Name, &f.OrigName, &f.Size, &f.Mime, &f.ShareToken, &f.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) FileByName(ctx context.Context, userID, name string) (File, error) {
+	var f File
+	err := s.db.QueryRow(ctx, `
+		SELECT id::text, name, orig_name, size, mime, share_token, created_at
+		FROM files WHERE user_id = $1 AND name = $2`, userID, name).
+		Scan(&f.ID, &f.Name, &f.OrigName, &f.Size, &f.Mime, &f.ShareToken, &f.CreatedAt)
+	return f, err
+}
+
+// FileByShareToken resolves a public share link — no ownership check.
+func (s *Store) FileByShareToken(ctx context.Context, token string) (string, File, error) {
+	var f File
+	var userID string
+	err := s.db.QueryRow(ctx, `
+		SELECT user_id::text, id::text, name, orig_name, size, mime, share_token, created_at
+		FROM files WHERE share_token = $1`, token).
+		Scan(&userID, &f.ID, &f.Name, &f.OrigName, &f.Size, &f.Mime, &f.ShareToken, &f.CreatedAt)
+	return userID, f, err
+}
+
+func (s *Store) SetFileShare(ctx context.Context, userID, id string, token *string) error {
+	tag, err := s.db.Exec(ctx, `UPDATE files SET share_token = $3 WHERE id = $1 AND user_id = $2`, id, userID, token)
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return err
+}
+
+// DeleteFile removes the row; the caller unlinks the disk file.
+func (s *Store) DeleteFile(ctx context.Context, userID, id string) (string, error) {
+	var name string
+	err := s.db.QueryRow(ctx, `DELETE FROM files WHERE id = $1 AND user_id = $2 RETURNING name`, id, userID).Scan(&name)
+	return name, err
+}
+
+// Activity returns date → entry count over the last N days.
+func (s *Store) Activity(ctx context.Context, userID string, days int) (map[string]int, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT date::text, count(*) FROM entries
+		WHERE user_id = $1 AND date >= current_date - $2::int
+		GROUP BY date`, userID, days)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var d string
+		var n int
+		if err := rows.Scan(&d, &n); err != nil {
+			return nil, err
+		}
+		out[d] = n
+	}
+	return out, rows.Err()
 }

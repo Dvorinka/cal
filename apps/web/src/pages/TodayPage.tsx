@@ -67,6 +67,7 @@ export function TodayPage() {
   const [review, setReview] = useState<WeekReview | null>(null);
   const [showReview, setShowReview] = useState(false);
   const [focus, setFocus] = useState(false);
+  const [activity, setActivity] = useState<Record<string, number>>({});
   const today = todayIso();
 
   useEffect(() => {
@@ -81,6 +82,7 @@ export function TodayPage() {
     void loadEntries({ from: addDaysIso(today, -14), to: addDaysIso(today, 14) });
     void loadFeeds();
     void api.habits().then(setHabits).catch(() => {});
+    void api.activity().then(setActivity).catch(() => {});
   }, [today, loadEntries, loadFeeds, api]);
 
   useEffect(() => {
@@ -374,9 +376,45 @@ export function TodayPage() {
                 </div>
               )}
             </section>
+
+            <section className="panel">
+              <h3>Activity</h3>
+              <ActivityGrid counts={activity} today={today} />
+            </section>
           </div>
         )}
       </div>
     </>
+  );
+}
+
+// ActivityGrid — contributions-style grid, last ~17 weeks, oldest → newest.
+function ActivityGrid({ counts, today }: { counts: Record<string, number>; today: string }) {
+  const cells = useMemo(() => {
+    const end = new Date(today + "T00:00:00");
+    // Align to the week's start so columns are full weeks.
+    const start = new Date(end);
+    start.setDate(start.getDate() - ((start.getDay() + 6) % 7) - 16 * 7); // Monday-aligned, 17 weeks back
+    const out: { date: string; n: number }[] = [];
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const iso = d.toISOString().slice(0, 10);
+      out.push({ date: iso, n: counts[iso] ?? 0 });
+    }
+    return out;
+  }, [counts, today]);
+
+  const max = Math.max(1, ...cells.map((c) => c.n));
+  const level = (n: number) => (n === 0 ? 0 : n <= max * 0.25 ? 1 : n <= max * 0.5 ? 2 : n <= max * 0.8 ? 3 : 4);
+
+  return (
+    <div className="activity-grid" role="img" aria-label="Entry activity for the last 17 weeks">
+      {cells.map((c) => (
+        <span
+          key={c.date}
+          className={`activity-cell lv${level(c.n)}`}
+          title={`${c.date} — ${c.n} entr${c.n === 1 ? "y" : "ies"}`}
+        />
+      ))}
+    </div>
   );
 }

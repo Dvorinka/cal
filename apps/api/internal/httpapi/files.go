@@ -7,11 +7,14 @@ package httpapi
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"cal/apps/api/internal/store"
 
 	"github.com/gin-gonic/gin"
 )
@@ -55,11 +58,86 @@ func (s *Server) uploadFile(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "save failed")
 		return
 	}
+	mime := header.Header.Get("Content-Type")
+	if mime == "" {
+		mime = "application/octet-stream"
+	}
+	rec, err := s.store.CreateFile(c.Request.Context(), currentUser(c).ID, name, header.Filename, mime, header.Size)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "record failed")
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{
+		"id":       rec.ID,
 		"url":      "/api/files/" + name,
 		"name":     header.Filename,
 		"markdown": "![" + header.Filename + "](/api/files/" + name + ")",
 	})
+}
+
+// listFiles returns the caller's uploads, newest first.
+func (s *Server) listFiles(c *gin.Context) {
+	files, err := s.store.ListFiles(c.Request.Context(), currentUser(c).ID)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "failed")
+		return
+	}
+	c.JSON(http.StatusOK, files)
+}
+
+// deleteFile removes the row then the disk file.
+func (s *Server) deleteFile(c *gin.Context) {
+	userID := currentUser(c).ID
+	name, err := s.store.DeleteFile(c.Request.Context(), userID, c.Param("id"))
+	if err != nil {
+		c.String(http.StatusNotFound, "not found")
+		return
+	}
+	_ = os.Remove(filepath.Join(s.dataDir, "uploads", userID, name))
+	c.Status(http.StatusNoContent)
+}
+
+// shareFile toggles the public share token: on → generates one, off → clears.
+func (s *Server) shareFile(c *gin.Context) {
+	var body struct {
+		On bool `json:"on"`
+	}
+	_ = c.ShouldBindJSON(&body)
+	var token *string
+	if body.On {
+		buf := make([]byte, 20)
+		_, _ = rand.Read(buf)
+		t := hex.EncodeToString(buf)
+		token = &t
+	}
+	if err := s.store.SetFileShare(c.Request.Context(), currentUser(c).ID, c.Param("id"), token); errors.Is(err, store.ErrNotFound) {
+		c.String(http.StatusNotFound, "not found")
+		return
+	} else if err != nil {
+		c.String(http.StatusInternalServerError, "failed")
+		return
+	}
+	if token == nil {
+		c.JSON(http.StatusOK, gin.H{"shareToken": nil})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"shareToken": *token})
+}
+
+// serveSharedFile resolves /api/shared/files/<token> without a session.
+func (s *Server) serveSharedFile(c *gin.Context) {
+	userID, f, err := s.store.FileByShareToken(c.Request.Context(), c.Param("token"))
+	if err != nil {
+		c.String(http.StatusNotFound, "not found")
+		return
+	}
+	path := filepath.Join(s.dataDir, "uploads", userID, f.Name)
+	if _, err := os.Stat(path); err != nil {
+		c.String(http.StatusNotFound, "file gone")
+		return
+	}
+	c.Header("Content-Disposition", `inline; filename="`+strings.NewReplacer(`"`, "", "\r", "", "\n", "").Replace(f.OrigName)+`"`)
+	c.File(path)
 }
 
 // dirSize totals a directory (one level — uploads are flat per user).

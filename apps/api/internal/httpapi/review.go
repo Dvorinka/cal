@@ -186,3 +186,14 @@ func hasTag(tags []string, want string) bool {
 	}
 	return false
 }
+
+// activityMap returns date → entry count for the last N days — the Today
+// page renders it as a contributions-style heatmap.
+func (s *Server) activityMap(c *gin.Context) {
+	rows, err := s.store.Activity(c.Request.Context(), currentUser(c).ID, 120)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "failed")
+		return
+	}
+	c.JSON(http.StatusOK, rows)
+}

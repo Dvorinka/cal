@@ -490,6 +490,23 @@ paths:
       responses:
         "200":
           description: "{url, name, markdown} — markdown is a ![alt](url) snippet"
+  /files:
+    get:
+      summary: List uploaded files
+    post:
+      summary: Upload a file (multipart, 20 MB, quota-enforced)
+  /files/{id}:
+    delete:
+      summary: Delete a file
+  /files/{id}/share:
+    post:
+      summary: Toggle a public share token {on}
+  /shared/files/{token}:
+    get:
+      summary: Public share download (no auth)
+  /activity:
+    get:
+      summary: Date -> entry count map, last 120 days
   /files/{name}:
     get:
       summary: Serve a caller-owned attachment

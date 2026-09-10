@@ -165,6 +165,11 @@ var mcpTools = []gin.H{
 		"description": "Habit streaks for recurring tasks tagged #habit.",
 		"inputSchema": gin.H{"type": "object", "properties": gin.H{}},
 	},
+	{
+		"name":        "list_files",
+		"description": "List uploaded files with their public share tokens.",
+		"inputSchema": gin.H{"type": "object", "properties": gin.H{}},
+	},
 }
 
 func (s *Server) mcpAuth(c *gin.Context) (store.User, bool) {
@@ -492,6 +497,15 @@ func (s *Server) mcpCall(c *gin.Context, user store.User, req rpcRequest) {
 			return
 		}
 		data, _ := json.Marshal(habits)
+		respond(toolText(string(data), false))
+
+	case "list_files":
+		files, err := s.store.ListFiles(ctx, user.ID)
+		if err != nil {
+			fail("query failed")
+			return
+		}
+		data, _ := json.Marshal(files)
 		respond(toolText(string(data), false))
 
 	default:

@@ -20,6 +20,7 @@ export interface Entry {
   startTime?: string;
   endTime?: string;
   completed: boolean;
+  pinned: boolean;
   color: string;
   tags: string[];
   recur: Recur;
@@ -44,7 +45,7 @@ export interface EntryInput {
   accountId?: string;
 }
 
-export type EntryPatch = Partial<EntryInput & { completed: boolean }>;
+export type EntryPatch = Partial<EntryInput & { completed: boolean; pinned: boolean }>;
 
 export interface Revision {
   id: string;
@@ -123,6 +124,16 @@ export interface CaldavAccount {
   username: string;
   color: string;
   lastSynced?: string;
+}
+
+export interface FileRec {
+  id: string;
+  name: string;
+  origName: string;
+  size: number;
+  mime: string;
+  shareToken?: string;
+  createdAt: string;
 }
 
 export interface Feed {
@@ -300,6 +311,22 @@ export class CalApi {
 
   async storage(): Promise<{ usedBytes: number; quotaBytes: number }> {
     return this.request("/storage");
+  }
+
+  async files(): Promise<FileRec[]> {
+    return this.request("/files");
+  }
+
+  async deleteFile(id: string): Promise<void> {
+    return this.request(`/files/${id}`, { method: "DELETE" });
+  }
+
+  async shareFile(id: string, on: boolean): Promise<{ shareToken: string | null }> {
+    return this.request(`/files/${id}/share`, { method: "POST", body: JSON.stringify({ on }) });
+  }
+
+  async activity(): Promise<Record<string, number>> {
+    return this.request("/activity");
   }
 
   async pushSubscriptions(): Promise<{ id: string; label: string; endpoint: string }[]> {

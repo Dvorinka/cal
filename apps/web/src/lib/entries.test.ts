@@ -9,6 +9,7 @@ function task(partial: Partial<Entry>): Entry {
     type: "task",
     date: "2026-09-10",
     completed: false,
+    pinned: false,
     color: "slate",
     tags: [],
     recur: "none",

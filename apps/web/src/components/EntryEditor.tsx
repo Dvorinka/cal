@@ -1,7 +1,7 @@
 import type { EntryType, Recur, Revision } from "@cal/api-client";
 import { renderMarkdown } from "../lib/markdown";
 import { AnimatePresence, motion } from "framer-motion";
-import { CalendarClock, Check, History, Link2, Paperclip, StickyNote, Trash2 } from "lucide-react";
+import { CalendarClock, Check, History, Link2, Paperclip, Pin, StickyNote, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
@@ -474,6 +474,16 @@ export function EntryEditor() {
                   placeholder={type === "event" ? "Location, agenda, context…" : "Notes, context, links…"}
                 />
               </label>
+            )}
+            {editing && type === "note" && (
+              <button
+                type="button"
+                className={`history-toggle ${editing.pinned ? "pin-on" : ""}`}
+                aria-label={editing.pinned ? "Unpin note" : "Pin note"}
+                onClick={() => void updateEntry(editing.id, { pinned: !editing.pinned })}
+              >
+                <Pin size={13} /> {editing.pinned ? "Pinned" : "Pin"}
+              </button>
             )}
             {editing && (
               <div className="history-wrap">
