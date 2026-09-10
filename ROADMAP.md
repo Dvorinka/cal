@@ -189,6 +189,48 @@ Status legend: `[x]` shipped · `[/]` partially shipped · `[ ]` planned
       closes cards whose issues were closed remotely and moves them to
       the done column.
 
+## Remaining — buildable now
+
+- [ ] **Time-entry tags** — sessions carry their own tag list, separate
+      from the linked task's tags; filter + group the timesheet by them.
+- [ ] **Time-entry editing** — fix a wrong start/end/duration after the
+      fact; today the only correction is delete-and-restart.
+- [ ] **Manual time entry** — log a past session without running the
+      timer (solidtime has this; ours doesn't).
+- [ ] **YouTube video search** — find videos from inside the app, not
+      just save URLs you already have. oEmbed can't search; needs the
+      Data API key or an invidious instance.
+- [ ] **Featured channels** — pin channels; new uploads surface in the
+      Links page. Poll channel RSS feeds (they exist at
+      `youtube.com/feeds/videos.xml?channel_id=` — no key needed).
+- [ ] **Saved filters / smart views** — sidebar presets ("overdue",
+      "this week + #work") instead of re-filtering every visit.
+- [ ] **Entry dependencies** — "blocked by" on cards; blocked cards get
+      a badge and can't be completed until the blocker resolves.
+- [ ] **Editable shared boards** — share tokens are view-only today;
+      a write token tier would let collaborators move cards.
+- [ ] **ICS export EXDATE** — exported recurring events can't express
+      skipped occurrences.
+- [ ] **Link preview refresh** — metadata is fetched once at save;
+      stale titles/thumbnails never update.
+- [ ] **Time summary on board tiles** — minutes logged per project
+      next to the done/total chip.
+
+## Remaining — needs something external
+
+- [ ] **GitHub PAT** — the inbox, import, and sync loop are built and
+      verified up to the token check; populate `settings.github_token`
+      to exercise them end-to-end.
+- [ ] **YouTube Data API key** — only if in-app video search lands;
+      oEmbed covers save-time metadata.
+- [ ] **Google OAuth client pair** — the Google Calendar path is
+      complete; needs real `GOOGLE_CLIENT_ID`/`_SECRET` to run consent.
+- [ ] **iOS build** — `apps/web/ios/` is scaffolded; needs a Mac +
+      Xcode. TestFlight after that.
+- [ ] **Inbound email plumbing** — `/api/intake` works; wiring real
+      email needs SendGrid/SES inbound (or a forwarding rule hitting
+      the endpoint with the intake token).
+
 ## Deliberately out of scope
 
 - Multi-user sharing / shared calendars (it's a personal planner).
