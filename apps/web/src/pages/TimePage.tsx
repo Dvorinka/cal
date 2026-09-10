@@ -63,6 +63,13 @@ export function TimePage() {
       >
         <button
           type="button"
+          className="btn btn-primary btn-xs"
+          onClick={() => void api.startTimer({}).then(load).catch(() => {})}
+        >
+          <Timer size={12} /> Start timer
+        </button>
+        <button
+          type="button"
           className={`btn btn-secondary btn-xs ${billableOnly ? "on" : ""}`}
           onClick={() => setBillableOnly((v) => !v)}
         >

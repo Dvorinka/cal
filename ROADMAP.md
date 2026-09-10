@@ -216,6 +216,18 @@ Status legend: `[x]` shipped · `[/]` partially shipped · `[ ]` planned
 - [ ] **Time summary on board tiles** — minutes logged per project
       next to the done/total chip.
 
+## Remaining — UX/discoverability (found in the visual pass)
+
+- [x] ~~Files page header was unstyled~~ — now uses the shared
+      `PageHeader` + `page-scroll` like every other page.
+- [x] ~~Timer start was buried in a context menu~~ — Time header gets
+      "Start timer", Today gets a Focus chip.
+- [ ] **Discoverability audit** — every feature reachable in ≤2 clicks
+      from a page that names it; currently several (share links,
+      templates, digest) live only in context menus or Settings.
+- [ ] **Mobile nav audit** — the bottom nav covers five pages; Files,
+      Boards, Time, GitHub are sidebar-only on phones.
+
 ## Remaining — needs something external
 
 - [ ] **GitHub PAT** — the inbox, import, and sync loop are built and

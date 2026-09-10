@@ -195,6 +195,16 @@ export function TodayPage() {
                 <i style={{ width: `${(tasksDone / tasksTotal) * 100}%` }} />
               </div>
             )}
+            <div className="habit-row">
+              <button
+                type="button"
+                className="habit-chip"
+                title="Start a focus timer"
+                onClick={() => void api.startTimer({}).then(() => api.timeSummary().then(setTime)).catch(() => {})}
+              >
+                <Timer size={12} /> Focus
+              </button>
+            </div>
             {time && time.todayMinutes > 0 && (
               <div className="habit-row">
                 <span className="habit-chip on" title="Focused today">

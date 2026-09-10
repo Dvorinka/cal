@@ -1,11 +1,12 @@
 # Cal
 
-The self-hosted daily planner people actually enjoy opening.
+The self-hosted daily toolkit people actually enjoy opening.
 
-Calendar, tasks, notes and links in one quiet place — month, week and day views,
-recurring tasks, holidays for 40+ regions, dark mode, keyboard-first, installable
-as a PWA. No accounts to create on someone else's server; one `docker compose up`
-and it's yours.
+Calendar, tasks, notes, links, files, kanban boards, time tracking and a GitHub
+inbox in one quiet place — month, week and day views, recurring tasks, billable
+sessions, link previews, global search, holidays for 40+ regions, dark mode,
+keyboard-first, installable as a PWA. No accounts to create on someone else's
+server; one `docker compose up` and it's yours.
 
 ![Month view](docs/screenshot-month.png)
 
@@ -13,7 +14,24 @@ and it's yours.
 
 ## Features
 
-- **Six pages** — Today (agenda, checklist, progress), Calendar, Tasks (grouped, quick-add, tag filters), Notes, Links, Settings
+- **Eleven pages** — Today, Calendar, Tasks, Notes, Links, Files, Boards, Tags,
+  Time, GitHub, Settings — plus Trash and a public board view
+- **Kanban boards** — cards are task entries (they land on the calendar too);
+  drag between columns, WIP limits, done-column conventions, checklists,
+  templates, public read-only sharing
+- **Time tracking** — one-tap focus timer in the sidebar, pomodoro mode,
+  billable sessions with hourly rates and per-project rollups,
+  solidtime-shaped CSV/JSON export
+- **File bin** — drag-drop uploads, per-type icons, image lightbox, public
+  share links, storage quota
+- **Link library** — saving a link unfurls title/favicon/og:image; YouTube
+  URLs get thumbnails + channel via oEmbed (no API key); watched toggle,
+  All/Videos/Articles filters
+- **Global search** — `⌘K` hits entry titles, content, tags, link URLs, file
+  names and board names in one pass
+- **GitHub inbox** — PAT in Settings; open issues and PRs grouped by repo,
+  import-to-board, weekly activity count; completing a linked card closes
+  the issue, and a 15-minute loop completes cards when issues close remotely
 - **Three real views** — month grid, week and day time grids with an all-day row
   and a live now-line
 - **Tasks, notes, links, events** — with colors, tags, details and optional
@@ -29,6 +47,15 @@ and it's yours.
   sync read-only into a toggleable "Google" feed every 15 minutes
 - **CardDAV birthdays** — connect an addressbook; contacts with birthdays
   become yearly all-day events
+- **RSS/Atom feeds** — subscribe to blogs and changelogs; items land on the
+  calendar on their publish date (SSRF-guarded like the webhook URLs)
+- **Soft-delete trash** — deletions recover for 30 days; restore or purge
+- **Note templates + wikilinks** — meeting/standup/decision starters;
+  `[[Note]]` links between notes with a backlinks row
+- **Activity** — per-card audit trail (created/moved/completed/renamed),
+  activity heatmap on Today, morning digest push at your chosen hour
+- **Tags page** — every tag counted across tasks, notes, links and cards;
+  one tap filters the whole toolkit
 - **Webhooks out** — POST `entry.created|updated|deleted` to any URL, signed
   with HMAC-SHA256 for n8n/Home Assistant
 - **Email → task** — `POST /api/intake?token=` accepts `{subject, text}`;
@@ -52,8 +79,9 @@ and it's yours.
   the next occurrence
 - **Holidays** — rule-based engine (Gregorian and Orthodox Easter, nth-weekday
   rules) covering 40+ countries, toggled per user
-- **MCP endpoint** — `POST /api/mcp` speaks Model Context Protocol so AI
-  assistants can read and manage your planner (bearer-token auth)
+- **MCP endpoint** — `POST /api/mcp` speaks Model Context Protocol; 22 tools
+  (entries, timer, boards, files, GitHub inbox, habits, weekly review) so AI
+  assistants can read and run your planner (bearer-token auth)
 - **Embeddable Today widget** — `/widget/today?token=…` renders a minimal
   agenda for dashboards and iframes
 - **Command palette** — `⌘K` / `Ctrl+K` to search everything and run actions

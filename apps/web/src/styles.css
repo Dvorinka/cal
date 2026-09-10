@@ -2453,7 +2453,9 @@ button {
 /* files page */
 .files-drop { min-height: 200px; border: 1.5px dashed var(--line); border-radius: var(--r-md); transition: border-color .15s, background .15s; }
 .files-drop.over { border-color: var(--accent); background: var(--bg-field); }
-.files-empty { padding: 48px 20px; text-align: center; color: var(--text-3); font-size: 13px; }
+.files-empty { padding: 56px 20px; text-align: center; color: var(--text-3); display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.files-empty p { margin: 0; font-size: 13px; }
+.files-drop { margin: 0 24px; }
 .files-list { list-style: none; margin: 0; padding: 0; }
 .files-item { display: flex; align-items: center; gap: 4px; padding: 0 8px; border-bottom: 1px solid var(--line); }
 .files-item:last-child { border-bottom: 0; }
