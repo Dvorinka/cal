@@ -17,7 +17,10 @@ function greeting(now: Date): string {
 
 export function TodayPage() {
   const entries = usePlanner((state) => state.entries);
+  const feedEvents = usePlanner((state) => state.feedEvents);
   const loadEntries = usePlanner((state) => state.loadEntries);
+  const loadFeeds = usePlanner((state) => state.loadFeeds);
+  const loadFeedEvents = usePlanner((state) => state.loadFeedEvents);
   const updateEntry = usePlanner((state) => state.updateEntry);
   const openCreate = useUi((state) => state.openCreate);
   const openEdit = useUi((state) => state.openEdit);
@@ -35,7 +38,13 @@ export function TodayPage() {
   // Deep-link landing: ensure entries exist even if the calendar never mounted.
   useEffect(() => {
     void loadEntries({ from: addDaysIso(today, -14), to: addDaysIso(today, 14) });
-  }, [today, loadEntries]);
+    void loadFeeds();
+  }, [today, loadEntries, loadFeeds]);
+
+  const feeds = usePlanner((state) => state.feeds);
+  useEffect(() => {
+    if (feeds.length) void loadFeedEvents({ from: today, to: today });
+  }, [feeds.length, today, loadFeedEvents]);
 
   const dayEntries = useMemo(
     () => entries.filter((e) => e.date === today).sort((a, b) => (timeToMinutes(a.startTime) ?? 9999) - (timeToMinutes(b.startTime) ?? 9999)),
@@ -48,6 +57,7 @@ export function TodayPage() {
   const tasksTotal = dayEntries.filter((e) => e.type === "task").length;
   const tasksDone = dayEntries.filter((e) => e.type === "task" && e.completed).length;
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const todaysFeeds = feedEvents.filter((e) => e.date === today);
   const nextUp = timed.find((e) => (timeToMinutes(e.startTime) ?? 0) >= nowMinutes || (timeToMinutes(e.endTime) ?? 0) > nowMinutes);
 
   return (
@@ -82,6 +92,25 @@ export function TodayPage() {
             <h3>Schedule</h3>
             {timed.length === 0 && <p className="panel-empty">No timed entries today.</p>}
             <ol className="agenda">
+              {todaysFeeds.map((e) => {
+                const start = timeToMinutes(e.startTime);
+                const end = timeToMinutes(e.endTime) ?? (start !== undefined ? start + 60 : undefined);
+                const live = start !== undefined && end !== undefined && start <= nowMinutes && nowMinutes < end;
+                return (
+                  <li
+                    key={e.id}
+                    className={`agenda-item feed-item color-${e.color} ${live ? "live" : ""}`}
+                    title={`${e.title} — ${e.feedName}${e.location ? ` · ${e.location}` : ""}`}
+                  >
+                    <span className="agenda-time">
+                      {e.startTime ? formatTime(e.startTime) : "all day"}
+                      <i>{e.endTime ? formatTime(e.endTime) : e.feedName}</i>
+                    </span>
+                    <span className="agenda-title">{e.title}</span>
+                    {live && <span className="live-pill">Now</span>}
+                  </li>
+                );
+              })}
               {timed.map((e) => {
                 const start = timeToMinutes(e.startTime)!;
                 const end = timeToMinutes(e.endTime) ?? start + 60;

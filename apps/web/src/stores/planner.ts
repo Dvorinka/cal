@@ -4,6 +4,8 @@ import {
   type Entry,
   type EntryInput,
   type EntryPatch,
+  type Feed,
+  type FeedEvent,
   type Holiday,
   type Settings,
   type User,
@@ -33,6 +35,8 @@ interface PlannerState {
   user?: User;
   booted: boolean;
   entries: Entry[];
+  feedEvents: FeedEvent[];
+  feeds: Feed[];
   holidays: Holiday[];
   countries: Country[];
   settings: Settings;
@@ -50,6 +54,13 @@ interface PlannerState {
   deleteEntry: (id: string) => Promise<void>;
   loadHolidays: (country: string, year: number) => Promise<void>;
   loadCountries: () => Promise<void>;
+  loadFeeds: () => Promise<void>;
+  loadFeedEvents: (params: { from: string; to: string }) => Promise<void>;
+  addFeed: (input: { name: string; url: string; color?: string }) => Promise<boolean>;
+  removeFeed: (id: string) => Promise<void>;
+  refreshFeed: (id: string) => Promise<void>;
+  importIcs: (file: File) => Promise<void>;
+  rotateToken: (kind: "widget" | "api") => Promise<void>;
   updateSettings: (settings: Settings) => Promise<void>;
   toast: (message: string, action?: Toast["action"]) => void;
   dismissToast: (id: number) => void;
@@ -58,6 +69,8 @@ interface PlannerState {
 export const usePlanner = create<PlannerState>((set, get) => ({
   api: new CalApi(),
   entries: readCachedEntries(),
+  feedEvents: [],
+  feeds: [],
   holidays: [],
   countries: [],
   settings: readCachedSettings(),
@@ -143,7 +156,9 @@ export const usePlanner = create<PlannerState>((set, get) => ({
 
   async updateEntry(id, patch) {
     const before = get().entries;
-    const optimistic = before.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry));
+    const optimistic = before.map((entry) =>
+      entry.id === id ? { ...entry, ...patch, remind: patch.remind === null ? undefined : (patch.remind ?? entry.remind) } : entry,
+    );
     set({ entries: optimistic });
     cacheEntries(optimistic);
     try {
@@ -217,6 +232,82 @@ export const usePlanner = create<PlannerState>((set, get) => ({
       set({ countries });
     } catch {
       set({ countries: [] });
+    }
+  },
+
+  async loadFeeds() {
+    try {
+      const feeds = await get().api.feeds();
+      set({ feeds });
+    } catch {
+      set({ feeds: [] });
+    }
+  },
+
+  async loadFeedEvents(params) {
+    if (get().feeds.length === 0) {
+      set({ feedEvents: [] });
+      return;
+    }
+    try {
+      const feedEvents = await get().api.feedEvents(params);
+      set({ feedEvents });
+    } catch {
+      // Feeds are a cache mirror — offline just shows fewer external events.
+    }
+  },
+
+  async addFeed(input) {
+    try {
+      await get().api.createFeed(input);
+      await get().loadFeeds();
+      get().toast("Feed added");
+      return true;
+    } catch (error) {
+      get().toast(error instanceof Error ? error.message : "Failed to add feed");
+      return false;
+    }
+  },
+
+  async removeFeed(id) {
+    try {
+      await get().api.deleteFeed(id);
+      set({ feeds: get().feeds.filter((f) => f.id !== id), feedEvents: get().feedEvents.filter((e) => e.feedId !== id) });
+    } catch (error) {
+      get().toast(error instanceof Error ? error.message : "Failed to delete feed");
+    }
+  },
+
+  async refreshFeed(id) {
+    try {
+      await get().api.refreshFeed(id);
+      await get().loadFeeds();
+      get().toast("Feed refreshed");
+    } catch (error) {
+      get().toast(error instanceof Error ? error.message : "Failed to refresh feed");
+    }
+  },
+
+  async importIcs(file) {
+    try {
+      const out = await get().api.importIcs(file);
+      get().toast(`Imported ${out.imported} event${out.imported === 1 ? "" : "s"}`);
+    } catch (error) {
+      get().toast(error instanceof Error ? error.message : "Import failed");
+    }
+  },
+
+  async rotateToken(kind) {
+    try {
+      const token = kind === "widget" ? await get().api.rotateWidgetToken() : await get().api.rotateApiToken();
+      const settings = { ...get().settings };
+      if (kind === "widget") settings.widgetToken = token;
+      else settings.apiToken = token;
+      cacheSettings(settings);
+      set({ settings });
+      get().toast("Token rotated");
+    } catch (error) {
+      get().toast(error instanceof Error ? error.message : "Failed to rotate token");
     }
   },
 

@@ -7,8 +7,9 @@ import { usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
 
 export function CalendarPage() {
-  const { user, entries, holidays, settings, loadEntries, updateEntry, loadHolidays } = usePlanner();
-  const { view, anchor, hiddenTypes } = useUi();
+  const { user, entries, feedEvents, holidays, settings, loadEntries, updateEntry, loadHolidays, loadFeeds, loadFeedEvents } =
+    usePlanner();
+  const { view, anchor, hiddenTypes, hiddenFeeds } = useUi();
 
   const range = useMemo(() => rangeFor(view, anchor, settings.weekStart), [view, anchor, settings.weekStart]);
 
@@ -22,7 +23,19 @@ export function CalendarPage() {
     void loadHolidays(settings.country, anchor.getFullYear());
   }, [user, settings.country, settings.showHolidays, anchor, loadHolidays]);
 
+  useEffect(() => {
+    if (!user) return;
+    void loadFeeds();
+  }, [user, loadFeeds]);
+
+  const feedsKey = usePlanner((s) => s.feeds).length;
+  useEffect(() => {
+    if (!user) return;
+    void loadFeedEvents({ from: range.from, to: range.to });
+  }, [user, range.from, range.to, feedsKey, loadFeedEvents]);
+
   const visible = entries.filter((entry) => !hiddenTypes.has(entry.type));
+  const visibleFeeds = feedEvents.filter((event) => !hiddenFeeds.has(event.feedId));
   const shownHolidays = settings.showHolidays ? holidays : [];
 
   return (
@@ -32,6 +45,7 @@ export function CalendarPage() {
         <MonthView
           anchor={anchor}
           entries={visible}
+          feedEvents={visibleFeeds}
           holidays={shownHolidays}
           weekStart={settings.weekStart}
           onMoveEntry={(id, date) => void updateEntry(id, { date })}
@@ -41,6 +55,7 @@ export function CalendarPage() {
           view={view}
           anchor={anchor}
           entries={visible}
+          feedEvents={visibleFeeds}
           holidays={shownHolidays}
           weekStart={settings.weekStart}
           onMoveEntry={(id, patch) => void updateEntry(id, patch)}

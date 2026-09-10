@@ -1,14 +1,15 @@
-import type { Entry, Holiday } from "@cal/api-client";
+import type { Entry, FeedEvent, Holiday } from "@cal/api-client";
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { draggedEntryId, dropTargetProps } from "../lib/dnd";
-import { iso, monthMatrix, timeToMinutes, todayIso, weekdayNames, type WeekStartPref } from "../lib/date";
+import { formatTime, iso, monthMatrix, timeToMinutes, todayIso, weekdayNames, type WeekStartPref } from "../lib/date";
 import { useUi } from "../stores/ui";
 import { EntryChip } from "./EntryChip";
 
 interface Props {
   anchor: Date;
   entries: Entry[];
+  feedEvents: FeedEvent[];
   holidays: Holiday[];
   weekStart: WeekStartPref;
   onMoveEntry: (id: string, date: string) => void;
@@ -16,7 +17,7 @@ interface Props {
 
 const MAX_VISIBLE = 4;
 
-export function MonthView({ anchor, entries, holidays, weekStart, onMoveEntry }: Props) {
+export function MonthView({ anchor, entries, feedEvents, holidays, weekStart, onMoveEntry }: Props) {
   const selectDate = useUi((state) => state.selectDate);
   const selectedDate = useUi((state) => state.selectedDate);
   const openCreate = useUi((state) => state.openCreate);
@@ -46,6 +47,19 @@ export function MonthView({ anchor, entries, holidays, weekStart, onMoveEntry }:
     return map;
   }, [holidays]);
 
+  const feedByDate = useMemo(() => {
+    const map = new Map<string, FeedEvent[]>();
+    for (const event of feedEvents) {
+      const list = map.get(event.date) ?? [];
+      list.push(event);
+      map.set(event.date, list);
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => (timeToMinutes(a.startTime) ?? 9999) - (timeToMinutes(b.startTime) ?? 9999));
+    }
+    return map;
+  }, [feedEvents]);
+
   function toggleExpanded(date: string) {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -66,10 +80,12 @@ export function MonthView({ anchor, entries, holidays, weekStart, onMoveEntry }:
         {days.map((day) => {
           const date = iso(day);
           const dayEntries = byDate.get(date) ?? [];
+          const dayFeeds = feedByDate.get(date) ?? [];
           const isOutside = day.getMonth() !== anchor.getMonth();
           const isExpanded = expanded.has(date);
           const visible = isExpanded ? dayEntries : dayEntries.slice(0, MAX_VISIBLE);
-          const hidden = dayEntries.length - visible.length;
+          const visibleFeeds = isExpanded ? dayFeeds : dayFeeds.slice(0, Math.max(0, MAX_VISIBLE - visible.length));
+          const hidden = dayEntries.length + dayFeeds.length - visible.length - visibleFeeds.length;
           return (
             <div
               key={date}
@@ -104,6 +120,16 @@ export function MonthView({ anchor, entries, holidays, weekStart, onMoveEntry }:
               </div>
               {visible.map((entry) => (
                 <EntryChip key={entry.id} entry={entry} />
+              ))}
+              {visibleFeeds.map((event) => (
+                <div
+                  key={event.id}
+                  className={`feed-chip color-${event.color}`}
+                  title={`${event.title} — ${event.feedName}${event.location ? ` · ${event.location}` : ""}`}
+                >
+                  {event.startTime && <span className="time">{formatTime(event.startTime)}</span>}
+                  <span className="title">{event.title}</span>
+                </div>
               ))}
               {hidden > 0 && (
                 <button

@@ -62,6 +62,17 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authed.GET("/settings", server.settings)
 	authed.PUT("/settings", server.updateSettings)
 	authed.GET("/export", server.export)
+	authed.GET("/feeds", server.listFeeds)
+	authed.POST("/feeds", server.createFeed)
+	authed.DELETE("/feeds/:id", server.deleteFeed)
+	authed.POST("/feeds/:id/refresh", server.refreshFeed)
+	authed.GET("/feed-events", server.feedEvents)
+	authed.POST("/import", server.importICS)
+	authed.POST("/settings/widget-token", server.rotateWidgetToken)
+	authed.POST("/settings/api-token", server.rotateApiToken)
+
+	router.GET("/api/widget/today", server.widgetToday)
+	router.POST("/api/mcp", server.mcp)
 
 	return router
 }

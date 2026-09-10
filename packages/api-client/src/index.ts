@@ -1,7 +1,8 @@
-export type EntryType = "task" | "note" | "link";
+export type EntryType = "task" | "note" | "link" | "event";
 export type Theme = "light" | "dark" | "system";
 export type WeekStart = "monday" | "sunday";
 export type Recur = "none" | "daily" | "weekly" | "monthly" | "yearly";
+export type Accent = "green" | "blue" | "violet" | "amber" | "rose";
 
 export interface User {
   id: string;
@@ -22,6 +23,8 @@ export interface Entry {
   color: string;
   tags: string[];
   recur: Recur;
+  /** Minutes before startTime to fire a reminder; absent = none. */
+  remind?: number;
   createdAt: string;
 }
 
@@ -36,6 +39,7 @@ export interface EntryInput {
   color?: string;
   tags?: string[];
   recur?: Recur;
+  remind?: number | null;
 }
 
 export type EntryPatch = Partial<EntryInput & { completed: boolean }>;
@@ -45,6 +49,31 @@ export interface Settings {
   showHolidays: boolean;
   theme: Theme;
   weekStart: WeekStart;
+  accent: Accent;
+  widgetToken: string;
+  apiToken: string;
+}
+
+export interface Feed {
+  id: string;
+  name: string;
+  url: string;
+  color: string;
+  fetchedAt?: string;
+}
+
+export interface FeedEvent {
+  id: string;
+  feedId: string;
+  feedName: string;
+  title: string;
+  date: string;
+  startTime?: string;
+  endTime?: string;
+  color: string;
+  location?: string;
+  url?: string;
+  details?: string;
 }
 
 export interface Holiday {
@@ -127,6 +156,51 @@ export class CalApi {
 
   async countries(): Promise<Country[]> {
     return this.request<Country[]>("/holidays/countries");
+  }
+
+  async feeds(): Promise<Feed[]> {
+    return this.request<Feed[]>("/feeds");
+  }
+
+  async createFeed(input: { name: string; url: string; color?: string }): Promise<Feed> {
+    return this.request<Feed>("/feeds", { method: "POST", body: input });
+  }
+
+  async deleteFeed(id: string): Promise<void> {
+    await this.request<void>(`/feeds/${id}`, { method: "DELETE" });
+  }
+
+  async refreshFeed(id: string): Promise<void> {
+    await this.request<void>(`/feeds/${id}/refresh`, { method: "POST" });
+  }
+
+  async feedEvents(params: { from: string; to: string }): Promise<FeedEvent[]> {
+    const search = new URLSearchParams({ from: params.from, to: params.to });
+    return this.request<FeedEvent[]>(`/feed-events?${search.toString()}`);
+  }
+
+  async importIcs(file: File): Promise<{ imported: number }> {
+    const response = await fetch(`${this.baseUrl}/import`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "text/calendar" },
+      body: file,
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new ApiError(text || response.statusText, response.status);
+    }
+    return response.json() as Promise<{ imported: number }>;
+  }
+
+  async rotateWidgetToken(): Promise<string> {
+    const out = await this.request<{ widgetToken: string }>("/settings/widget-token", { method: "POST" });
+    return out.widgetToken;
+  }
+
+  async rotateApiToken(): Promise<string> {
+    const out = await this.request<{ apiToken: string }>("/settings/api-token", { method: "POST" });
+    return out.apiToken;
   }
 
   private async request<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {

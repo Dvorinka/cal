@@ -7,6 +7,7 @@ import { useUi } from "../stores/ui";
 
 const FILTERS = [
   { type: "task", label: "Tasks", color: "var(--c-mint)" },
+  { type: "event", label: "Events", color: "var(--c-orange)" },
   { type: "note", label: "Notes", color: "var(--c-sky)" },
   { type: "link", label: "Links", color: "var(--c-violet)" },
 ] as const;
@@ -99,18 +100,21 @@ function MiniMonth({ weekStart }: { weekStart: WeekStartPref }) {
 export function Sidebar() {
   const user = usePlanner((state) => state.user);
   const entries = usePlanner((state) => state.entries);
+  const feeds = usePlanner((state) => state.feeds);
   const settings = usePlanner((state) => state.settings);
   const updateSettings = usePlanner((state) => state.updateSettings);
   const openPalette = useUi((state) => state.openPalette);
   const openCreate = useUi((state) => state.openCreate);
   const selectedDate = useUi((state) => state.selectedDate);
   const hiddenTypes = useUi((state) => state.hiddenTypes);
+  const hiddenFeeds = useUi((state) => state.hiddenFeeds);
   const toggleType = useUi((state) => state.toggleType);
+  const toggleFeed = useUi((state) => state.toggleFeed);
   const sidebarOpen = useUi((state) => state.sidebarOpen);
   const closeSidebar = useUi((state) => state.closeSidebar);
 
   const counts = useMemo(() => {
-    const map: Record<string, number> = { task: 0, note: 0, link: 0 };
+    const map: Record<string, number> = { task: 0, event: 0, note: 0, link: 0 };
     for (const entry of entries) map[entry.type] = (map[entry.type] ?? 0) + 1;
     return map;
   }, [entries]);
@@ -192,6 +196,26 @@ export function Sidebar() {
             <span className="count">{settings.showHolidays ? "on" : "off"}</span>
           </button>
         </div>
+
+        {feeds.length > 0 && (
+          <>
+            <div className="side-label">Calendars</div>
+            <div className="filter-list">
+              {feeds.map((feed) => (
+                <button
+                  key={feed.id}
+                  type="button"
+                  className={`filter-item ${hiddenFeeds.has(feed.id) ? "off" : ""}`}
+                  onClick={() => toggleFeed(feed.id)}
+                  title={feed.url}
+                >
+                  <span className="swatch" style={{ "--swatch": `var(--c-${feed.color})` } as React.CSSProperties} />
+                  {feed.name}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
 
         <div className="sidebar-footer">
           <NavLink to="/settings" className="icon-btn" aria-label="Settings" onClick={closeSidebar}>

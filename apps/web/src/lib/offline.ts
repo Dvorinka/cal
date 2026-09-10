@@ -27,7 +27,17 @@ export function clearCachedUser(): void {
 }
 
 export function readCachedSettings(): Settings {
-  return read<Settings>("settings") ?? { country: "US", showHolidays: true, theme: "system", weekStart: "monday" };
+  return (
+    read<Settings>("settings") ?? {
+      country: "US",
+      showHolidays: true,
+      theme: "system",
+      weekStart: "monday",
+      accent: "green",
+      widgetToken: "",
+      apiToken: "",
+    }
+  );
 }
 
 export function cacheSettings(settings: Settings): void {

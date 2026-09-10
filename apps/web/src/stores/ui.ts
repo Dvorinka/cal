@@ -22,6 +22,7 @@ interface UiState {
   contextMenu?: ContextMenuState;
   sidebarOpen: boolean;
   hiddenTypes: Set<string>;
+  hiddenFeeds: Set<string>;
   setView: (view: CalendarView) => void;
   setAnchor: (date: Date) => void;
   shift: (direction: -1 | 1) => void;
@@ -36,19 +37,27 @@ interface UiState {
   toggleSidebar: () => void;
   closeSidebar: () => void;
   toggleType: (type: string) => void;
+  toggleFeed: (id: string) => void;
 }
 
 const persisted = (() => {
   try {
-    return JSON.parse(localStorage.getItem("cal:ui") ?? "{}") as { view?: CalendarView; hiddenTypes?: string[] };
+    return JSON.parse(localStorage.getItem("cal:ui") ?? "{}") as {
+      view?: CalendarView;
+      hiddenTypes?: string[];
+      hiddenFeeds?: string[];
+    };
   } catch {
     return {};
   }
 })();
 
-function persist(state: Pick<UiState, "view" | "hiddenTypes">) {
+function persist(state: Pick<UiState, "view" | "hiddenTypes" | "hiddenFeeds">) {
   try {
-    localStorage.setItem("cal:ui", JSON.stringify({ view: state.view, hiddenTypes: [...state.hiddenTypes] }));
+    localStorage.setItem(
+      "cal:ui",
+      JSON.stringify({ view: state.view, hiddenTypes: [...state.hiddenTypes], hiddenFeeds: [...state.hiddenFeeds] }),
+    );
   } catch {
     // no storage (tests, SSR)
   }
@@ -63,6 +72,7 @@ export const useUi = create<UiState>((set, get) => ({
   contextMenu: undefined,
   sidebarOpen: false,
   hiddenTypes: new Set(persisted.hiddenTypes ?? []),
+  hiddenFeeds: new Set(persisted.hiddenFeeds ?? []),
 
   setView(view) {
     set({ view });
@@ -112,6 +122,13 @@ export const useUi = create<UiState>((set, get) => ({
     if (hiddenTypes.has(type)) hiddenTypes.delete(type);
     else hiddenTypes.add(type);
     set({ hiddenTypes });
+    persist(get());
+  },
+  toggleFeed(id) {
+    const hiddenFeeds = new Set(get().hiddenFeeds);
+    if (hiddenFeeds.has(id)) hiddenFeeds.delete(id);
+    else hiddenFeeds.add(id);
+    set({ hiddenFeeds });
     persist(get());
   },
 }));

@@ -1,4 +1,4 @@
-import type { Entry, Holiday } from "@cal/api-client";
+import type { Entry, FeedEvent, Holiday } from "@cal/api-client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { draggedEntryId, dropTargetProps, startEntryDrag } from "../lib/dnd";
 import {
@@ -22,6 +22,7 @@ interface Props {
   view: CalendarView;
   anchor: Date;
   entries: Entry[];
+  feedEvents: FeedEvent[];
   holidays: Holiday[];
   weekStart: WeekStartPref;
   onMoveEntry: (id: string, patch: { date: string; startTime?: string; endTime?: string }) => void;
@@ -59,7 +60,7 @@ function lanes(events: { entry: Entry; start: number; end: number }[]) {
   return result;
 }
 
-export function TimeGridView({ view, anchor, entries, holidays, weekStart, onMoveEntry }: Props) {
+export function TimeGridView({ view, anchor, entries, feedEvents, holidays, weekStart, onMoveEntry }: Props) {
   const selectDate = useUi((state) => state.selectDate);
   const openCreate = useUi((state) => state.openCreate);
   const openEdit = useUi((state) => state.openEdit);
@@ -129,6 +130,13 @@ export function TimeGridView({ view, anchor, entries, holidays, weekStart, onMov
                 .filter((entry) => entry.date === date)
                 .map((entry) => (
                   <EntryChip key={entry.id} entry={entry} showTime={false} />
+                ))}
+              {feedEvents
+                .filter((e) => e.date === date && timeToMinutes(e.startTime) === undefined)
+                .map((e) => (
+                  <div key={e.id} className={`feed-chip color-${e.color}`} title={`${e.title} — ${e.feedName}`}>
+                    <span className="title">{e.title}</span>
+                  </div>
                 ))}
             </div>
           );
@@ -229,6 +237,32 @@ export function TimeGridView({ view, anchor, entries, holidays, weekStart, onMov
                     )}
                   </div>
                 ))}
+                {feedEvents
+                  .filter((e) => e.date === date && timeToMinutes(e.startTime) !== undefined)
+                  .map((e) => {
+                    const start = timeToMinutes(e.startTime) ?? 0;
+                    const end = Math.max(timeToMinutes(e.endTime) ?? start + 60, start + 25);
+                    return (
+                      <div
+                        key={e.id}
+                        className={`tg-event feed-event color-${e.color}`}
+                        style={{
+                          top: (start / 60) * HOUR_H,
+                          height: Math.max(20, ((end - start) / 60) * HOUR_H - 2),
+                          left: "3px",
+                          right: "3px",
+                        }}
+                        title={`${e.title} — ${e.feedName}${e.location ? ` · ${e.location}` : ""}`}
+                      >
+                        <div className="t">{e.title}</div>
+                        {(end - start) * (HOUR_H / 60) > 34 && (
+                          <div className="time">
+                            {formatTime(e.startTime!)} – {formatTime(e.endTime ?? minutesToTime(start + 60))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 {date === today && <div className="tg-now" style={{ top: (nowMinutes / 60) * HOUR_H }} />}
               </div>
             );

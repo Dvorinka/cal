@@ -165,6 +165,165 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Settings"
+  /feeds:
+    get:
+      summary: List subscribed external calendar feeds
+      responses:
+        "200":
+          description: Feeds
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Feed"
+    post:
+      summary: Subscribe to an iCalendar feed URL. The URL is fetched and validated immediately.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                name:
+                  type: string
+                url:
+                  type: string
+                  format: uri
+                color:
+                  type: string
+      responses:
+        "201":
+          description: Subscribed feed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Feed"
+        "400":
+          description: Not a valid iCalendar feed
+        "502":
+          description: Feed URL could not be fetched
+  /feeds/{id}:
+    delete:
+      responses:
+        "204":
+          description: Feed removed
+  /feeds/{id}/refresh:
+    post:
+      summary: Re-fetch the feed's ICS body now
+      responses:
+        "204":
+          description: Refreshed
+        "502":
+          description: Feed URL could not be fetched
+  /feed-events:
+    get:
+      summary: Expanded occurrences from all subscribed feeds in a date range (read-only)
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: External events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FeedEvent"
+  /import:
+    post:
+      summary: Import a .ics file; each VEVENT becomes an `event` entry (recurring rules flatten to occurrences within ±1 year)
+      requestBody:
+        required: true
+        content:
+          text/calendar:
+            schema:
+              type: string
+      responses:
+        "200":
+          description: Import result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  imported:
+                    type: integer
+        "400":
+          description: No events found
+  /settings/widget-token:
+    post:
+      summary: Rotate the read-only widget share token
+      responses:
+        "200":
+          description: New token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  widgetToken:
+                    type: string
+  /settings/api-token:
+    post:
+      summary: Rotate the MCP/API access token
+      responses:
+        "200":
+          description: New token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  apiToken:
+                    type: string
+  /widget/today:
+    get:
+      summary: Token-gated read-only agenda for the embeddable widget
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Today's entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Entry"
+        "401":
+          description: Invalid token
+  /mcp:
+    post:
+      summary: Model Context Protocol endpoint (JSON-RPC 2.0 over HTTP). Auth via `Authorization: Bearer <apiToken>`. Supports initialize, ping, tools/list, tools/call.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: JSON-RPC response
+        "401":
+          description: Invalid API token
   /export:
     get:
       summary: Download all user data as JSON
@@ -253,7 +412,7 @@ components:
         content:
           type: string
         type:
-          enum: [task, note, link]
+          enum: [task, note, link, event]
         linkUrl:
           type: string
         date:
@@ -277,6 +436,9 @@ components:
             type: string
         recur:
           enum: [none, daily, weekly, monthly, yearly]
+        remind:
+          type: integer
+          description: Minutes before startTime to fire a reminder; absent = none
         createdAt:
           type: string
           format: date-time
@@ -289,7 +451,7 @@ components:
         content:
           type: string
         type:
-          enum: [task, note, link]
+          enum: [task, note, link, event]
         linkUrl:
           type: string
         date:
@@ -310,6 +472,9 @@ components:
         recur:
           enum: [none, daily, weekly, monthly, yearly]
           description: Only valid for type=task
+        remind:
+          type: integer
+          nullable: true
     EntryPatch:
       type: object
       properties:
@@ -318,7 +483,7 @@ components:
         content:
           type: string
         type:
-          enum: [task, note, link]
+          enum: [task, note, link, event]
         linkUrl:
           type: string
         date:
@@ -338,6 +503,9 @@ components:
             type: string
         recur:
           enum: [none, daily, weekly, monthly, yearly]
+        remind:
+          type: integer
+          nullable: true
     Settings:
       type: object
       required: [country, showHolidays, theme, weekStart]
@@ -350,6 +518,56 @@ components:
           enum: [light, dark, system]
         weekStart:
           enum: [monday, sunday]
+        accent:
+          enum: [green, blue, violet, amber, rose]
+        widgetToken:
+          type: string
+          description: Read-only token for the embeddable Today widget
+        apiToken:
+          type: string
+          description: Full-access bearer token for the MCP endpoint
+    Feed:
+      type: object
+      required: [id, name, url, color]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        url:
+          type: string
+        color:
+          type: string
+        fetchedAt:
+          type: string
+          format: date-time
+    FeedEvent:
+      type: object
+      required: [id, feedId, feedName, title, date, color]
+      properties:
+        id:
+          type: string
+        feedId:
+          type: string
+        feedName:
+          type: string
+        title:
+          type: string
+        date:
+          type: string
+          format: date
+        startTime:
+          type: string
+        endTime:
+          type: string
+        color:
+          type: string
+        location:
+          type: string
+        url:
+          type: string
+        details:
+          type: string
     Holiday:
       type: object
       required: [id, name, date, country]

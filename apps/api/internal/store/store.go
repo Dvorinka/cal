@@ -28,7 +28,7 @@ type User struct {
 // Times are rendered as HH:MM strings to keep the API surface simple.
 const entryCols = `id::text, title, content, type, link_url, date::text,
 	to_char(start_time, 'HH24:MI'), to_char(end_time, 'HH24:MI'),
-	completed, color, tags, recur, created_at`
+	completed, color, tags, recur, remind, created_at`
 
 type Entry struct {
 	ID        string    `json:"id"`
@@ -43,12 +43,13 @@ type Entry struct {
 	Color     string    `json:"color"`
 	Tags      []string  `json:"tags"`
 	Recur     string    `json:"recur"`
+	Remind    *int      `json:"remind,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 
 func (e *Entry) scan(row interface{ Scan(...any) error }) error {
 	return row.Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date,
-		&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.CreatedAt)
+		&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.CreatedAt)
 }
 
 type Settings struct {
@@ -56,6 +57,17 @@ type Settings struct {
 	ShowHolidays bool   `json:"showHolidays"`
 	Theme        string `json:"theme"`
 	WeekStart    string `json:"weekStart"`
+	Accent       string `json:"accent"`
+	WidgetToken  string `json:"widgetToken"`
+	ApiToken     string `json:"apiToken"`
+}
+
+type Feed struct {
+	ID        string     `json:"id"`
+	Name      string     `json:"name"`
+	URL       string     `json:"url"`
+	Color     string     `json:"color"`
+	FetchedAt *time.Time `json:"fetchedAt,omitempty"`
 }
 
 type EntryInput struct {
@@ -69,6 +81,7 @@ type EntryInput struct {
 	Color     string   `json:"color"`
 	Tags      []string `json:"tags"`
 	Recur     string   `json:"recur"`
+	Remind    *int     `json:"remind"`
 }
 
 type EntryPatch struct {
@@ -82,6 +95,7 @@ type EntryPatch struct {
 	Completed *bool    `json:"completed"`
 	Color     *string  `json:"color"`
 	Recur     *string  `json:"recur"`
+	Remind    *int     `json:"remind"`
 	Tags      []string `json:"tags"`
 	HasTags   bool     `json:"-"`
 }
@@ -208,11 +222,11 @@ func (s *Store) CreateEntry(ctx context.Context, userID string, input EntryInput
 	}
 	var e Entry
 	err := s.db.QueryRow(ctx, `
-		INSERT INTO entries (user_id, title, content, type, link_url, date, start_time, end_time, color, tags, recur)
-		VALUES ($1, $2, $3, $4, $5, $6, nullif($7, '')::time, nullif($8, '')::time, $9, $10, coalesce(nullif($11, ''), 'none'))
+		INSERT INTO entries (user_id, title, content, type, link_url, date, start_time, end_time, color, tags, recur, remind)
+		VALUES ($1, $2, $3, $4, $5, $6, nullif($7, '')::time, nullif($8, '')::time, $9, $10, coalesce(nullif($11, ''), 'none'), $12)
 		RETURNING `+entryCols+`
-	`, userID, input.Title, input.Content, input.Type, input.LinkURL, input.Date, input.StartTime, input.EndTime, input.Color, input.Tags, input.Recur).
-		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.CreatedAt)
+	`, userID, input.Title, input.Content, input.Type, input.LinkURL, input.Date, input.StartTime, input.EndTime, input.Color, input.Tags, input.Recur, input.Remind).
+		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.CreatedAt)
 	return e, err
 }
 
@@ -257,6 +271,9 @@ func (s *Store) UpdateEntry(ctx context.Context, userID, id string, patch EntryP
 	if patch.Color != nil {
 		current.Color = *patch.Color
 	}
+	if patch.Remind != nil {
+		current.Remind = patch.Remind
+	}
 	if patch.HasTags {
 		current.Tags = patch.Tags
 	}
@@ -281,13 +298,13 @@ func (s *Store) UpdateEntry(ctx context.Context, userID, id string, patch EntryP
 		UPDATE entries
 		SET title = $1, content = $2, type = $3, link_url = $4, date = $5,
 		    start_time = nullif($6, '')::time, end_time = nullif($7, '')::time,
-		    completed = $8, color = $9, tags = $10, recur = $11
-		WHERE id = $12 AND user_id = $13
+		    completed = $8, color = $9, tags = $10, recur = $11, remind = $12
+		WHERE id = $13 AND user_id = $14
 		RETURNING `+entryCols+`
 	`, current.Title, current.Content, current.Type, current.LinkURL, current.Date,
 		strOrEmpty(current.StartTime), strOrEmpty(current.EndTime),
-		current.Completed, current.Color, current.Tags, current.Recur, id, userID).
-		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.CreatedAt)
+		current.Completed, current.Color, current.Tags, current.Recur, current.Remind, id, userID).
+		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.CreatedAt)
 	if err != nil {
 		return Entry{}, err
 	}
@@ -378,23 +395,145 @@ func (s *Store) entryTx(ctx context.Context, tx pgx.Tx, userID, id string) (Entr
 func (s *Store) Settings(ctx context.Context, userID string) (Settings, error) {
 	var settings Settings
 	err := s.db.QueryRow(ctx, `
-		SELECT country, show_holidays, theme, week_start FROM settings WHERE user_id = $1
-	`, userID).Scan(&settings.Country, &settings.ShowHolidays, &settings.Theme, &settings.WeekStart)
+		SELECT country, show_holidays, theme, week_start, accent, widget_token, api_token FROM settings WHERE user_id = $1
+	`, userID).Scan(&settings.Country, &settings.ShowHolidays, &settings.Theme, &settings.WeekStart, &settings.Accent, &settings.WidgetToken, &settings.ApiToken)
 	return settings, err
 }
 
 func (s *Store) UpdateSettings(ctx context.Context, userID string, settings Settings) (Settings, error) {
 	var out Settings
 	err := s.db.QueryRow(ctx, `
-		INSERT INTO settings (user_id, country, show_holidays, theme, week_start)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO settings (user_id, country, show_holidays, theme, week_start, accent)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (user_id) DO UPDATE
 		SET country = EXCLUDED.country,
 		    show_holidays = EXCLUDED.show_holidays,
 		    theme = EXCLUDED.theme,
-		    week_start = EXCLUDED.week_start
-		RETURNING country, show_holidays, theme, week_start
-	`, userID, settings.Country, settings.ShowHolidays, settings.Theme, settings.WeekStart).
-		Scan(&out.Country, &out.ShowHolidays, &out.Theme, &out.WeekStart)
+		    week_start = EXCLUDED.week_start,
+		    accent = EXCLUDED.accent
+		RETURNING country, show_holidays, theme, week_start, accent, widget_token, api_token
+	`, userID, settings.Country, settings.ShowHolidays, settings.Theme, settings.WeekStart, settings.Accent).
+		Scan(&out.Country, &out.ShowHolidays, &out.Theme, &out.WeekStart, &out.Accent, &out.WidgetToken, &out.ApiToken)
 	return out, err
+}
+
+// RegenerateWidgetToken rotates the read-only widget share token.
+func (s *Store) RegenerateWidgetToken(ctx context.Context, userID string) (string, error) {
+	var token string
+	err := s.db.QueryRow(ctx, `
+		UPDATE settings SET widget_token = replace(gen_random_uuid()::text, '-', '')
+		WHERE user_id = $1 RETURNING widget_token
+	`, userID).Scan(&token)
+	return token, err
+}
+
+// UserByWidgetToken resolves the owner of a widget share token (read-only use).
+func (s *Store) UserByWidgetToken(ctx context.Context, token string) (User, error) {
+	var u User
+	err := s.db.QueryRow(ctx, `
+		SELECT users.id::text, users.email
+		FROM settings JOIN users ON users.id = settings.user_id
+		WHERE settings.widget_token = $1
+	`, token).Scan(&u.ID, &u.Email)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return User{}, ErrNotFound
+	}
+	return u, err
+}
+
+// RegenerateApiToken rotates the MCP/API access token.
+func (s *Store) RegenerateApiToken(ctx context.Context, userID string) (string, error) {
+	var token string
+	err := s.db.QueryRow(ctx, `
+		UPDATE settings SET api_token = replace(gen_random_uuid()::text, '-', '')
+		WHERE user_id = $1 RETURNING api_token
+	`, userID).Scan(&token)
+	return token, err
+}
+
+// UserByApiToken resolves the owner of an API token (used by the MCP endpoint).
+func (s *Store) UserByApiToken(ctx context.Context, token string) (User, error) {
+	var u User
+	err := s.db.QueryRow(ctx, `
+		SELECT users.id::text, users.email
+		FROM settings JOIN users ON users.id = settings.user_id
+		WHERE settings.api_token = $1
+	`, token).Scan(&u.ID, &u.Email)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return User{}, ErrNotFound
+	}
+	return u, err
+}
+
+// ---------- Feeds ----------
+
+func (s *Store) ListFeeds(ctx context.Context, userID string) ([]Feed, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT id::text, name, url, color, fetched_at FROM feeds WHERE user_id = $1 ORDER BY created_at
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	feeds := []Feed{}
+	for rows.Next() {
+		var f Feed
+		if err := rows.Scan(&f.ID, &f.Name, &f.URL, &f.Color, &f.FetchedAt); err != nil {
+			return nil, err
+		}
+		feeds = append(feeds, f)
+	}
+	return feeds, rows.Err()
+}
+
+func (s *Store) CreateFeed(ctx context.Context, userID, name, url, color, ics string) (Feed, error) {
+	var f Feed
+	err := s.db.QueryRow(ctx, `
+		INSERT INTO feeds (id, user_id, name, url, color, ics_cache, fetched_at)
+		VALUES ($1, $2, $3, $4, $5, $6, now())
+		RETURNING id::text, name, url, color, fetched_at
+	`, uuid.NewString(), userID, name, url, color, ics).Scan(&f.ID, &f.Name, &f.URL, &f.Color, &f.FetchedAt)
+	return f, err
+}
+
+func (s *Store) DeleteFeed(ctx context.Context, userID, id string) error {
+	tag, err := s.db.Exec(ctx, `DELETE FROM feeds WHERE id = $1 AND user_id = $2`, id, userID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// FeedCache returns the stored ICS body for every feed the user owns.
+func (s *Store) FeedCaches(ctx context.Context, userID string) (map[Feed]string, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT id::text, name, url, color, fetched_at, ics_cache FROM feeds WHERE user_id = $1
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[Feed]string{}
+	for rows.Next() {
+		var f Feed
+		var cache *string
+		if err := rows.Scan(&f.ID, &f.Name, &f.URL, &f.Color, &f.FetchedAt, &cache); err != nil {
+			return nil, err
+		}
+		if cache != nil {
+			out[f] = *cache
+		}
+	}
+	return out, rows.Err()
+}
+
+// RefreshFeedCache stores the latest ICS body for a feed.
+func (s *Store) RefreshFeedCache(ctx context.Context, userID, feedID, ics string) error {
+	_, err := s.db.Exec(ctx, `
+		UPDATE feeds SET ics_cache = $3, fetched_at = now() WHERE id = $1 AND user_id = $2
+	`, feedID, userID, ics)
+	return err
 }

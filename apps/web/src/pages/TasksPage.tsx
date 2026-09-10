@@ -2,6 +2,7 @@ import { Check, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { allTags, groupTasks } from "../lib/entries";
+import { parseQuickAdd } from "../lib/quickadd";
 import { formatDayShort, todayIso } from "../lib/date";
 import { usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
@@ -56,10 +57,16 @@ export function TasksPage() {
   const tags = useMemo(() => allTags(entries.filter((e) => e.type === "task")), [entries]);
 
   async function addQuick() {
-    const title = quick.trim();
-    if (!title) return;
+    const parsed = parseQuickAdd(quick);
+    if (!parsed) return;
     setQuick("");
-    await createEntry({ title, type: "task", date: today, tags: tag ? [tag] : [] });
+    await createEntry({
+      title: parsed.title,
+      type: "task",
+      date: parsed.date,
+      startTime: parsed.startTime,
+      tags: [...parsed.tags, ...(tag ? [tag] : [])],
+    });
   }
 
   return (
@@ -72,7 +79,7 @@ export function TasksPage() {
             value={quick}
             onChange={(e) => setQuick(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && void addQuick()}
-            placeholder="Add a task for today — press Enter"
+            placeholder='Try "dentist fri 5pm #health" — Enter to add'
             aria-label="Quick add task"
           />
         </div>

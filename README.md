@@ -16,20 +16,33 @@ and it's yours.
 - **Six pages** — Today (agenda, checklist, progress), Calendar, Tasks (grouped, quick-add, tag filters), Notes, Links, Settings
 - **Three real views** — month grid, week and day time grids with an all-day row
   and a live now-line
-- **Tasks, notes, links** — with colors, tags, details and optional start/end
-  times
+- **Tasks, notes, links, events** — with colors, tags, details and optional
+  start/end times
+- **Calendar feeds** — subscribe to any iCalendar URL (Google Calendar's secret
+  address, iCloud public calendars, Nextcloud shared links, Outlook published
+  calendars); external events render read-only beside your own
+- **.ics import** — drop in a calendar file; events land as real entries,
+  recurring rules expand
+- **Natural-language quick add** — `dentist fri 5pm #health` parses the date,
+  time and tags on the Tasks page
+- **Reminders** — per-entry lead times; browser notifications fire while the
+  app is open
 - **Recurring tasks** — daily, weekly, monthly, yearly; completing one spawns
   the next occurrence
 - **Holidays** — rule-based engine (Gregorian and Orthodox Easter, nth-weekday
   rules) covering 40+ countries, toggled per user
+- **MCP endpoint** — `POST /api/mcp` speaks Model Context Protocol so AI
+  assistants can read and manage your planner (bearer-token auth)
+- **Embeddable Today widget** — `/widget/today?token=…` renders a minimal
+  agenda for dashboards and iframes
 - **Command palette** — `⌘K` / `Ctrl+K` to search everything and run actions
 - **Keyboard-first** — `1/2/3` switch views, `t` today, `←/→` navigate, `c` new
   entry, `/` search
 - **Drag & drop** — move entries between days, reschedule onto the time grid,
   drop into all-day
-- **Light, dark and system themes** — warm paper light, calm dark
-- **Offline-first PWA** — installable, entries cached locally, read-only
-  fallback when the API is unreachable
+- **Themes + accents** — light, dark, system; five accent colors
+- **Offline-first PWA + Android** — installable, entries cached locally; a
+  Capacitor shell produces a native APK
 - **Self-contained** — cookie sessions, bcrypt passwords, login rate limiting,
   Postgres, zero external services
 
@@ -79,11 +92,39 @@ npm run build
 cd apps/api && go vet ./... && go test ./...
 ```
 
+## Android APK
+
+The web app ships with a Capacitor shell. With an Android SDK installed:
+
+```bash
+cd apps/web
+npm run android:build        # builds the PWA, syncs, produces an APK
+# -> android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+The shell wraps the same SPA — the API URL is relative, so the APK works
+against whatever origin serves it. Release builds need a signing config
+(`./gradlew assembleRelease` after adding a keystore).
+
+## MCP
+
+`POST /api/mcp` is a streamable-HTTP MCP endpoint (initialize, tools/list,
+tools/call). Generate or rotate a token in Settings → MCP / API access, then
+point a client at it:
+
+```json
+{ "mcpServers": { "cal": { "url": "https://your-host/api/mcp",
+    "headers": { "Authorization": "Bearer <apiToken>" } } } }
+```
+
+Tools: `list_entries`, `today`, `create_entry`, `update_entry`, `delete_entry`,
+`list_feeds`.
+
 ## Layout
 
 ```
-apps/web          React PWA
-apps/api          Go API + migrations + goose entrypoint
+apps/web          React PWA + Capacitor android/ shell
+apps/api          Go API + migrations + goose entrypoint + MCP endpoint
 packages/api-client   shared typed client (mirrors openapi.yaml)
 infra             docker-compose
 ```
@@ -96,8 +137,13 @@ Auth is a secure, HttpOnly session cookie (`SESSION_SECURE=true` in production).
 | --- | --- |
 | `POST /api/auth/register` `/login` `/logout`, `GET /api/me` | session auth (login/register rate-limited) |
 | `GET/POST /api/entries`, `PATCH/DELETE /api/entries/:id` | entries; `q`, `from`, `to` filters |
-| `GET/PUT /api/settings` | theme, week start, holiday region + toggle |
+| `GET/PUT /api/settings` | theme, week start, holiday region + toggle, accent, tokens |
 | `GET /api/export` | full JSON export (user, settings, entries) |
+| `GET/POST /api/feeds`, `DELETE /api/feeds/:id`, `POST /api/feeds/:id/refresh` | ICS feed subscriptions |
+| `GET /api/feed-events?from=&to=` | expanded external events |
+| `POST /api/import` | import a .ics file |
+| `GET /api/widget/today?token=` | token-gated read-only agenda |
+| `POST /api/mcp` | MCP endpoint (bearer `apiToken`) |
 | `GET /api/holidays?country=&year=` | computed holidays |
 | `GET /api/holidays/countries` | supported regions |
 

@@ -1,12 +1,12 @@
 import type { Entry } from "@cal/api-client";
-import { Check, Link2, Repeat, StickyNote } from "lucide-react";
+import { CalendarClock, Check, Link2, Repeat, StickyNote } from "lucide-react";
 import { useState } from "react";
 import { startEntryDrag } from "../lib/dnd";
 import { formatTime } from "../lib/date";
 import { usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
 
-const typeIcon = { task: Check, note: StickyNote, link: Link2 } as const;
+const typeIcon = { task: Check, note: StickyNote, link: Link2, event: CalendarClock } as const;
 
 export function EntryChip({ entry, showTime = true }: { entry: Entry; showTime?: boolean }) {
   const openEdit = useUi((state) => state.openEdit);

@@ -14,6 +14,7 @@ import { NotesPage } from "./pages/NotesPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { TasksPage } from "./pages/TasksPage";
 import { TodayPage } from "./pages/TodayPage";
+import { WidgetPage } from "./pages/WidgetPage";
 import { usePlanner } from "./stores/planner";
 import { useUi } from "./stores/ui";
 
@@ -69,6 +70,38 @@ function Shell() {
     return () => window.removeEventListener("keydown", onKey);
   }, [user, paletteOpen, editor.mode, contextMenu, selectedDate, onCalendar, navigate, setView, shift, goToday, openPalette, closePalette, openCreate, setContextMenu, closeSidebar]);
 
+  // Notification reminder loop — checks every 30s for entries whose
+  // start time minus `remind` minutes has arrived. Fires once per entry.
+  useEffect(() => {
+    if (!user) return;
+    if (typeof Notification === "undefined") return;
+    if (Notification.permission === "default") void Notification.requestPermission();
+    const fired = new Set<string>();
+    const check = () => {
+      if (Notification.permission !== "granted") return;
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      for (const entry of usePlanner.getState().entries) {
+        if (entry.remind === undefined || entry.remind === null || !entry.startTime || entry.date !== today) continue;
+        if (fired.has(entry.id)) continue;
+        const [h, m] = entry.startTime.split(":").map(Number);
+        const at = new Date(now);
+        at.setHours(h, m - entry.remind, 0, 0);
+        if (now >= at) {
+          fired.add(entry.id);
+          new Notification(entry.title, {
+            body: entry.remind === 0 ? "Starting now" : `Starts at ${entry.startTime}`,
+            tag: entry.id,
+            icon: "/pwa-192.png",
+          });
+        }
+      }
+    };
+    check();
+    const timer = window.setInterval(check, 30_000);
+    return () => window.clearInterval(timer);
+  }, [user]);
+
   if (!user) return <AuthPanel />;
 
   return (
@@ -112,6 +145,10 @@ export function App() {
     return () => media.removeEventListener("change", apply);
   }, [settings.theme]);
 
+  useEffect(() => {
+    document.documentElement.dataset.accent = settings.accent;
+  }, [settings.accent]);
+
   if (!booted) {
     return (
       <main className="splash">
@@ -124,7 +161,10 @@ export function App() {
 
   return (
     <BrowserRouter>
-      <Shell />
+      <Routes>
+        <Route path="/widget/today" element={<WidgetPage />} />
+        <Route path="*" element={<Shell />} />
+      </Routes>
     </BrowserRouter>
   );
 }

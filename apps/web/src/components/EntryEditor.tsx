@@ -1,6 +1,6 @@
 import type { EntryType, Recur } from "@cal/api-client";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, Link2, StickyNote, Trash2 } from "lucide-react";
+import { CalendarClock, Check, Link2, StickyNote, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
@@ -9,8 +9,19 @@ const COLORS = ["slate", "mint", "sky", "violet", "amber", "orange", "rose", "re
 
 const TYPE_META: { value: EntryType; label: string; icon: typeof Check }[] = [
   { value: "task", label: "Task", icon: Check },
+  { value: "event", label: "Event", icon: CalendarClock },
   { value: "note", label: "Note", icon: StickyNote },
   { value: "link", label: "Link", icon: Link2 },
+];
+
+const REMINDS: { value: number | ""; label: string }[] = [
+  { value: "", label: "No reminder" },
+  { value: 0, label: "At start" },
+  { value: 5, label: "5 min before" },
+  { value: 15, label: "15 min before" },
+  { value: 30, label: "30 min before" },
+  { value: 60, label: "1 hour before" },
+  { value: 1440, label: "1 day before" },
 ];
 
 const RECURS: { value: Recur; label: string }[] = [
@@ -41,6 +52,7 @@ export function EntryEditor() {
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [recur, setRecur] = useState<Recur>("none");
+  const [remind, setRemind] = useState<number | "">("");
   const [linkUrl, setLinkUrl] = useState("");
   const [color, setColor] = useState("slate");
   const [tags, setTags] = useState("");
@@ -56,6 +68,7 @@ export function EntryEditor() {
       setStartTime(editor.startTime ?? "");
       setEndTime(editor.startTime ? addHour(editor.startTime) : "");
       setRecur("none");
+      setRemind("");
       setLinkUrl("");
       setColor("slate");
       setTags("");
@@ -68,6 +81,7 @@ export function EntryEditor() {
       setStartTime(e.startTime ?? "");
       setEndTime(e.endTime ?? "");
       setRecur(e.recur);
+      setRemind(e.remind ?? "");
       setLinkUrl(e.linkUrl ?? "");
       setColor(e.color);
       setTags(e.tags.join(", "));
@@ -118,6 +132,7 @@ export function EntryEditor() {
       content: content.trim(),
       linkUrl: type === "link" ? linkUrl.trim() : "",
       recur: type === "task" ? recur : ("none" as Recur),
+      remind: startTime && remind !== "" ? remind : null,
     };
     try {
       if (editing) await updateEntry(editing.id, fields);
@@ -195,6 +210,22 @@ export function EntryEditor() {
                 <span>End</span>
                 <input className="input" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
               </label>
+              {startTime && (
+                <label className="field">
+                  <span>Remind</span>
+                  <select
+                    className="select"
+                    value={remind}
+                    onChange={(e) => setRemind(e.target.value === "" ? "" : Number(e.target.value))}
+                  >
+                    {REMINDS.map((r) => (
+                      <option key={r.label} value={r.value}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </div>
             {type === "link" && (
               <label className="field">
