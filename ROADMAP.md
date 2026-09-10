@@ -143,6 +143,13 @@ Status legend: `[x]` shipped · `[/]` partially shipped · `[ ]` planned
 - [x] **Activity heatmap** — `GET /api/activity` date→count map; 17-week
       contributions grid on Today.
 - [x] **MCP `list_files`** — 14 tools.
+- [x] **Kanban boards** — `boards`/`board_columns` tables; cards are real
+      task entries (`board_id`/`column_id`/float `position`), so board work
+      appears on the calendar, Today, and Tasks. Drag between columns
+      (fractional positions), inline card add, column add/delete, board
+      list page, editor board/column picker. `POST /api/cards/:id/move`.
+- [x] **MCP board tools** — `list_boards`, `board_view`, `create_card`,
+      `move_card` — 18 tools.
 
 ## Deliberately out of scope
 

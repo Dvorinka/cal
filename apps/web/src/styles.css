@@ -2489,3 +2489,29 @@ button {
 .activity-cell.lv2 { background: color-mix(in srgb, var(--accent) 55%, var(--line)); }
 .activity-cell.lv3 { background: color-mix(in srgb, var(--accent) 80%, var(--line)); }
 .activity-cell.lv4 { background: var(--accent); }
+
+/* kanban */
+.board-add { display: flex; gap: 8px; max-width: 480px; margin: 8px 24px 20px; }
+.board-add .input { flex: 1; }
+.board-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; padding: 0 24px; }
+.board-tile { display: flex; align-items: center; gap: 10px; padding: 18px 16px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-panel); color: var(--text-1); text-decoration: none; font: inherit; }
+.board-tile:hover { border-color: var(--accent); }
+.board-name { font-weight: 600; flex: 1; }
+.kanban { display: flex; gap: 12px; align-items: flex-start; padding: 4px 24px 48px; overflow-x: auto; min-height: 60vh; }
+.kanban-col { width: 260px; flex-shrink: 0; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-panel); }
+.kanban-col.over { border-color: var(--accent); }
+.kanban-col-new { padding: 12px; border-style: dashed; background: transparent; }
+.kanban-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.kanban-name { font-weight: 650; font-size: 13px; }
+.kanban-count { font-size: 11px; color: var(--text-3); margin-left: auto; }
+.kanban-cards { padding: 8px; display: flex; flex-direction: column; gap: 6px; min-height: 40px; }
+.kanban-card { border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg-field); padding: 8px 10px; cursor: grab; }
+.kanban-card:active { cursor: grabbing; }
+.kanban-card.done { opacity: 0.55; }
+.kanban-card-title { background: none; border: 0; padding: 0; font: inherit; color: var(--text-1); text-align: left; cursor: pointer; width: 100%; }
+.kanban-card-meta { display: flex; gap: 8px; margin-top: 4px; align-items: center; }
+.kanban-done { color: var(--accent); margin-left: auto; }
+.kanban-add { padding: 6px 8px 10px; }
+.kanban-add-input { width: 100%; border: 0; background: none; padding: 6px 8px; font: inherit; color: var(--text-1); border-radius: var(--r-sm); }
+.kanban-add-input:focus { outline: 1px solid var(--line); background: var(--bg-field); }
+@media (max-width: 700px) { .kanban { padding: 4px 12px 80px; } .kanban-col { width: 78vw; } }

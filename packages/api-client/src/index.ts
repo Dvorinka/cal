@@ -22,6 +22,9 @@ export interface Entry {
   completed: boolean;
   pinned: boolean;
   color: string;
+  boardId?: string;
+  columnId?: string;
+  position?: number;
   tags: string[];
   recur: Recur;
   /** Minutes before startTime to fire a reminder; absent = none. */
@@ -43,6 +46,8 @@ export interface EntryInput {
   recur?: Recur;
   remind?: number | null;
   accountId?: string;
+  boardId?: string;
+  columnId?: string;
 }
 
 export type EntryPatch = Partial<EntryInput & { completed: boolean; pinned: boolean }>;
@@ -325,6 +330,38 @@ export class CalApi {
     return this.request(`/files/${id}/share`, { method: "POST", body: JSON.stringify({ on }) });
   }
 
+  async boards(): Promise<Board[]> {
+    return this.request("/boards");
+  }
+
+  async createBoard(name: string, color?: string): Promise<Board> {
+    return this.request("/boards", { method: "POST", body: JSON.stringify({ name, color }) });
+  }
+
+  async deleteBoard(id: string): Promise<void> {
+    return this.request(`/boards/${id}`, { method: "DELETE" });
+  }
+
+  async boardView(id: string): Promise<{ columns: BoardColumn[]; cards: Entry[] }> {
+    return this.request(`/boards/${id}/view`);
+  }
+
+  async createColumn(boardId: string, name: string): Promise<BoardColumn> {
+    return this.request(`/boards/${boardId}/columns`, { method: "POST", body: JSON.stringify({ name }) });
+  }
+
+  async renameColumn(id: string, name: string): Promise<void> {
+    return this.request(`/columns/${id}`, { method: "PATCH", body: JSON.stringify({ name }) });
+  }
+
+  async deleteColumn(id: string): Promise<void> {
+    return this.request(`/columns/${id}`, { method: "DELETE" });
+  }
+
+  async moveCard(entryId: string, columnId: string | null, position: number): Promise<void> {
+    return this.request(`/cards/${entryId}/move`, { method: "POST", body: JSON.stringify({ columnId, position }) });
+  }
+
   async activity(): Promise<Record<string, number>> {
     return this.request("/activity");
   }
@@ -452,4 +489,18 @@ export class CalApi {
     if (response.status === 204) return undefined as T;
     return response.json() as Promise<T>;
   }
+}
+
+export interface Board {
+  id: string;
+  name: string;
+  color: string;
+  createdAt: string;
+}
+
+export interface BoardColumn {
+  id: string;
+  boardId: string;
+  name: string;
+  position: number;
 }

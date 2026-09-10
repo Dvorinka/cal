@@ -504,6 +504,25 @@ paths:
   /shared/files/{token}:
     get:
       summary: Public share download (no auth)
+  /boards:
+    get:
+      summary: List kanban boards
+    post:
+      summary: Create a board
+  /boards/{id}/view:
+    get:
+      summary: Board columns + cards
+  /boards/{id}/columns:
+    post:
+      summary: Add a column
+  /columns/{id}:
+    patch:
+      summary: Rename a column
+    delete:
+      summary: Delete a column
+  /cards/{id}/move:
+    post:
+      summary: Move card to column at fractional position
   /activity:
     get:
       summary: Date -> entry count map, last 120 days

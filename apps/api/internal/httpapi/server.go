@@ -96,6 +96,14 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authed.POST("/push/unsubscribe", server.unsubscribePush)
 	authed.GET("/push/subscriptions", server.pushSubscriptions)
 	authed.DELETE("/push/subscriptions/:id", server.deletePushSubscription)
+	authed.GET("/boards", server.listBoards)
+	authed.POST("/boards", server.createBoard)
+	authed.DELETE("/boards/:id", server.deleteBoard)
+	authed.GET("/boards/:id/view", server.boardView)
+	authed.POST("/boards/:id/columns", server.createColumn)
+	authed.PATCH("/columns/:id", server.renameColumn)
+	authed.DELETE("/columns/:id", server.deleteColumn)
+	authed.POST("/cards/:id/move", server.moveCard)
 	authed.GET("/caldav", server.listCaldav)
 	authed.POST("/caldav", server.createCaldav)
 	authed.POST("/caldav/test", server.testCaldav)
@@ -202,6 +210,32 @@ func (s *Server) createEntry(c *gin.Context) {
 		}
 	} else {
 		input.AccountID = nil
+	}
+	// boardId/columnId must belong to the caller; a card appended without a
+	// position lands at the end of its column.
+	if input.BoardID != nil && *input.BoardID != "" {
+		userID := currentUser(c).ID
+		if !s.store.BoardExists(c.Request.Context(), userID, *input.BoardID) {
+			c.String(http.StatusBadRequest, "unknown board")
+			return
+		}
+		if input.ColumnID != nil && *input.ColumnID != "" && !s.store.ColumnInBoard(c.Request.Context(), userID, *input.BoardID, *input.ColumnID) {
+			c.String(http.StatusBadRequest, "column not on this board")
+			return
+		}
+		if input.Position == nil {
+			cards, _ := s.store.BoardCards(c.Request.Context(), userID, *input.BoardID)
+			top := 0.0
+			for _, card := range cards {
+				if card.ColumnID != nil && input.ColumnID != nil && *card.ColumnID == *input.ColumnID && card.Position != nil && *card.Position > top {
+					top = *card.Position
+				}
+			}
+			pos := top + 1024
+			input.Position = &pos
+		}
+	} else {
+		input.BoardID, input.ColumnID = nil, nil
 	}
 	entry, err := s.store.CreateEntry(c.Request.Context(), currentUser(c).ID, input)
 	if err != nil {
@@ -456,6 +490,28 @@ func parsePatch(raw map[string]json.RawMessage) (store.EntryPatch, bool) {
 				return patch, false
 			}
 			patch.Completed = &v
+		case "pinned":
+			var v bool
+			if json.Unmarshal(value, &v) != nil {
+				return patch, false
+			}
+			patch.Pinned = &v
+		case "boardId", "columnId":
+			var v *string
+			if json.Unmarshal(value, &v) != nil {
+				return patch, false
+			}
+			if v != nil && *v == "" {
+				v = nil // empty string clears the assignment
+			}
+			if key == "boardId" {
+				patch.BoardID = v
+				if v == nil {
+					patch.ClearBoard = true // explicit clear: leave the board
+				}
+			} else {
+				patch.ColumnID = v
+			}
 		case "color":
 			var v string
 			if json.Unmarshal(value, &v) != nil {

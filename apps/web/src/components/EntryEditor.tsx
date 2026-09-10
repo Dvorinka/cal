@@ -1,4 +1,4 @@
-import type { EntryType, Recur, Revision } from "@cal/api-client";
+import type { Board, BoardColumn, EntryType, Recur, Revision } from "@cal/api-client";
 import { renderMarkdown } from "../lib/markdown";
 import { AnimatePresence, motion } from "framer-motion";
 import { CalendarClock, Check, History, Link2, Paperclip, Pin, StickyNote, Trash2 } from "lucide-react";
@@ -67,6 +67,10 @@ export function EntryEditor() {
   const [recur, setRecur] = useState<Recur>("none");
   const [remind, setRemind] = useState<number | "">("");
   const [accountId, setAccountId] = useState("");
+  const [boards, setBoards] = useState<Board[]>([]);
+  const [boardId, setBoardId] = useState("");
+  const [boardCols, setBoardCols] = useState<BoardColumn[]>([]);
+  const [columnId, setColumnId] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [color, setColor] = useState("slate");
   const [tags, setTags] = useState("");
@@ -121,6 +125,8 @@ export function EntryEditor() {
       setRecur(e.recur);
       setRemind(e.remind ?? "");
       setAccountId(e.accountId ?? "");
+      setBoardId(e.boardId ?? "");
+      setColumnId(e.columnId ?? "");
       setLinkUrl(e.linkUrl ?? "");
       setColor(e.color);
       setTags(e.tags.join(", "));
@@ -148,6 +154,15 @@ export function EntryEditor() {
   useEffect(() => {
     if (open && accounts.length === 0) void loadAccounts();
   }, [open, accounts.length, loadAccounts]);
+
+  // Boards for the task board picker; columns load with the chosen board.
+  useEffect(() => {
+    if (open) void api.boards().then(setBoards).catch(() => {});
+  }, [open, api]);
+  useEffect(() => {
+    if (boardId) void api.boardView(boardId).then((v) => setBoardCols(v.columns)).catch(() => {});
+    else setBoardCols([]);
+  }, [boardId, api]);
 
   useEffect(() => {
     if (!open) return;
@@ -193,6 +208,8 @@ export function EntryEditor() {
       linkUrl: type === "link" ? linkUrl.trim() : "",
       recur: type === "task" ? recur : ("none" as Recur),
       remind: startTime && remind !== "" ? remind : null,
+      boardId: type === "task" && boardId ? boardId : undefined,
+      columnId: type === "task" && boardId && columnId ? columnId : undefined,
     };
     try {
       if (editing) await updateEntry(editing.id, fields);
@@ -398,6 +415,41 @@ export function EntryEditor() {
                     </select>
                   )}
                 </label>
+              </div>
+            )}
+            {type === "task" && boards.length > 0 && (
+              <div className="editor-row">
+                <label className="field">
+                  <span>Board</span>
+                  <select
+                    className="select"
+                    value={boardId}
+                    onChange={(e) => {
+                      setBoardId(e.target.value);
+                      setColumnId("");
+                    }}
+                  >
+                    <option value="">No board</option>
+                    {boards.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {boardId && (
+                  <label className="field">
+                    <span>Column</span>
+                    <select className="select" value={columnId} onChange={(e) => setColumnId(e.target.value)}>
+                      <option value="">Inbox (no column)</option>
+                      {boardCols.map((col) => (
+                        <option key={col.id} value={col.id}>
+                          {col.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
               </div>
             )}
             {type === "link" && (

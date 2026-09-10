@@ -9,6 +9,7 @@ import { EntryEditor } from "./components/EntryEditor";
 import { Sidebar } from "./components/Sidebar";
 import { Toasts } from "./components/Toasts";
 import { CalendarPage } from "./pages/CalendarPage";
+import { BoardsPage } from "./pages/BoardsPage";
 import { FilesPage } from "./pages/FilesPage";
 import { LinksPage } from "./pages/LinksPage";
 import { NotesPage } from "./pages/NotesPage";
@@ -116,6 +117,8 @@ function Shell() {
           <Route path="/notes" element={<NotesPage />} />
           <Route path="/links" element={<LinksPage />} />
           <Route path="/files" element={<FilesPage />} />
+          <Route path="/boards" element={<BoardsPage />} />
+          <Route path="/boards/:boardId" element={<BoardsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/share" element={<ShareTarget />} />
           <Route path="/entry/:id" element={<EntryDeepLink />} />

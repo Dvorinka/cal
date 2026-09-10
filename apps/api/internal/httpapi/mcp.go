@@ -170,6 +170,48 @@ var mcpTools = []gin.H{
 		"description": "List uploaded files with their public share tokens.",
 		"inputSchema": gin.H{"type": "object", "properties": gin.H{}},
 	},
+	{
+		"name":        "list_boards",
+		"description": "List kanban boards.",
+		"inputSchema": gin.H{"type": "object", "properties": gin.H{}},
+	},
+	{
+		"name":        "board_view",
+		"description": "Columns and cards of a board.",
+		"inputSchema": gin.H{
+			"type":       "object",
+			"properties": gin.H{"boardId": gin.H{"type": "string"}},
+			"required":   []string{"boardId"},
+		},
+	},
+	{
+		"name":        "create_card",
+		"description": "Create a task on a board column (title required; date defaults to today).",
+		"inputSchema": gin.H{
+			"type": "object",
+			"properties": gin.H{
+				"boardId":  gin.H{"type": "string"},
+				"columnId": gin.H{"type": "string"},
+				"title":    gin.H{"type": "string"},
+				"date":     gin.H{"type": "string"},
+				"content":  gin.H{"type": "string"},
+			},
+			"required": []string{"boardId", "title"},
+		},
+	},
+	{
+		"name":        "move_card",
+		"description": "Move a card to another column (position optional).",
+		"inputSchema": gin.H{
+			"type": "object",
+			"properties": gin.H{
+				"id":       gin.H{"type": "string"},
+				"columnId": gin.H{"type": "string"},
+				"position": gin.H{"type": "number"},
+			},
+			"required": []string{"id", "columnId"},
+		},
+	},
 }
 
 func (s *Server) mcpAuth(c *gin.Context) (store.User, bool) {
@@ -507,6 +549,84 @@ func (s *Server) mcpCall(c *gin.Context, user store.User, req rpcRequest) {
 		}
 		data, _ := json.Marshal(files)
 		respond(toolText(string(data), false))
+
+	case "list_boards":
+		boards, err := s.store.ListBoards(ctx, user.ID)
+		if err != nil {
+			fail("query failed")
+			return
+		}
+		data, _ := json.Marshal(boards)
+		respond(toolText(string(data), false))
+
+	case "board_view":
+		var args struct {
+			BoardID string `json:"boardId"`
+		}
+		_ = json.Unmarshal(params.Arguments, &args)
+		cols, _ := s.store.BoardColumns(ctx, user.ID, args.BoardID)
+		cards, _ := s.store.BoardCards(ctx, user.ID, args.BoardID)
+		data, _ := json.Marshal(gin.H{"columns": cols, "cards": cards})
+		respond(toolText(string(data), false))
+
+	case "create_card":
+		var args struct {
+			BoardID  string `json:"boardId"`
+			ColumnID string `json:"columnId"`
+			Title    string `json:"title"`
+			Date     string `json:"date"`
+			Content  string `json:"content"`
+		}
+		if err := json.Unmarshal(params.Arguments, &args); err != nil || args.BoardID == "" || strings.TrimSpace(args.Title) == "" {
+			fail("boardId and title are required")
+			return
+		}
+		if !s.store.BoardExists(ctx, user.ID, args.BoardID) {
+			fail("unknown board")
+			return
+		}
+		if args.Date == "" {
+			args.Date = time.Now().Format("2006-01-02")
+		}
+		input := store.EntryInput{Title: args.Title, Type: "task", Date: args.Date, Content: args.Content, BoardID: &args.BoardID}
+		if args.ColumnID != "" {
+			input.ColumnID = &args.ColumnID
+		}
+		// Append at the column's end.
+		cards, _ := s.store.BoardCards(ctx, user.ID, args.BoardID)
+		top := 0.0
+		for _, card := range cards {
+			if card.ColumnID != nil && args.ColumnID != "" && *card.ColumnID == args.ColumnID && card.Position != nil && *card.Position > top {
+				top = *card.Position
+			}
+		}
+		pos := top + 1024
+		input.Position = &pos
+		entry, err := s.store.CreateEntry(ctx, user.ID, input)
+		if err != nil {
+			fail("create failed")
+			return
+		}
+		data, _ := json.Marshal(entry)
+		respond(toolText(string(data), false))
+
+	case "move_card":
+		var args struct {
+			ID       string  `json:"id"`
+			ColumnID string  `json:"columnId"`
+			Position float64 `json:"position"`
+		}
+		_ = json.Unmarshal(params.Arguments, &args)
+		entry, err := s.store.Entry(ctx, user.ID, args.ID)
+		if err != nil || entry.BoardID == nil {
+			fail("card not found")
+			return
+		}
+		if err := s.store.MoveCard(ctx, user.ID, args.ID, *entry.BoardID, &args.ColumnID, args.Position); err != nil {
+			fail("move failed")
+			return
+		}
+		respond(toolText("moved", false))
 
 	default:
 		c.JSON(http.StatusOK, rpcError(req.ID, -32602, "unknown tool"))

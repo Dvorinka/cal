@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronLeft, ChevronRight, FolderOpen, Link2, ListChecks, Plus, Search, Settings2, StickyNote, Sun } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, FolderOpen, Link2, ListChecks, Plus, Search, Settings2, StickyNote, Sun, Trello } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { addMonths, fromIso, iso, monthMatrix, todayIso, weekdayNames, type WeekStartPref } from "../lib/date";
@@ -19,6 +19,7 @@ const NAV: { to: string; label: string; icon: typeof Sun; end?: boolean }[] = [
   { to: "/notes", label: "Notes", icon: StickyNote },
   { to: "/links", label: "Links", icon: Link2 },
   { to: "/files", label: "Files", icon: FolderOpen },
+  { to: "/boards", label: "Boards", icon: Trello },
 ];
 
 function MiniMonth({ weekStart }: { weekStart: WeekStartPref }) {

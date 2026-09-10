@@ -28,7 +28,8 @@ type User struct {
 // Times are rendered as HH:MM strings to keep the API surface simple.
 const entryCols = `id::text, title, content, type, link_url, date::text,
 	to_char(start_time, 'HH24:MI'), to_char(end_time, 'HH24:MI'),
-	completed, color, tags, recur, remind, pinned, created_at,
+	completed, color, tags, recur, remind, pinned,
+	board_id::text, column_id::text, position, created_at,
 	account_id::text, external_uid, external_href, external_etag, dirty`
 
 type Entry struct {
@@ -43,6 +44,9 @@ type Entry struct {
 	Completed    bool      `json:"completed"`
 	Pinned       bool      `json:"pinned"`
 	Color        string    `json:"color"`
+	BoardID      *string   `json:"boardId,omitempty"`
+	ColumnID     *string   `json:"columnId,omitempty"`
+	Position     *float64  `json:"position,omitempty"`
 	Tags         []string  `json:"tags"`
 	Recur        string    `json:"recur"`
 	Remind       *int      `json:"remind,omitempty"`
@@ -57,7 +61,7 @@ type Entry struct {
 
 func (e *Entry) scan(row interface{ Scan(...any) error }) error {
 	return row.Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date,
-		&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.CreatedAt,
+		&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
 		&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty)
 }
 
@@ -95,6 +99,9 @@ type EntryInput struct {
 	Recur     string   `json:"recur"`
 	Remind    *int     `json:"remind"`
 	AccountID *string  `json:"accountId"`
+	BoardID   *string  `json:"boardId"`
+	ColumnID  *string  `json:"columnId"`
+	Position  *float64 `json:"-"`
 }
 
 type EntryPatch struct {
@@ -107,6 +114,9 @@ type EntryPatch struct {
 	EndTime   *string  `json:"endTime"`
 	Completed *bool    `json:"completed"`
 	Pinned    *bool    `json:"pinned"`
+	BoardID   *string  `json:"boardId"`
+	ColumnID  *string  `json:"columnId"`
+	ClearBoard bool    `json:"-"`
 	Color     *string  `json:"color"`
 	Recur     *string  `json:"recur"`
 	Remind    *int     `json:"remind"`
@@ -291,11 +301,11 @@ func (s *Store) CreateEntry(ctx context.Context, userID string, input EntryInput
 	}
 	var e Entry
 	err := s.db.QueryRow(ctx, `
-		INSERT INTO entries (user_id, title, content, type, link_url, date, start_time, end_time, color, tags, recur, remind, account_id, dirty)
-		VALUES ($1, $2, $3, $4, $5, $6, nullif($7, '')::time, nullif($8, '')::time, $9, $10, coalesce(nullif($11, ''), 'none'), $12, $13::uuid, $13 IS NOT NULL)
+		INSERT INTO entries (user_id, title, content, type, link_url, date, start_time, end_time, color, tags, recur, remind, account_id, board_id, column_id, position, dirty)
+		VALUES ($1, $2, $3, $4, $5, $6, nullif($7, '')::time, nullif($8, '')::time, $9, $10, coalesce(nullif($11, ''), 'none'), $12, $13::uuid, $14::uuid, $15::uuid, $16, $13 IS NOT NULL)
 		RETURNING `+entryCols+`
-	`, userID, input.Title, input.Content, input.Type, input.LinkURL, input.Date, input.StartTime, input.EndTime, input.Color, input.Tags, input.Recur, input.Remind, input.AccountID).
-		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.CreatedAt,
+	`, userID, input.Title, input.Content, input.Type, input.LinkURL, input.Date, input.StartTime, input.EndTime, input.Color, input.Tags, input.Recur, input.Remind, input.AccountID, input.BoardID, input.ColumnID, input.Position).
+		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
 			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty)
 	return e, err
 }
@@ -341,6 +351,17 @@ func (s *Store) UpdateEntry(ctx context.Context, userID, id string, patch EntryP
 	if patch.Pinned != nil {
 		current.Pinned = *patch.Pinned
 	}
+	if patch.ClearBoard {
+		current.BoardID = nil
+		current.ColumnID = nil
+	} else {
+		if patch.BoardID != nil {
+			current.BoardID = patch.BoardID
+		}
+		if patch.ColumnID != nil {
+			current.ColumnID = patch.ColumnID
+		}
+	}
 	if patch.Color != nil {
 		current.Color = *patch.Color
 	}
@@ -384,15 +405,15 @@ func (s *Store) UpdateEntry(ctx context.Context, userID, id string, patch EntryP
 		SET title = $1, content = $2, type = $3, link_url = $4, date = $5,
 		    start_time = nullif($6, '')::time, end_time = nullif($7, '')::time,
 		    completed = $8, color = $9, tags = $10, recur = $11, remind = $12,
-		    pinned = $16,
+		    pinned = $16, board_id = $17::uuid, column_id = $18::uuid,
 		    dirty = CASE WHEN account_id IS NOT NULL THEN true ELSE dirty END,
 		    reminded_at = CASE WHEN $15 THEN NULL ELSE reminded_at END
 		WHERE id = $13 AND user_id = $14
 		RETURNING `+entryCols+`
 	`, current.Title, current.Content, current.Type, current.LinkURL, current.Date,
 		strOrEmpty(current.StartTime), strOrEmpty(current.EndTime),
-		current.Completed, current.Color, current.Tags, current.Recur, current.Remind, id, userID, resetRemind, current.Pinned).
-		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.CreatedAt,
+		current.Completed, current.Color, current.Tags, current.Recur, current.Remind, id, userID, resetRemind, current.Pinned, current.BoardID, current.ColumnID).
+		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
 			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty)
 	if err != nil {
 		return Entry{}, err
@@ -790,7 +811,8 @@ func (s *Store) DueReminders(ctx context.Context) ([]Entry, error) {
 	rows, err := s.db.Query(ctx, `
 		SELECT e.id::text, e.title, e.content, e.type, e.link_url, e.date::text,
 		       to_char(e.start_time, 'HH24:MI'), to_char(e.end_time, 'HH24:MI'),
-		       e.completed, e.color, e.tags, e.recur, e.remind, e.created_at,
+		       e.completed, e.color, e.tags, e.recur, e.remind, e.pinned,
+		       e.board_id::text, e.column_id::text, e.position, e.created_at,
 		       e.account_id::text, e.external_uid, e.external_href, e.external_etag, e.dirty,
 		       e.user_id::text
 		FROM entries e JOIN settings st ON st.user_id = e.user_id
@@ -805,7 +827,7 @@ func (s *Store) DueReminders(ctx context.Context) ([]Entry, error) {
 	for rows.Next() {
 		var e Entry
 		if err := rows.Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date,
-			&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.CreatedAt,
+			&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
 			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty, &e.OwnerID); err != nil {
 			return nil, err
 		}
@@ -1333,4 +1355,159 @@ func (s *Store) Activity(ctx context.Context, userID string, days int) (map[stri
 		out[d] = n
 	}
 	return out, rows.Err()
+}
+
+// --- Boards ---
+
+type Board struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Color     string    `json:"color"`
+	CreatedAt time.Time `json:"createdAt"`
+	Columns   []BoardColumn `json:"columns,omitempty"`
+}
+
+type BoardColumn struct {
+	ID       string `json:"id"`
+	BoardID  string `json:"boardId"`
+	Name     string `json:"name"`
+	Position int    `json:"position"`
+}
+
+func (s *Store) ListBoards(ctx context.Context, userID string) ([]Board, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT id::text, name, color, created_at FROM boards WHERE user_id = $1 ORDER BY created_at`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Board{}
+	for rows.Next() {
+		var b Board
+		if err := rows.Scan(&b.ID, &b.Name, &b.Color, &b.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) CreateBoard(ctx context.Context, userID, name, color string) (Board, error) {
+	var b Board
+	err := s.db.QueryRow(ctx, `
+		INSERT INTO boards (user_id, name, color) VALUES ($1, $2, $3)
+		RETURNING id::text, name, color, created_at`, userID, name, color).
+		Scan(&b.ID, &b.Name, &b.Color, &b.CreatedAt)
+	return b, err
+}
+
+func (s *Store) DeleteBoard(ctx context.Context, userID, id string) error {
+	tag, err := s.db.Exec(ctx, `DELETE FROM boards WHERE id = $1 AND user_id = $2`, id, userID)
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return err
+}
+
+// BoardColumns returns a board's columns ordered by position.
+func (s *Store) BoardColumns(ctx context.Context, userID, boardID string) ([]BoardColumn, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT c.id::text, c.board_id::text, c.name, c.position
+		FROM board_columns c JOIN boards b ON b.id = c.board_id
+		WHERE c.board_id = $1 AND b.user_id = $2
+		ORDER BY c.position`, boardID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []BoardColumn{}
+	for rows.Next() {
+		var col BoardColumn
+		if err := rows.Scan(&col.ID, &col.BoardID, &col.Name, &col.Position); err != nil {
+			return nil, err
+		}
+		out = append(out, col)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) CreateColumn(ctx context.Context, userID, boardID, name string, position int) (BoardColumn, error) {
+	var col BoardColumn
+	err := s.db.QueryRow(ctx, `
+		INSERT INTO board_columns (board_id, name, position)
+		SELECT $1, $2, $3 FROM boards WHERE id = $1 AND user_id = $4
+		RETURNING id::text, board_id::text, name, position`, boardID, name, position, userID).
+		Scan(&col.ID, &col.BoardID, &col.Name, &col.Position)
+	return col, err
+}
+
+func (s *Store) RenameColumn(ctx context.Context, userID, id, name string) error {
+	tag, err := s.db.Exec(ctx, `
+		UPDATE board_columns c SET name = $3 FROM boards b
+		WHERE c.id = $1 AND c.board_id = b.id AND b.user_id = $2`, id, userID, name)
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return err
+}
+
+func (s *Store) DeleteColumn(ctx context.Context, userID, id string) error {
+	tag, err := s.db.Exec(ctx, `
+		DELETE FROM board_columns c USING boards b
+		WHERE c.id = $1 AND c.board_id = b.id AND b.user_id = $2`, id, userID)
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return err
+}
+
+// BoardCards returns task entries on a board, ordered within columns.
+func (s *Store) BoardCards(ctx context.Context, userID, boardID string) ([]Entry, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT `+entryCols+` FROM entries
+		WHERE user_id = $1 AND board_id = $2
+		ORDER BY column_id NULLS LAST, position NULLS LAST, created_at`, userID, boardID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Entry{}
+	for rows.Next() {
+		var e Entry
+		if err := rows.Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date,
+			&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned,
+			&e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
+			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// BoardExists verifies the user owns the board (for card assignment).
+func (s *Store) BoardExists(ctx context.Context, userID, boardID string) bool {
+	var ok bool
+	_ = s.db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM boards WHERE id = $1 AND user_id = $2)`, boardID, userID).Scan(&ok)
+	return ok
+}
+
+// ColumnInBoard verifies the column belongs to a board the user owns.
+func (s *Store) ColumnInBoard(ctx context.Context, userID, boardID, columnID string) bool {
+	var ok bool
+	_ = s.db.QueryRow(ctx, `
+		SELECT EXISTS(SELECT 1 FROM board_columns c JOIN boards b ON b.id = c.board_id
+			WHERE c.id = $1 AND c.board_id = $2 AND b.user_id = $3)`, columnID, boardID, userID).Scan(&ok)
+	return ok
+}
+
+// MoveCard sets column + position (fractional between neighbours).
+func (s *Store) MoveCard(ctx context.Context, userID, entryID, boardID string, columnID *string, position float64) error {
+	tag, err := s.db.Exec(ctx, `
+		UPDATE entries SET board_id = $3, column_id = $4, position = $5
+		WHERE id = $1 AND user_id = $2`, entryID, userID, boardID, columnID, position)
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return err
 }
