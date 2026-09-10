@@ -2550,3 +2550,6 @@ button {
 .bulk-bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; margin: 0 0 10px; border: 1px solid var(--accent); border-radius: var(--r-sm); background: color-mix(in srgb, var(--accent) 8%, transparent); font-size: 12.5px; }
 .bulk-bar > span { font-weight: 650; }
 .board-desc { margin: 0 24px 10px; color: var(--text-2); font-size: 13px; max-width: 640px; }
+.board-progress { font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.board-progress.all { color: var(--accent); font-weight: 650; }
+.time-hint { font-size: 12px; color: var(--text-3); display: inline-flex; align-items: center; gap: 5px; }

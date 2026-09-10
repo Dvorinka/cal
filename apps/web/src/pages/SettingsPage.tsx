@@ -261,6 +261,16 @@ export function SettingsPage() {
               </select>
             </label>
             <label className="field">
+              <span>Morning digest push</span>
+              <input
+                type="time"
+                className="input"
+                value={settings.digestTime ?? ""}
+                onChange={(e) => set({ digestTime: e.target.value })}
+                aria-label="Daily digest time"
+              />
+            </label>
+            <label className="field">
               <span>Weather city</span>
               <input
                 className="input"

@@ -76,6 +76,7 @@ type Settings struct {
 	Timezone     string `json:"timezone"`
 	City         string `json:"city"`
 	QuotaMB      int    `json:"quotaMb"`
+	DigestTime   string `json:"digestTime"` // "HH:MM" or ""
 	WidgetToken  string `json:"widgetToken"`
 	ApiToken     string `json:"apiToken"`
 }
@@ -688,16 +689,17 @@ func (s *Store) entryTx(ctx context.Context, tx pgx.Tx, userID, id string) (Entr
 func (s *Store) Settings(ctx context.Context, userID string) (Settings, error) {
 	var settings Settings
 	err := s.db.QueryRow(ctx, `
-		SELECT country, show_holidays, theme, week_start, accent, timezone, coalesce(city, ''), quota_mb, widget_token, api_token FROM settings WHERE user_id = $1
-	`, userID).Scan(&settings.Country, &settings.ShowHolidays, &settings.Theme, &settings.WeekStart, &settings.Accent, &settings.Timezone, &settings.City, &settings.QuotaMB, &settings.WidgetToken, &settings.ApiToken)
+		SELECT country, show_holidays, theme, week_start, accent, timezone, coalesce(city, ''), quota_mb,
+		       coalesce(digest_time::text, ''), widget_token, api_token FROM settings WHERE user_id = $1
+	`, userID).Scan(&settings.Country, &settings.ShowHolidays, &settings.Theme, &settings.WeekStart, &settings.Accent, &settings.Timezone, &settings.City, &settings.QuotaMB, &settings.DigestTime, &settings.WidgetToken, &settings.ApiToken)
 	return settings, err
 }
 
 func (s *Store) UpdateSettings(ctx context.Context, userID string, settings Settings) (Settings, error) {
 	var out Settings
 	err := s.db.QueryRow(ctx, `
-		INSERT INTO settings (user_id, country, show_holidays, theme, week_start, accent, timezone, city)
-		VALUES ($1, $2, $3, $4, $5, $6, coalesce(nullif($7, ''), 'UTC'), nullif($8, ''))
+		INSERT INTO settings (user_id, country, show_holidays, theme, week_start, accent, timezone, city, digest_time)
+		VALUES ($1, $2, $3, $4, $5, $6, coalesce(nullif($7, ''), 'UTC'), nullif($8, ''), nullif($9, '')::time)
 		ON CONFLICT (user_id) DO UPDATE
 		SET country = EXCLUDED.country,
 		    show_holidays = EXCLUDED.show_holidays,
@@ -705,10 +707,12 @@ func (s *Store) UpdateSettings(ctx context.Context, userID string, settings Sett
 		    week_start = EXCLUDED.week_start,
 		    accent = EXCLUDED.accent,
 		    timezone = EXCLUDED.timezone,
-		    city = EXCLUDED.city
-		RETURNING country, show_holidays, theme, week_start, accent, timezone, coalesce(city, ''), quota_mb, widget_token, api_token
-	`, userID, settings.Country, settings.ShowHolidays, settings.Theme, settings.WeekStart, settings.Accent, settings.Timezone, settings.City).
-		Scan(&out.Country, &out.ShowHolidays, &out.Theme, &out.WeekStart, &out.Accent, &out.Timezone, &out.City, &out.QuotaMB, &out.WidgetToken, &out.ApiToken)
+		    city = EXCLUDED.city,
+		    digest_time = EXCLUDED.digest_time
+		RETURNING country, show_holidays, theme, week_start, accent, timezone, coalesce(city, ''), quota_mb,
+		          coalesce(digest_time::text, ''), widget_token, api_token
+	`, userID, settings.Country, settings.ShowHolidays, settings.Theme, settings.WeekStart, settings.Accent, settings.Timezone, settings.City, settings.DigestTime).
+		Scan(&out.Country, &out.ShowHolidays, &out.Theme, &out.WeekStart, &out.Accent, &out.Timezone, &out.City, &out.QuotaMB, &out.DigestTime, &out.WidgetToken, &out.ApiToken)
 	return out, err
 }
 
@@ -1368,6 +1372,8 @@ type Board struct {
 	Description string    `json:"description"`
 	TargetDate  *string   `json:"targetDate,omitempty"`
 	ShareToken  *string   `json:"shareToken,omitempty"`
+	Total       int       `json:"total"`
+	Done        int       `json:"done"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
@@ -1381,8 +1387,11 @@ type BoardColumn struct {
 
 func (s *Store) ListBoards(ctx context.Context, userID string) ([]Board, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT id::text, name, color, description, target_date::text, share_token, created_at
-		FROM boards WHERE user_id = $1 ORDER BY created_at`, userID)
+		SELECT b.id::text, b.name, b.color, b.description, b.target_date::text, b.share_token, b.created_at,
+		       count(e.id) FILTER (WHERE e.deleted_at IS NULL) AS total,
+		       count(e.id) FILTER (WHERE e.deleted_at IS NULL AND e.completed) AS done
+		FROM boards b LEFT JOIN entries e ON e.board_id = b.id
+		WHERE b.user_id = $1 GROUP BY b.id ORDER BY b.created_at`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -1390,7 +1399,7 @@ func (s *Store) ListBoards(ctx context.Context, userID string) ([]Board, error) 
 	out := []Board{}
 	for rows.Next() {
 		var b Board
-		if err := rows.Scan(&b.ID, &b.Name, &b.Color, &b.Description, &b.TargetDate, &b.ShareToken, &b.CreatedAt); err != nil {
+		if err := rows.Scan(&b.ID, &b.Name, &b.Color, &b.Description, &b.TargetDate, &b.ShareToken, &b.CreatedAt, &b.Total, &b.Done); err != nil {
 			return nil, err
 		}
 		out = append(out, b)
@@ -1582,16 +1591,17 @@ type TimeEntry struct {
 	StartAt   time.Time  `json:"startAt"`
 	EndAt     *time.Time `json:"endAt,omitempty"`
 	Note      string     `json:"note"`
+	Planned   *int       `json:"planned,omitempty"`
 }
 
 // StartTimer opens a running time entry; only one runs per user.
-func (s *Store) StartTimer(ctx context.Context, userID string, entryID *string, note string) (TimeEntry, error) {
+func (s *Store) StartTimer(ctx context.Context, userID string, entryID *string, note string, planned int) (TimeEntry, error) {
 	var t TimeEntry
 	err := s.db.QueryRow(ctx, `
-		INSERT INTO time_entries (user_id, entry_id, note)
-		VALUES ($1, $2::uuid, $3)
+		INSERT INTO time_entries (user_id, entry_id, note, planned_minutes)
+		VALUES ($1, $2::uuid, $3, nullif($4, 0))
 		ON CONFLICT (user_id) WHERE end_at IS NULL DO NOTHING
-		RETURNING id::text, entry_id::text, start_at`, userID, entryID, note).
+		RETURNING id::text, entry_id::text, start_at`, userID, entryID, note, planned).
 		Scan(&t.ID, &t.EntryID, &t.StartAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return t, fmt.Errorf("timer already running")
@@ -1612,10 +1622,10 @@ func (s *Store) StopTimer(ctx context.Context, userID string) (TimeEntry, error)
 func (s *Store) CurrentTimer(ctx context.Context, userID string) (*TimeEntry, error) {
 	var t TimeEntry
 	err := s.db.QueryRow(ctx, `
-		SELECT t.id::text, t.entry_id::text, coalesce(e.title,''), t.start_at, t.note
+		SELECT t.id::text, t.entry_id::text, coalesce(e.title,''), t.start_at, t.note, t.planned_minutes
 		FROM time_entries t LEFT JOIN entries e ON e.id = t.entry_id
 		WHERE t.user_id = $1 AND t.end_at IS NULL`, userID).
-		Scan(&t.ID, &t.EntryID, &t.Title, &t.StartAt, &t.Note)
+		Scan(&t.ID, &t.EntryID, &t.Title, &t.StartAt, &t.Note, &t.Planned)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -1821,4 +1831,79 @@ func nilIfEmpty(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+// --- Time log ---
+
+// TimeLog lists finished sessions in a range (timesheet view).
+func (s *Store) TimeLog(ctx context.Context, userID, from, to string) ([]TimeEntry, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT t.id::text, t.entry_id::text, coalesce(e.title, t.note), t.start_at, t.end_at, t.note, t.planned_minutes
+		FROM time_entries t LEFT JOIN entries e ON e.id = t.entry_id
+		WHERE t.user_id = $1 AND t.start_at::date >= $2::date AND t.start_at::date <= $3::date
+		ORDER BY t.start_at DESC`, userID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []TimeEntry{}
+	for rows.Next() {
+		var t TimeEntry
+		if err := rows.Scan(&t.ID, &t.EntryID, &t.Title, &t.StartAt, &t.EndAt, &t.Note, &t.Planned); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) DeleteTimeEntry(ctx context.Context, userID, id string) error {
+	tag, err := s.db.Exec(ctx, `DELETE FROM time_entries WHERE id = $1 AND user_id = $2`, id, userID)
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return err
+}
+
+// DigestDue — users whose digest_time passed today and haven't been sent.
+func (s *Store) DigestDue(ctx context.Context) ([]struct {
+	UserID   string
+	Timezone string
+	Payload  string
+}, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT st.user_id::text, st.timezone,
+			(SELECT count(*) FROM entries WHERE user_id = st.user_id AND deleted_at IS NULL
+			 AND date = (now() AT TIME ZONE st.timezone)::date AND type = 'task' AND NOT completed)::text || ' open tasks, ' ||
+			(SELECT count(*) FROM entries WHERE user_id = st.user_id AND deleted_at IS NULL
+			 AND date = (now() AT TIME ZONE st.timezone)::date AND type = 'event')::text || ' events'
+		FROM settings st
+		WHERE st.digest_time IS NOT NULL
+		  AND (st.digest_last IS NULL OR st.digest_last < (now() AT TIME ZONE st.timezone)::date)
+		  AND (now() AT TIME ZONE st.timezone)::time >= st.digest_time`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []struct {
+		UserID   string
+		Timezone string
+		Payload  string
+	}
+	for rows.Next() {
+		var r struct {
+			UserID   string
+			Timezone string
+			Payload  string
+		}
+		if err := rows.Scan(&r.UserID, &r.Timezone, &r.Payload); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) MarkDigestSent(ctx context.Context, userID string) {
+	_, _ = s.db.Exec(ctx, `UPDATE settings SET digest_last = (now() AT TIME ZONE timezone)::date WHERE user_id = $1`, userID)
 }

@@ -141,6 +141,11 @@ export function BoardsPage() {
                 <Link key={b.id} to={`/boards/${b.id}`} className="board-tile">
                   <Trello size={18} strokeWidth={1.8} />
                   <span className="board-name">{b.name}</span>
+                  {b.total > 0 && (
+                    <span className={`board-progress ${b.done === b.total ? "all" : ""}`}>
+                      {b.done}/{b.total}
+                    </span>
+                  )}
                   <button
                     type="button"
                     className="icon-btn"

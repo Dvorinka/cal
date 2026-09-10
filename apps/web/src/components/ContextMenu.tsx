@@ -79,6 +79,16 @@ export function ContextMenu() {
               <Timer size={14} /> Start timer
             </button>
           )}
+          {entry.type === "task" && (
+            <button
+              type="button"
+              onClick={() => {
+                void api.startTimer(entry.id, undefined, 25).then(() => setMenu(undefined)).catch(() => setMenu(undefined));
+              }}
+            >
+              <Timer size={14} /> Pomodoro (25m)
+            </button>
+          )}
           {isLink && (
             <button
               type="button"

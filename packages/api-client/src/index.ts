@@ -77,6 +77,8 @@ export interface Settings {
   accent: Accent;
   timezone: string;
   city: string;
+  quotaMb?: number;
+  digestTime?: string;
   widgetToken: string;
   apiToken: string;
 }
@@ -138,6 +140,8 @@ export interface FileRec {
   size: number;
   mime: string;
   shareToken?: string;
+  total: number;
+  done: number;
   createdAt: string;
 }
 
@@ -362,8 +366,8 @@ export class CalApi {
     return this.request(`/cards/${entryId}/move`, { method: "POST", body: JSON.stringify({ columnId, position }) });
   }
 
-  async startTimer(entryId?: string, note?: string): Promise<TimeEntry> {
-    return this.request("/timer/start", { method: "POST", body: JSON.stringify({ entryId, note }) });
+  async startTimer(entryId?: string, note?: string, planned?: number): Promise<TimeEntry> {
+    return this.request("/timer/start", { method: "POST", body: JSON.stringify({ entryId, note, planned }) });
   }
   async stopTimer(): Promise<TimeEntry> {
     return this.request("/timer/stop", { method: "POST", body: "{}" });
@@ -401,6 +405,14 @@ export class CalApi {
   async tags(): Promise<Record<string, number>> {
     return this.request("/tags");
   }
+  async timeLog(from?: string, to?: string): Promise<TimeEntry[]> {
+    const q = from && to ? `?from=${from}&to=${to}` : "";
+    return this.request(`/time/log${q}`);
+  }
+  async deleteTimeEntry(id: string): Promise<void> {
+    return this.request(`/time/log/${id}`, { method: "DELETE" });
+  }
+
   async agenda(days = 7): Promise<string> {
     const r = await fetch(`${this.baseUrl}/agenda?days=${days}`, { credentials: "include" });
     return r.text();
@@ -542,6 +554,8 @@ export interface Board {
   description: string;
   targetDate?: string;
   shareToken?: string;
+  total: number;
+  done: number;
   createdAt: string;
 }
 
@@ -560,6 +574,7 @@ export interface TimeEntry {
   startAt: string;
   endAt?: string;
   note: string;
+  planned?: number;
 }
 
 export interface ActivityItem {

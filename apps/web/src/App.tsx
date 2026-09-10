@@ -12,6 +12,7 @@ import { CalendarPage } from "./pages/CalendarPage";
 import { BoardsPage } from "./pages/BoardsPage";
 import { SharedBoardPage } from "./pages/SharedBoardPage";
 import { TagsPage } from "./pages/TagsPage";
+import { TimePage } from "./pages/TimePage";
 import { TrashPage } from "./pages/TrashPage";
 import { FilesPage } from "./pages/FilesPage";
 import { LinksPage } from "./pages/LinksPage";
@@ -134,6 +135,7 @@ function Shell() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/trash" element={<TrashPage />} />
           <Route path="/tags" element={<TagsPage />} />
+          <Route path="/time" element={<TimePage />} />
           <Route path="/share" element={<ShareTarget />} />
           <Route path="/entry/:id" element={<EntryDeepLink />} />
           <Route path="*" element={<Navigate to="/" replace />} />

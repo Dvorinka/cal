@@ -23,12 +23,13 @@ func (s *Server) startTimer(c *gin.Context) {
 	var body struct {
 		EntryID *string `json:"entryId"`
 		Note    string  `json:"note"`
+		Planned int     `json:"planned"`
 	}
 	_ = c.ShouldBindJSON(&body)
 	if body.EntryID != nil && *body.EntryID == "" {
 		body.EntryID = nil
 	}
-	t, err := s.store.StartTimer(c.Request.Context(), currentUser(c).ID, body.EntryID, body.Note)
+	t, err := s.store.StartTimer(c.Request.Context(), currentUser(c).ID, body.EntryID, body.Note, body.Planned)
 	if err != nil {
 		c.String(http.StatusConflict, "a timer is already running")
 		return
@@ -69,6 +70,29 @@ func (s *Server) timeSummary(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, sum)
+}
+
+// timeLog — the timesheet: finished sessions in a range.
+func (s *Server) timeLog(c *gin.Context) {
+	from := c.DefaultQuery("from", time.Now().AddDate(0, 0, -14).Format("2006-01-02"))
+	to := c.DefaultQuery("to", time.Now().Format("2006-01-02"))
+	items, err := s.store.TimeLog(c.Request.Context(), currentUser(c).ID, from, to)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "failed")
+		return
+	}
+	c.JSON(http.StatusOK, items)
+}
+
+func (s *Server) deleteTimeEntry(c *gin.Context) {
+	if err := s.store.DeleteTimeEntry(c.Request.Context(), currentUser(c).ID, c.Param("id")); errors.Is(err, store.ErrNotFound) {
+		c.String(http.StatusNotFound, "not found")
+		return
+	} else if err != nil {
+		c.String(http.StatusInternalServerError, "failed")
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 // --- Card activity ---

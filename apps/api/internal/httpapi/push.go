@@ -190,6 +190,35 @@ func pushTick(ctx context.Context, s pushStore, pub, priv string, send pushSend)
 		}
 		_ = s.MarkReminded(ctx, entry.ID)
 	}
+	// Daily digest: settings.digest_time per user, once per day.
+	if st, ok := s.(*store.Store); ok {
+		due, err := st.DigestDue(ctx)
+		if err != nil {
+			return
+		}
+		for _, d := range due {
+			subs, err := st.PushSubs(ctx, d.UserID)
+			if err != nil || len(subs) == 0 {
+				st.MarkDigestSent(ctx, d.UserID)
+				continue
+			}
+			payload, _ := json.Marshal(gin.H{
+				"title": "Good morning — your day",
+				"body":  d.Payload + " on the calendar today",
+				"tag":   "digest",
+			})
+			for _, sub := range subs {
+				status, err := send(payload, sub, pub, priv)
+				if err != nil {
+					continue
+				}
+				if status == http.StatusGone || status == http.StatusNotFound {
+					_ = st.DeletePushSub(ctx, sub.Endpoint)
+				}
+			}
+			st.MarkDigestSent(ctx, d.UserID)
+		}
+	}
 }
 
 // PushLoop fires due reminders every minute. Runs for the life of the process.

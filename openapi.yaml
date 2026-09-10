@@ -559,6 +559,12 @@ paths:
   /agenda:
     get:
       summary: Markdown agenda for ?days=N (1-60)
+  /time/log:
+    get:
+      summary: Finished sessions in ?from&to
+  /time/log/{id}:
+    delete:
+      summary: Delete a session
   /activity:
     get:
       summary: Date -> entry count map, last 120 days

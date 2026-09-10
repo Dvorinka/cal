@@ -172,6 +172,11 @@ Status legend: `[x]` shipped · `[/]` partially shipped · `[ ]` planned
       from the palette or Settings.
 - [x] **Note templates** — meeting notes / standup / decision log /
       project brief chips in an empty note editor.
+- [x] **Timesheet** — `/time` groups sessions by day with totals and
+      delete; pomodoro mode (`planned` minutes → countdown + notify).
+- [x] **Daily digest push** — `digest_time` in Settings; the push loop
+      sends one morning summary (open tasks + events) per day.
+- [x] **Board progress** — done/total chip on every board tile.
 
 ## Deliberately out of scope
 

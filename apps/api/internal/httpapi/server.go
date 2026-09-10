@@ -108,6 +108,8 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authed.POST("/timer/stop", server.stopTimer)
 	authed.GET("/timer/current", server.currentTimer)
 	authed.GET("/time/summary", server.timeSummary)
+	authed.GET("/time/log", server.timeLog)
+	authed.DELETE("/time/log/:id", server.deleteTimeEntry)
 	authed.GET("/entries/:id/activity", server.entryActivity)
 	authed.GET("/trash", server.listTrash)
 	authed.POST("/trash/:id/restore", server.restoreEntry)
@@ -618,6 +620,9 @@ func validSettings(settings store.Settings) bool {
 		if _, err := time.LoadLocation(settings.Timezone); err != nil {
 			return false
 		}
+	}
+	if settings.DigestTime != "" && !validTime(settings.DigestTime) {
+		return false
 	}
 	return len(settings.Country) == 2 && validTheme &&
 		(settings.WeekStart == "monday" || settings.WeekStart == "sunday")

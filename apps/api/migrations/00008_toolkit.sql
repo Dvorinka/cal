@@ -27,7 +27,11 @@ ALTER TABLE boards
   ADD COLUMN description TEXT NOT NULL DEFAULT '',
   ADD COLUMN target_date DATE,
   ADD COLUMN share_token TEXT UNIQUE;
+ALTER TABLE time_entries ADD COLUMN planned_minutes INT;
+ALTER TABLE settings ADD COLUMN digest_time TIME, ADD COLUMN digest_last DATE;
 -- +goose Down
+ALTER TABLE time_entries DROP COLUMN IF EXISTS planned_minutes;
+ALTER TABLE settings DROP COLUMN IF EXISTS digest_time, DROP COLUMN IF EXISTS digest_last;
 DROP TABLE IF EXISTS time_entries;
 DROP TABLE IF EXISTS card_activity;
 ALTER TABLE entries DROP COLUMN IF EXISTS deleted_at;
