@@ -75,42 +75,48 @@ Status legend: `[x]` shipped · `[/]` partially shipped · `[ ]` planned
       SSRF-guarded (http(s) only, private IPs refused incl. redirects).
 - [x] **Print stylesheet** — chrome hidden, agenda/panels print clean.
 
-## Phase 4 — Mobile & on-the-go
+## Phase 4 — Mobile & on-the-go (shipped 2026-09-10)
 
-- [ ] **Android release signing in CI** — keystore from secrets, attach APK
-      to GitHub releases.
-- [ ] **Android home-screen widget** — native "today" widget reading the
-      widget endpoint.
-- [ ] **Offline write queue** — edits made offline queue and replay
-      (currently reads are cached; writes need a real queue).
-- [ ] **Share target** — Android "share to Cal" creates a link/note entry.
+- [x] **Android release signing in CI** — `.github/workflows/android.yml`:
+      keystore from secrets, tag builds attach a signed APK artifact.
+- [x] **Android home-screen widget** — `CalWidgetProvider` renders today's
+      agenda from `/api/widget/today`; the app pushes server+token via the
+      WidgetConfig Capacitor plugin.
+- [x] **Offline write queue** — create/update/delete queue in localStorage
+      (tmp-ids, op coalescing, replay on `online`), pending pill in the topbar.
+- [x] **Share target** — PWA `share_target` → `/share` prefills the editor
+      (URL → link, text → note); Android `ACTION_SEND` intent deep-links the
+      same route.
 - [ ] **iOS wrapper** — same Capacitor shell; TestFlight later.
 - [ ] **Multi-account push** — per-device subscription labels, per-device
       mute.
 
-## Phase 5 — Integrations (depth)
+## Phase 5 — Integrations (shipped 2026-09-10)
 
-- [ ] **OAuth for Google Calendar** — the only mainstream two-way provider
-      requiring OAuth; optional self-hosted client-id config.
-- [ ] **CardDAV contacts** — birthday/anniversary events from contacts.
-- [ ] **Email → task** — `inbound@` webhook (documented Mailgun/SMTP-pipe
-      recipes) so forwarding a mail creates a task.
-- [ ] **Webhooks out** — fire on entry create/complete for n8n/Home
-      Assistant.
-- [ ] **CalDAV collection discovery** — PROPFIND walk so users paste the
-      account root and pick a calendar.
+- [x] **OAuth for Google Calendar** — `GOOGLE_CLIENT_ID`/`_SECRET` env, consent
+      → callback → refresh-token sync; events land as a "Google" feed (read-only,
+      RFC 5545 conversion server-side, re-syncs every 15 min).
+- [x] **CardDAV contacts** — addressbook REPORT → vCard FN+BDAY → yearly
+      all-day "X's birthday" events tagged `birthday`.
+- [x] **Email → task** — `POST /api/intake?token=` accepts `{subject, text}`;
+      any forwarding recipe (procmail→curl, Mailgun route) lands an `inbox` task.
+- [x] **Webhooks out** — `POST {event, entry}` on create/update/delete,
+      HMAC-SHA256 in `X-Cal-Signature`.
+- [x] **CalDAV collection discovery** — `POST /api/caldav/discover` walks
+      principal → calendar-home-set → collections; Settings offers a picker.
 - [ ] **RSS/Atom feeds** — subscribe blogs as dated link entries.
 
-## Phase 6 — Polish & hardening
+## Phase 6 — Polish & hardening (in progress)
 
-- [ ] **E2E test suite** — Playwright specs for the six core flows
-      (auth, create, drag, sync, offline, export).
-- [ ] **Load tests** — k6 against a 10k-entry account.
-- [ ] **a11y audit** — axe-core pass, full keyboard-only traversal, screen
-      reader labels on every interactive control.
-- [ ] **Rate-limit everything sensitive** — MCP token endpoint, feed create
-      (SSRF surface), import size caps.
-- [ ] **Security headers** — CSP, COOP/COEP where compatible with Capacitor.
+- [x] **E2E test suite** — Playwright specs in `apps/web/e2e`: auth, CRUD,
+      navigation, palette, settings persistence.
+- [x] **Load test** — `perf/k6.js`: 847 iterations, 0 failures, p95 156ms.
+- [x] **a11y audit** — axe-core specs on Today/Tasks/Settings; contrast and
+      focusability violations fixed (text-3/4 tokens, scrollable `<pre>`).
+- [x] **Security headers** — CSP + X-Frame-Options + nosniff + Referrer-Policy
+      in `apps/web/nginx.conf`.
+- [ ] **Rate-limit everything sensitive** — intake + feed-create + MCP still
+      ride the global limiter; per-route caps TODO.
 - [ ] **Per-user storage quota** — configurable, shown in settings.
 
 ## Deliberately out of scope

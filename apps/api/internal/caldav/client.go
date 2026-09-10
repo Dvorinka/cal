@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -174,4 +175,104 @@ func (c *Client) DeleteEvent(ctx context.Context, href string) error {
 		return fmt.Errorf("delete failed: %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// Collection is one calendar collection discovered on the server.
+type Collection struct {
+	Href string `json:"href"`
+	Name string `json:"name"`
+}
+
+// Discover walks principal → calendar-home-set → child collections so the UI
+// can offer a picker instead of requiring a raw collection URL.
+func Discover(ctx context.Context, baseURL, username, password string) ([]Collection, error) {
+	c := New(baseURL, username, password)
+
+	// 1. current-user-principal on the server root.
+	principal, err := c.propValue(ctx, c.url, `<D:propfind xmlns:D="DAV:"><D:prop><D:current-user-principal/></D:prop></D:propfind>`, "current-user-principal")
+	if err != nil {
+		return nil, err
+	}
+	if principal == "" {
+		// Some servers accept PROPFIND on the collection directly — try base as home-set.
+		principal = c.url
+	}
+	principalURL := c.objectURL(principal)
+
+	// 2. calendar-home-set on the principal.
+	home, err := c.propValue(ctx, principalURL, `<D:propfind xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><C:calendar-home-set/></D:prop></D:propfind>`, "calendar-home-set")
+	if err != nil || home == "" {
+		return nil, fmt.Errorf("no calendar-home-set (status ok but empty)")
+	}
+	homeURL := c.objectURL(home)
+
+	// 3. Depth:1 on the home-set → child collections.
+	body := `<?xml version="1.0" encoding="utf-8"?>
+<D:propfind xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop><D:resourcetype/><D:displayname/></D:prop>
+</D:propfind>`
+	resp, err := c.do(ctx, "PROPFIND", homeURL, "application/xml", []byte(body), "1")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return nil, err
+	}
+	type resp2 struct {
+		Href     string `xml:"href"`
+		PropStat []struct {
+			Prop struct {
+				Name string `xml:"displayname"`
+				RT   struct {
+					Cal []struct{} `xml:"calendar"`
+				} `xml:"resourcetype"`
+			} `xml:"prop"`
+		} `xml:"propstat"`
+	}
+	var ms struct {
+		Responses []resp2 `xml:"response"`
+	}
+	if err := xml.Unmarshal(data, &ms); err != nil {
+		return nil, fmt.Errorf("parse home-set: %w", err)
+	}
+	var out []Collection
+	for _, r := range ms.Responses {
+		for _, ps := range r.PropStat {
+			if len(ps.Prop.RT.Cal) == 0 {
+				continue // not a calendar collection
+			}
+			name := ps.Prop.Name
+			if name == "" {
+				name = r.Href
+			}
+			out = append(out, Collection{Href: c.objectURL(r.Href), Name: name})
+			break
+		}
+	}
+	return out, nil
+}
+
+// propValue extracts the href inside a single-prop PROPFIND response.
+func (c *Client) propValue(ctx context.Context, url, body, tag string) (string, error) {
+	resp, err := c.do(ctx, "PROPFIND", url, "application/xml", []byte(body), "0")
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized {
+		return "", fmt.Errorf("authentication failed")
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return "", err
+	}
+	// Tags may carry any namespace prefix (<C:calendar-home-set> or bare).
+	// Extract the <href> inside the named prop.
+	re := regexp.MustCompile(`(?is)<(?:[A-Za-z0-9]+:)?` + tag + `[^>]*>.*?<(?:[A-Za-z0-9]+:)?href[^>]*>(.*?)</(?:[A-Za-z0-9]+:)?href>`)
+	if m := re.FindSubmatch(data); m != nil {
+		return strings.TrimSpace(string(m[1])), nil
+	}
+	return "", nil
 }

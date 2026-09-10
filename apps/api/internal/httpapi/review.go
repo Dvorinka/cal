@@ -105,10 +105,10 @@ func (s *Server) habitStreaks(c *gin.Context) {
 		done[k][e.Date] = true
 	}
 	type habit struct {
-		ID      string `json:"id"`
-		Title   string `json:"title"`
-		Recur   string `json:"recur"`
-		Streak  int    `json:"streak"`
+		ID       string `json:"id"`
+		Title    string `json:"title"`
+		Recur    string `json:"recur"`
+		Streak   int    `json:"streak"`
 		LastDone string `json:"lastDone,omitempty"`
 	}
 	out := []habit{}

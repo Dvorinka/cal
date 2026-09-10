@@ -86,18 +86,19 @@ export function EntryEditor() {
 
   useEffect(() => {
     if (editor.mode === "create") {
-      setTitle("");
-      setType("task");
+      const p = editor.prefill ?? {};
+      setTitle(p.title ?? "");
+      setType((p.type as typeof type) ?? "task");
       setDate(editor.date);
       setStartTime(editor.startTime ?? "");
       setEndTime(editor.startTime ? addHour(editor.startTime) : "");
       setRecur("none");
       setRemind("");
       setAccountId("");
-      setLinkUrl("");
+      setLinkUrl(p.linkUrl ?? "");
       setColor("slate");
       setTags("");
-      setContent("");
+      setContent(p.content ?? "");
       setNoteMode("write");
       setShowHistory(false);
       setRevisions([]);

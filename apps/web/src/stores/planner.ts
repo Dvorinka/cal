@@ -22,6 +22,7 @@ import {
   readCachedUser,
 } from "../lib/offline";
 import { ApiError } from "@cal/api-client";
+import { enqueue, isOfflineError, newTempId, readQueue, writeQueue } from "../lib/opqueue";
 
 export interface Toast {
   id: number;
@@ -30,6 +31,17 @@ export interface Toast {
 }
 
 let toastSeq = 0;
+
+// pushWidgetConfig hands the Android home widget the server origin + the
+// read-only widget token. No-ops outside the Capacitor shell.
+function pushWidgetConfig(settings: Settings) {
+  try {
+    const cap = (window as unknown as { Capacitor?: { Plugins?: Record<string, { set?: (v: unknown) => Promise<void> }> } }).Capacitor;
+    void cap?.Plugins?.WidgetConfig?.set?.({ server: location.origin, widgetToken: settings.widgetToken });
+  } catch {
+    /* not in the app */
+  }
+}
 
 interface PlannerState {
   api: CalApi;
@@ -43,6 +55,7 @@ interface PlannerState {
   settings: Settings;
   loading: boolean;
   offline: boolean;
+  pendingOps: number;
   error?: string;
   toasts: Toast[];
   bootstrap: () => Promise<void>;
@@ -71,6 +84,7 @@ interface PlannerState {
   updateSettings: (settings: Settings) => Promise<void>;
   toast: (message: string, action?: Toast["action"]) => void;
   dismissToast: (id: number) => void;
+  flushQueue: () => Promise<void>;
 }
 
 export const usePlanner = create<PlannerState>((set, get) => ({
@@ -85,6 +99,7 @@ export const usePlanner = create<PlannerState>((set, get) => ({
   loading: false,
   booted: false,
   offline: false,
+  pendingOps: readQueue().length,
   toasts: [],
 
   async bootstrap() {
@@ -93,8 +108,10 @@ export const usePlanner = create<PlannerState>((set, get) => ({
       const settings = await get().api.settings();
       cacheSettings(settings);
       cacheUser(user);
+      pushWidgetConfig(settings);
       set({ user, settings, booted: true, offline: false });
       void get().loadCountries();
+      void get().flushQueue();
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         set({ user: undefined, booted: true });
@@ -111,6 +128,7 @@ export const usePlanner = create<PlannerState>((set, get) => ({
     const settings = await get().api.settings();
     cacheSettings(settings);
     cacheUser(user);
+    pushWidgetConfig(settings);
     set({ user, settings, error: undefined, offline: false });
     void get().loadCountries();
   },
@@ -120,6 +138,7 @@ export const usePlanner = create<PlannerState>((set, get) => ({
     const settings = await get().api.settings();
     cacheSettings(settings);
     cacheUser(user);
+    pushWidgetConfig(settings);
     set({ user, settings, error: undefined, offline: false });
     void get().loadCountries();
   },
@@ -139,6 +158,7 @@ export const usePlanner = create<PlannerState>((set, get) => ({
       const entries = await get().api.entries(params);
       cacheEntries(entries);
       set({ entries, loading: false, offline: false, error: undefined });
+      void get().flushQueue();
     } catch (error) {
       set({
         entries: readCachedEntries(),
@@ -157,8 +177,34 @@ export const usePlanner = create<PlannerState>((set, get) => ({
       set({ entries, offline: false });
       return entry;
     } catch (error) {
-      get().toast(error instanceof Error ? error.message : "Failed to create entry");
-      return undefined;
+      if (!isOfflineError(error)) {
+        get().toast(error instanceof Error ? error.message : "Failed to create entry");
+        return undefined;
+      }
+      // Offline: queue the create, show a temp entry so the UI stays live.
+      const tempId = newTempId();
+      enqueue({ kind: "create", id: tempId, input });
+      const tmp: Entry = {
+        id: tempId,
+        title: input.title,
+        content: input.content ?? "",
+        type: input.type ?? "task",
+        linkUrl: input.linkUrl,
+        date: input.date,
+        startTime: input.startTime || undefined,
+        endTime: input.endTime || undefined,
+        completed: false,
+        color: input.color ?? "slate",
+        tags: input.tags ?? [],
+        recur: input.recur ?? "none",
+        remind: input.remind ?? undefined,
+        createdAt: new Date().toISOString(),
+      };
+      const entries = [...get().entries, tmp];
+      cacheEntries(entries);
+      set({ entries, offline: true, pendingOps: readQueue().length });
+      get().toast("Saved offline — will sync when back");
+      return tmp;
     }
   },
 
@@ -185,6 +231,13 @@ export const usePlanner = create<PlannerState>((set, get) => ({
         set({ entries });
       }
     } catch (error) {
+      if (isOfflineError(error)) {
+        // Keep the optimistic state; queue the patch for replay.
+        enqueue({ kind: "update", id, patch });
+        set({ offline: true, pendingOps: readQueue().length });
+        get().toast("Saved offline — will sync when back");
+        return;
+      }
       set({ entries: before });
       cacheEntries(before);
       get().toast(error instanceof Error ? error.message : "Failed to save entry");
@@ -219,10 +272,49 @@ export const usePlanner = create<PlannerState>((set, get) => ({
         });
       }
     } catch (error) {
+      if (isOfflineError(error)) {
+        enqueue({ kind: "delete", id });
+        set({ offline: true, pendingOps: readQueue().length });
+        get().toast("Deleted offline — will sync when back");
+        return;
+      }
       set({ entries: snapshot });
       cacheEntries(snapshot);
       get().toast(error instanceof Error ? error.message : "Failed to delete entry");
     }
+  },
+
+  // flushQueue replays pending mutations in order; creates swap tmp ids.
+  async flushQueue() {
+    const ops = readQueue();
+    if (ops.length === 0) return;
+    const idMap = new Map<string, string>();
+    for (const op of ops) {
+      const id = idMap.get(op.id) ?? op.id;
+      try {
+        if (op.kind === "create") {
+          const entry = await get().api.createEntry(op.input);
+          idMap.set(op.id, entry.id);
+        } else if (op.kind === "update") {
+          if (!id.startsWith("tmp-")) await get().api.updateEntry(id, op.patch);
+        } else if (op.kind === "delete") {
+          if (!id.startsWith("tmp-")) await get().api.deleteEntry(id);
+        }
+      } catch (error) {
+        if (isOfflineError(error)) {
+          // Still offline — keep this op and everything after it.
+          const idx = ops.indexOf(op);
+          writeQueue(ops.slice(idx));
+          set({ pendingOps: ops.length - idx });
+          return;
+        }
+        // Real error (e.g. 4xx): drop the op, keep flushing the rest.
+      }
+    }
+    writeQueue([]);
+    set({ pendingOps: 0 });
+    await get().loadEntries({});
+    get().toast("Offline changes synced");
   },
 
   async loadHolidays(country, year) {

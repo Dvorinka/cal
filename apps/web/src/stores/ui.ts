@@ -2,9 +2,16 @@ import type { Entry } from "@cal/api-client";
 import { create } from "zustand";
 import { addDays, addMonths, todayIso, type CalendarView } from "../lib/date";
 
+export interface EditorPrefill {
+  title?: string;
+  content?: string;
+  linkUrl?: string;
+  type?: string;
+}
+
 export type EditorState =
   | { mode: "closed" }
-  | { mode: "create"; date: string; startTime?: string }
+  | { mode: "create"; date: string; startTime?: string; prefill?: EditorPrefill }
   | { mode: "edit"; entry: Entry };
 
 export interface ContextMenuState {
@@ -30,7 +37,7 @@ interface UiState {
   selectDate: (date: string) => void;
   openPalette: () => void;
   closePalette: () => void;
-  openCreate: (date?: string, startTime?: string) => void;
+  openCreate: (date?: string, startTime?: string, prefill?: EditorPrefill) => void;
   openEdit: (entry: Entry) => void;
   closeEditor: () => void;
   setContextMenu: (menu?: ContextMenuState) => void;
@@ -99,8 +106,8 @@ export const useUi = create<UiState>((set, get) => ({
   closePalette() {
     set({ paletteOpen: false });
   },
-  openCreate(date, startTime) {
-    set({ editor: { mode: "create", date: date ?? get().selectedDate, startTime }, contextMenu: undefined });
+  openCreate(date, startTime, prefill) {
+    set({ editor: { mode: "create", date: date ?? get().selectedDate, startTime, prefill }, contextMenu: undefined });
   },
   openEdit(entry) {
     set({ editor: { mode: "edit", entry }, contextMenu: undefined });

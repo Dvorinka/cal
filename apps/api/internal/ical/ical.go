@@ -296,14 +296,14 @@ func parseTime(p *prop) (time.Time, bool, error) {
 }
 
 var windowsTZ = map[string]string{
-	"W. Europe Standard Time":     "Europe/Berlin",
+	"W. Europe Standard Time":        "Europe/Berlin",
 	"Central European Standard Time": "Europe/Budapest",
-	"GMT Standard Time":           "Europe/London",
-	"Eastern Standard Time":       "America/New_York",
-	"Central Standard Time":       "America/Chicago",
-	"Mountain Standard Time":      "America/Denver",
-	"Pacific Standard Time":       "America/Los_Angeles",
-	"UTC":                         "UTC",
+	"GMT Standard Time":              "Europe/London",
+	"Eastern Standard Time":          "America/New_York",
+	"Central Standard Time":          "America/Chicago",
+	"Mountain Standard Time":         "America/Denver",
+	"Pacific Standard Time":          "America/Los_Angeles",
+	"UTC":                            "UTC",
 }
 
 func mapWindowsTZ(tz string) string {

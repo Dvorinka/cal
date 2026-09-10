@@ -18,6 +18,7 @@ export function TopBar({ weekStart }: { weekStart: WeekStartPref }) {
   const openPalette = useUi((state) => state.openPalette);
   const toggleSidebar = useUi((state) => state.toggleSidebar);
   const offline = usePlanner((state) => state.offline);
+  const pendingOps = usePlanner((state) => state.pendingOps);
 
   return (
     <header className="topbar">
@@ -27,9 +28,9 @@ export function TopBar({ weekStart }: { weekStart: WeekStartPref }) {
       <div>
         <h1>{formatHeading(view, anchor, weekStart)}</h1>
       </div>
-      {offline && (
-        <span className="offline-note">
-          <WifiOff size={11} /> Offline
+      {(offline || pendingOps > 0) && (
+        <span className="offline-note" title={pendingOps > 0 ? `${pendingOps} change${pendingOps === 1 ? "" : "s"} will sync when back online` : "Offline"}>
+          <WifiOff size={11} /> {pendingOps > 0 ? `${pendingOps} pending` : "Offline"}
         </span>
       )}
       <span className="spacer" />

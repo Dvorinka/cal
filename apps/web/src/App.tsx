@@ -1,6 +1,6 @@
 import { CalendarDays } from "lucide-react";
 import { useEffect } from "react";
-import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { AuthPanel } from "./components/AuthPanel";
 import { BottomNav } from "./components/BottomNav";
 import { CommandPalette } from "./components/CommandPalette";
@@ -115,6 +115,7 @@ function Shell() {
           <Route path="/notes" element={<NotesPage />} />
           <Route path="/links" element={<LinksPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/share" element={<ShareTarget />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </section>
@@ -127,12 +128,42 @@ function Shell() {
   );
 }
 
+// ShareTarget receives PWA share_target GETs (?title=&text=&url=) and opens
+// the editor prefilled — a shared URL becomes a link entry, text a note.
+function ShareTarget() {
+  const [params] = useSearchParams();
+  const openCreate = useUi((s) => s.openCreate);
+  const navigate = useNavigate();
+  useEffect(() => {
+    const url = params.get("url") ?? "";
+    const title = params.get("title") ?? "";
+    const text = params.get("text") ?? "";
+    const isLink = /^https?:\/\//i.test(url || text);
+    openCreate(undefined, undefined, {
+      title: title || (isLink ? "" : text).slice(0, 120),
+      linkUrl: url || (isLink ? text : ""),
+      content: isLink ? "" : text,
+      type: isLink ? "link" : "note",
+    });
+    navigate("/", { replace: true });
+  }, [params, openCreate, navigate]);
+  return null;
+}
+
 export function App() {
   const { booted, bootstrap, settings } = usePlanner();
+  const flushQueue = usePlanner((s) => s.flushQueue);
 
   useEffect(() => {
     void bootstrap();
   }, [bootstrap]);
+
+  // Replay offline mutations whenever connectivity returns.
+  useEffect(() => {
+    const on = () => void flushQueue();
+    window.addEventListener("online", on);
+    return () => window.removeEventListener("online", on);
+  }, [flushQueue]);
 
   // Resolve theme: light | dark | system (follows prefers-color-scheme live).
   useEffect(() => {

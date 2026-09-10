@@ -498,6 +498,68 @@ paths:
           description: File bytes
         "404":
           description: Not found / not owned
+  /webhooks:
+    get:
+      summary: List outbound webhooks
+    post:
+      summary: Register a webhook (HMAC secret returned)
+      responses:
+        "201":
+          description: Created
+  /webhooks/{id}:
+    delete:
+      summary: Remove a webhook
+  /intake:
+    post:
+      summary: "Email-to-task intake — {subject, text?, date?} → task"
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+          description: API token (settings.apiToken)
+      responses:
+        "201":
+          description: Task created
+  /caldav/discover:
+    post:
+      summary: List calendar collections under a base URL (principal → home-set)
+      responses:
+        "200":
+          description: "[{href, name}]"
+  /carddav:
+    post:
+      summary: Connect an addressbook and import BDAY contacts as yearly events
+      responses:
+        "201":
+          description: "{imported, found}"
+  /carddav/{id}/sync:
+    post:
+      summary: Re-pull birthdays for a CardDAV account
+  /carddav/{id}:
+    delete:
+      summary: Disconnect a CardDAV account
+  /google/connect:
+    get:
+      summary: Google OAuth consent URL (requires GOOGLE_CLIENT_ID/SECRET env)
+      responses:
+        "200":
+          description: "{url}"
+        "501":
+          description: Not configured
+  /google/callback:
+    get:
+      summary: OAuth redirect — exchanges code, stores tokens, syncs, redirects to /settings
+  /google/status:
+    get:
+      summary: "{connected: bool}"
+  /google/sync:
+    post:
+      summary: Force a Google Calendar sync
+  /google:
+    delete:
+      summary: Disconnect Google (removes tokens + synthetic feed)
   /push/vapid:
     get:
       responses:

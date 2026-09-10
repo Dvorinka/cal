@@ -32,18 +32,18 @@ const entryCols = `id::text, title, content, type, link_url, date::text,
 	account_id::text, external_uid, external_href, external_etag, dirty`
 
 type Entry struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
-	Content   string    `json:"content,omitempty"`
-	Type      string    `json:"type"`
-	LinkURL   string    `json:"linkUrl,omitempty"`
-	Date      string    `json:"date"`
-	StartTime *string   `json:"startTime,omitempty"`
-	EndTime   *string   `json:"endTime,omitempty"`
-	Completed bool      `json:"completed"`
-	Color     string    `json:"color"`
-	Tags      []string  `json:"tags"`
-	Recur     string    `json:"recur"`
+	ID           string    `json:"id"`
+	Title        string    `json:"title"`
+	Content      string    `json:"content,omitempty"`
+	Type         string    `json:"type"`
+	LinkURL      string    `json:"linkUrl,omitempty"`
+	Date         string    `json:"date"`
+	StartTime    *string   `json:"startTime,omitempty"`
+	EndTime      *string   `json:"endTime,omitempty"`
+	Completed    bool      `json:"completed"`
+	Color        string    `json:"color"`
+	Tags         []string  `json:"tags"`
+	Recur        string    `json:"recur"`
 	Remind       *int      `json:"remind,omitempty"`
 	CreatedAt    time.Time `json:"createdAt"`
 	OwnerID      string    `json:"-"`
@@ -68,6 +68,7 @@ type Settings struct {
 	Accent       string `json:"accent"`
 	Timezone     string `json:"timezone"`
 	City         string `json:"city"`
+	QuotaMB      int    `json:"quotaMb"`
 	WidgetToken  string `json:"widgetToken"`
 	ApiToken     string `json:"apiToken"`
 }
@@ -591,6 +592,45 @@ func (s *Store) RestoreRevision(ctx context.Context, userID, entryID, revID stri
 	return tx.Commit(ctx)
 }
 
+// Webhook is a user-registered outbound endpoint.
+type Webhook struct {
+	ID        string    `json:"id"`
+	URL       string    `json:"url"`
+	Secret    string    `json:"secret"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+func (s *Store) Webhooks(ctx context.Context, userID string) ([]Webhook, error) {
+	rows, err := s.db.Query(ctx, `SELECT id::text, url, secret, created_at FROM webhooks WHERE user_id = $1 ORDER BY created_at`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Webhook{}
+	for rows.Next() {
+		var w Webhook
+		if err := rows.Scan(&w.ID, &w.URL, &w.Secret, &w.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, w)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) CreateWebhook(ctx context.Context, userID, url, secret string) (Webhook, error) {
+	var w Webhook
+	err := s.db.QueryRow(ctx, `
+		INSERT INTO webhooks (user_id, url, secret) VALUES ($1, $2, $3)
+		RETURNING id::text, url, secret, created_at
+	`, userID, url, secret).Scan(&w.ID, &w.URL, &w.Secret, &w.CreatedAt)
+	return w, err
+}
+
+func (s *Store) DeleteWebhook(ctx context.Context, userID, id string) error {
+	_, err := s.db.Exec(ctx, `DELETE FROM webhooks WHERE id = $1 AND user_id = $2`, id, userID)
+	return err
+}
+
 // Entry returns one entry owned by the user.
 func (s *Store) Entry(ctx context.Context, userID, id string) (Entry, error) {
 	var e Entry
@@ -619,8 +659,8 @@ func (s *Store) entryTx(ctx context.Context, tx pgx.Tx, userID, id string) (Entr
 func (s *Store) Settings(ctx context.Context, userID string) (Settings, error) {
 	var settings Settings
 	err := s.db.QueryRow(ctx, `
-		SELECT country, show_holidays, theme, week_start, accent, timezone, coalesce(city, ''), widget_token, api_token FROM settings WHERE user_id = $1
-	`, userID).Scan(&settings.Country, &settings.ShowHolidays, &settings.Theme, &settings.WeekStart, &settings.Accent, &settings.Timezone, &settings.City, &settings.WidgetToken, &settings.ApiToken)
+		SELECT country, show_holidays, theme, week_start, accent, timezone, coalesce(city, ''), quota_mb, widget_token, api_token FROM settings WHERE user_id = $1
+	`, userID).Scan(&settings.Country, &settings.ShowHolidays, &settings.Theme, &settings.WeekStart, &settings.Accent, &settings.Timezone, &settings.City, &settings.QuotaMB, &settings.WidgetToken, &settings.ApiToken)
 	return settings, err
 }
 
@@ -637,9 +677,9 @@ func (s *Store) UpdateSettings(ctx context.Context, userID string, settings Sett
 		    accent = EXCLUDED.accent,
 		    timezone = EXCLUDED.timezone,
 		    city = EXCLUDED.city
-		RETURNING country, show_holidays, theme, week_start, accent, timezone, coalesce(city, ''), widget_token, api_token
+		RETURNING country, show_holidays, theme, week_start, accent, timezone, coalesce(city, ''), quota_mb, widget_token, api_token
 	`, userID, settings.Country, settings.ShowHolidays, settings.Theme, settings.WeekStart, settings.Accent, settings.Timezone, settings.City).
-		Scan(&out.Country, &out.ShowHolidays, &out.Theme, &out.WeekStart, &out.Accent, &out.Timezone, &out.City, &out.WidgetToken, &out.ApiToken)
+		Scan(&out.Country, &out.ShowHolidays, &out.Theme, &out.WeekStart, &out.Accent, &out.Timezone, &out.City, &out.QuotaMB, &out.WidgetToken, &out.ApiToken)
 	return out, err
 }
 
@@ -870,6 +910,124 @@ func (s *Store) DeleteCaldavAccount(ctx context.Context, userID, id string) erro
 func (s *Store) TouchCaldavSync(ctx context.Context, id string) error {
 	_, err := s.db.Exec(ctx, `UPDATE caldav_accounts SET last_synced = now() WHERE id = $1`, id)
 	return err
+}
+
+// CarddavAccount is a connected addressbook (birthdays sync).
+type CarddavAccount struct {
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	URL         string     `json:"url"`
+	Username    string     `json:"username"`
+	PasswordEnc string     `json:"-"`
+	LastSynced  *time.Time `json:"lastSynced,omitempty"`
+}
+
+func (s *Store) CreateCarddavAccount(ctx context.Context, userID, name, url, username, passwordEnc string) error {
+	_, err := s.db.Exec(ctx, `
+		INSERT INTO carddav_accounts (id, user_id, name, url, username, password_enc)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`, uuid.NewString(), userID, name, url, username, passwordEnc)
+	return err
+}
+
+func (s *Store) CarddavAccounts(ctx context.Context, userID string) ([]CarddavAccount, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT id::text, name, url, username, last_synced FROM carddav_accounts WHERE user_id = $1 ORDER BY created_at
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []CarddavAccount{}
+	for rows.Next() {
+		var a CarddavAccount
+		if err := rows.Scan(&a.ID, &a.Name, &a.URL, &a.Username, &a.LastSynced); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) CarddavAccountWithSecret(ctx context.Context, id string) (CarddavAccount, string, error) {
+	var a CarddavAccount
+	var userID string
+	err := s.db.QueryRow(ctx, `
+		SELECT id::text, user_id::text, name, url, username, password_enc FROM carddav_accounts WHERE id = $1
+	`, id).Scan(&a.ID, &userID, &a.Name, &a.URL, &a.Username, &a.PasswordEnc)
+	return a, userID, err
+}
+
+func (s *Store) DeleteCarddavAccount(ctx context.Context, userID, id string) error {
+	_, err := s.db.Exec(ctx, `DELETE FROM carddav_accounts WHERE id = $1 AND user_id = $2`, id, userID)
+	return err
+}
+
+func (s *Store) TouchCarddavSync(ctx context.Context, id string) error {
+	_, err := s.db.Exec(ctx, `UPDATE carddav_accounts SET last_synced = now() WHERE id = $1`, id)
+	return err
+}
+
+// GoogleToken holds one user's OAuth state; the matching events live as a
+// feed's cached ICS so the existing feed pipeline renders them.
+type GoogleToken struct {
+	UserID        string
+	FeedID        string
+	RefreshEnc    string
+	AccessEnc     string
+	AccessExpires time.Time
+	CalendarID    string
+}
+
+func (s *Store) UpsertGoogleToken(ctx context.Context, userID, feedID, refreshEnc, accessEnc string, expires time.Time) error {
+	_, err := s.db.Exec(ctx, `
+		INSERT INTO google_tokens (user_id, feed_id, refresh_enc, access_enc, access_expires)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (user_id) DO UPDATE SET
+		  feed_id = $2, refresh_enc = $3, access_enc = $4, access_expires = $5
+	`, userID, feedID, refreshEnc, accessEnc, expires)
+	return err
+}
+
+func (s *Store) GoogleToken(ctx context.Context, userID string) (GoogleToken, error) {
+	var t GoogleToken
+	err := s.db.QueryRow(ctx, `
+		SELECT user_id::text, coalesce(feed_id::text, ''), refresh_enc, access_enc, access_expires, calendar_id
+		FROM google_tokens WHERE user_id = $1
+	`, userID).Scan(&t.UserID, &t.FeedID, &t.RefreshEnc, &t.AccessEnc, &t.AccessExpires, &t.CalendarID)
+	return t, err
+}
+
+func (s *Store) UpdateGoogleAccess(ctx context.Context, userID, accessEnc string, expires time.Time) error {
+	_, err := s.db.Exec(ctx, `UPDATE google_tokens SET access_enc = $2, access_expires = $3, last_synced = now() WHERE user_id = $1`,
+		userID, accessEnc, expires)
+	return err
+}
+
+func (s *Store) DeleteGoogleToken(ctx context.Context, userID string) error {
+	_, err := s.db.Exec(ctx, `DELETE FROM google_tokens WHERE user_id = $1`, userID)
+	return err
+}
+
+// AllGoogleTokens lists every connected account for the background sync loop.
+func (s *Store) AllGoogleTokens(ctx context.Context) ([]GoogleToken, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT user_id::text, coalesce(feed_id::text, ''), refresh_enc, access_enc, access_expires, calendar_id
+		FROM google_tokens
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []GoogleToken
+	for rows.Next() {
+		var t GoogleToken
+		if err := rows.Scan(&t.UserID, &t.FeedID, &t.RefreshEnc, &t.AccessEnc, &t.AccessExpires, &t.CalendarID); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
 }
 
 // AccountEntries returns all entries belonging to a CalDAV account.

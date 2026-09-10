@@ -23,9 +23,26 @@ and it's yours.
   calendars); external events render read-only beside your own
 - **CalDAV two-way sync** — connect Nextcloud, Radicale, Baikal or Fastmail
   collections; events flow both directions on a 15-minute cycle, deletes
-  propagate, credentials AES-encrypted at rest
-- **.ics import** — drop in a calendar file; events land as real entries,
-  recurring rules expand
+  propagate, credentials AES-encrypted at rest. Collection discovery walks the
+  server for you — paste the account root, pick a calendar
+- **Google Calendar** — OAuth connect (self-hosted client id/secret); events
+  sync read-only into a toggleable "Google" feed every 15 minutes
+- **CardDAV birthdays** — connect an addressbook; contacts with birthdays
+  become yearly all-day events
+- **Webhooks out** — POST `entry.created|updated|deleted` to any URL, signed
+  with HMAC-SHA256 for n8n/Home Assistant
+- **Email → task** — `POST /api/intake?token=` accepts `{subject, text}`;
+  point any mail-forwarding recipe at it
+- **.ics import + export** — drop in a calendar file, or subscribe to
+  `/api/feed.ics?token=` to read your own planner in any calendar app
+- **Offline write queue** — edits made offline persist and replay in order on
+  reconnect; a pending-ops pill shows the backlog
+- **Share target** — PWA share_target + Android `ACTION_SEND` prefill the
+  editor (URL → link, text → note)
+- **Android home widget** — native today-agenda widget backed by the
+  token-gated widget endpoint
+- **Entry history** — every save snapshots the prior version; restore any of
+  them from the editor
 - **Web push** — VAPID-based push for reminders, fires even with the tab closed
 - **Natural-language quick add** — `dentist fri 5pm #health` parses the date,
   time and tags on the Tasks page
@@ -122,7 +139,27 @@ point a client at it:
 ```
 
 Tools: `list_entries`, `today`, `create_entry`, `update_entry`, `delete_entry`,
-`list_feeds`.
+`list_feeds`, `get_entry`, `append_note`, `search_entries`, `list_accounts`.
+Resources `cal://today`, `cal://week`, `cal://open-tasks`; prompts
+`daily-plan`, `weekly-review`.
+
+## Integrations & webhooks
+
+- **Google**: set `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` on the API
+  (Google Cloud → OAuth consent → `calendar.readonly` scope), then Settings →
+  Google Calendar → Connect.
+- **Webhooks**: Settings → Webhooks. Each POST body `{"event","at","entry"}`;
+  verify `X-Cal-Signature` as hex HMAC-SHA256 of the raw body with the shown
+  secret.
+- **Email intake**: `curl -X POST 'https://host/api/intake?token=<apiToken>'
+  -d '{"subject":"…","text":"…"}'` — a Mailgun route or `procmail | curl`
+  recipe turns mail into tasks tagged `inbox`.
+
+## Testing
+
+`npm test` runs vitest units; `cd apps/web && npx playwright test` runs the
+Playwright + axe E2E suite against the dev stack; `k6 run perf/k6.js -e
+EMAIL=… -e PASS=…` load-tests the entry pipeline.
 
 ## Layout
 

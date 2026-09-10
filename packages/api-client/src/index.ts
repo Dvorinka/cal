@@ -95,6 +95,13 @@ export interface Habit {
   lastDone?: string;
 }
 
+export interface Webhook {
+  id: string;
+  url: string;
+  secret: string;
+  createdAt: string;
+}
+
 export interface Unfurl {
   title: string;
   favicon: string;
@@ -253,6 +260,46 @@ export class CalApi {
 
   async unfurl(url: string): Promise<Unfurl> {
     return this.request<Unfurl>(`/unfurl?url=${encodeURIComponent(url)}`);
+  }
+
+  async webhooks(): Promise<Webhook[]> {
+    return this.request("/webhooks");
+  }
+
+  async addWebhook(url: string): Promise<Webhook> {
+    return this.request("/webhooks", { method: "POST", body: JSON.stringify({ url }) });
+  }
+
+  async deleteWebhook(id: string): Promise<void> {
+    return this.request(`/webhooks/${id}`, { method: "DELETE" });
+  }
+
+  async discoverCaldav(input: { url: string; username: string; password: string }): Promise<{ href: string; name: string }[]> {
+    return this.request("/caldav/discover", { method: "POST", body: JSON.stringify(input) });
+  }
+
+  async connectCarddav(input: { name?: string; url: string; username: string; password: string }): Promise<{ imported: number; found: number }> {
+    return this.request("/carddav", { method: "POST", body: JSON.stringify(input) });
+  }
+
+  async googleStatus(): Promise<{ connected: boolean }> {
+    return this.request("/google/status");
+  }
+
+  async googleConnect(): Promise<{ url: string }> {
+    return this.request("/google/connect");
+  }
+
+  async googleSync(): Promise<void> {
+    return this.request("/google/sync", { method: "POST" });
+  }
+
+  async googleDisconnect(): Promise<void> {
+    return this.request("/google", { method: "DELETE" });
+  }
+
+  async storage(): Promise<{ usedBytes: number; quotaBytes: number }> {
+    return this.request("/storage");
   }
 
   async upload(file: File): Promise<{ url: string; name: string; markdown: string }> {

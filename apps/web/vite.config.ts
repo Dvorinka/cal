@@ -6,6 +6,8 @@ import { VitePWA } from "vite-plugin-pwa";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, ".");
   return {
+    // Playwright specs live in e2e/ — vitest runs only src.
+    test: { exclude: ["e2e/**", "node_modules/**", "android/**"] },
     plugins: [
       react(),
       tailwindcss(),
@@ -20,6 +22,11 @@ export default defineConfig(({ mode }) => {
           background_color: "#151513",
           display: "standalone",
           start_url: "/",
+          share_target: {
+            action: "/share",
+            method: "GET",
+            params: { title: "title", text: "text", url: "url" }
+          },
           icons: [
             { src: "/pwa-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
             { src: "/pwa-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },

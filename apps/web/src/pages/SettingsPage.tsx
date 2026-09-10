@@ -1,4 +1,4 @@
-import type { Accent, SessionInfo } from "@cal/api-client";
+import type { Accent, SessionInfo, Webhook } from "@cal/api-client";
 import { Bell, BellOff, Copy, Download, LogOut, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
@@ -52,6 +52,16 @@ export function SettingsPage() {
   const [davUser, setDavUser] = useState("");
   const [davPass, setDavPass] = useState("");
   const [addingAccount, setAddingAccount] = useState(false);
+  const [discovering, setDiscovering] = useState(false);
+  const [discovered, setDiscovered] = useState<{ href: string; name: string }[]>([]);
+  const [google, setGoogle] = useState<{ connected: boolean }>();
+  const [cdName, setCdName] = useState("");
+  const [cdUrl, setCdUrl] = useState("");
+  const [cdUser, setCdUser] = useState("");
+  const [cdPass, setCdPass] = useState("");
+  const [webhooks, setWebhooks] = useState<Webhook[]>([]);
+  const [hookUrl, setHookUrl] = useState("");
+  const [storage, setStorage] = useState<{ usedBytes: number; quotaBytes: number }>();
   const [pwCurrent, setPwCurrent] = useState("");
   const [pwNext, setPwNext] = useState("");
   const [pwSaving, setPwSaving] = useState(false);
@@ -68,7 +78,10 @@ export function SettingsPage() {
     void loadFeeds();
     void loadAccounts();
     void api.sessions().then(setSessions).catch(() => {});
-  }, [loadEntries, loadFeeds]);
+    void api.webhooks().then(setWebhooks).catch(() => {});
+    void api.googleStatus().then(setGoogle).catch(() => {});
+    void api.storage().then(setStorage).catch(() => {});
+  }, [loadEntries, loadFeeds, loadAccounts, api]);
 
   const stats = useMemo(() => {
     const counts = { task: 0, event: 0, note: 0, link: 0, done: 0 };
@@ -125,6 +138,51 @@ export function SettingsPage() {
       setDavUser("");
       setDavPass("");
     }
+  }
+
+  async function runDiscover() {
+    setDiscovering(true);
+    try {
+      const cols = await api.discoverCaldav({ url: davUrl.trim(), username: davUser.trim(), password: davPass });
+      setDiscovered(cols);
+      if (cols.length === 0) toast("No calendar collections found — check the URL");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Discovery failed");
+    } finally {
+      setDiscovering(false);
+    }
+  }
+
+  async function submitCarddav() {
+    try {
+      const out = await api.connectCarddav({
+        name: cdName.trim() || undefined,
+        url: cdUrl.trim(),
+        username: cdUser.trim(),
+        password: cdPass,
+      });
+      toast(`Imported ${out.imported} of ${out.found} birthdays`);
+      setCdName(""); setCdUrl(""); setCdUser(""); setCdPass("");
+      void loadEntries({});
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "CardDAV connect failed");
+    }
+  }
+
+  async function submitWebhook() {
+    try {
+      const hook = await api.addWebhook(hookUrl.trim());
+      setWebhooks((w) => [...w, hook]);
+      setHookUrl("");
+      toast("Webhook added");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Failed");
+    }
+  }
+
+  async function removeWebhook(id: string) {
+    await api.deleteWebhook(id).catch(() => {});
+    setWebhooks((w) => w.filter((x) => x.id !== id));
   }
 
   async function submitFeed() {
@@ -311,7 +369,35 @@ export function SettingsPage() {
               onChange={(e) => setDavPass(e.target.value)}
             />
           </div>
-          <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end" }}>
+          {discovered.length > 0 && (
+            <div className="discover-list">
+              {discovered.map((c) => (
+                <button
+                  key={c.href}
+                  type="button"
+                  className="feed-row as-btn"
+                  onClick={() => {
+                    setDavUrl(c.href);
+                    if (!davName) setDavName(c.name);
+                  }}
+                >
+                  <div className="feed-meta">
+                    <span className="feed-name">{c.name}</span>
+                    <span className="feed-url">{c.href}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+          <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={discovering || !davUrl.trim() || !davUser.trim()}
+              onClick={() => void runDiscover()}
+            >
+              {discovering ? "Discovering…" : "Discover calendars"}
+            </button>
             <button
               type="button"
               className="btn btn-primary"
@@ -322,8 +408,102 @@ export function SettingsPage() {
             </button>
           </div>
           <p className="panel-note" style={{ marginTop: 8 }}>
-            Proton Calendar does not expose CalDAV outside Bridge — import via .ics instead. Google requires
-            OAuth (not supported); use its .ics secret address above.
+            Proton Calendar does not expose CalDAV outside Bridge — import via .ics instead. For Google,
+            connect below (OAuth) or use its .ics secret address above.
+          </p>
+        </section>
+
+        <section className="panel">
+          <h3>Google Calendar</h3>
+          {google === undefined ? null : google.connected ? (
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <span className="feed-name">Connected — events sync every 15 min as the "Google" feed.</span>
+              <span className="spacer" style={{ flex: 1 }} />
+              <button type="button" className="btn btn-secondary" onClick={() => void api.googleSync().then(() => toast("Synced"))}>
+                Sync now
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => void api.googleDisconnect().then(() => { setGoogle({ connected: false }); void loadFeeds(); })}
+              >
+                Disconnect
+              </button>
+            </div>
+          ) : (
+            <div>
+              <p className="panel-note">
+                Requires <code>GOOGLE_CLIENT_ID</code>/<code>GOOGLE_CLIENT_SECRET</code> on the API
+                (Google Cloud → OAuth consent → Calendar read scope). Events sync read-only into a
+                "Google" feed — toggleable like any other feed.
+              </p>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() =>
+                  void api
+                    .googleConnect()
+                    .then((r) => window.open(r.url, "_blank", "noopener"))
+                    .catch((e) => toast(e instanceof Error ? e.message : "Google not configured"))
+                }
+              >
+                Connect Google
+              </button>
+            </div>
+          )}
+        </section>
+
+        <section className="panel">
+          <h3>Birthdays (CardDAV)</h3>
+          <p className="panel-note">
+            Connect an addressbook (Nextcloud contacts, Radicale, Baikal) — contacts with a birthday
+            become yearly all-day events.
+          </p>
+          <div className="feed-add" style={{ gridTemplateColumns: "1fr 1fr" }}>
+            <input className="input" placeholder="Name" value={cdName} onChange={(e) => setCdName(e.target.value)} />
+            <input className="input" placeholder="Addressbook URL" value={cdUrl} onChange={(e) => setCdUrl(e.target.value)} />
+            <input className="input" placeholder="Username" value={cdUser} onChange={(e) => setCdUser(e.target.value)} />
+            <input
+              className="input"
+              type="password"
+              placeholder="Password / app password"
+              value={cdPass}
+              onChange={(e) => setCdPass(e.target.value)}
+            />
+          </div>
+          <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end" }}>
+            <button type="button" className="btn btn-primary" disabled={!cdUrl.trim()} onClick={() => void submitCarddav()}>
+              <Plus size={14} /> Import birthdays
+            </button>
+          </div>
+        </section>
+
+        <section className="panel">
+          <h3>Webhooks</h3>
+          <p className="panel-note">
+            Cal POSTs <code>{"{event, entry}"}</code> to each URL on create/update/delete, signed with
+            HMAC-SHA256 in <code>X-Cal-Signature</code> (verify with the secret shown once).
+          </p>
+          {webhooks.map((w) => (
+            <div key={w.id} className="feed-row">
+              <div className="feed-meta">
+                <span className="feed-name">{w.url}</span>
+                <span className="feed-url">secret: {w.secret}</span>
+              </div>
+              <button type="button" className="icon-btn" aria-label="Remove webhook" onClick={() => void removeWebhook(w.id)}>
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+          <div className="feed-add">
+            <input className="input" placeholder="https://example.com/hook" value={hookUrl} onChange={(e) => setHookUrl(e.target.value)} />
+            <button type="button" className="btn btn-primary" disabled={!hookUrl.trim()} onClick={() => void submitWebhook()}>
+              <Plus size={14} /> Add
+            </button>
+          </div>
+          <p className="panel-note" style={{ marginTop: 8 }}>
+            Email-to-task: forward mail to <code>POST /api/intake?token=&lt;api token&gt;</code> with
+            {" "}<code>{"{subject, text}"}</code> — lands as a task tagged <code>inbox</code>.
           </p>
         </section>
 
@@ -402,7 +582,7 @@ export function SettingsPage() {
               <RefreshCw size={14} />
             </button>
           </div>
-          <pre className="code-block">{mcpConfig}</pre>
+          <pre className="code-block" tabIndex={0}>{mcpConfig}</pre>
           <button type="button" className="btn btn-secondary" onClick={() => copy(mcpConfig, "Config")}>
             <Copy size={14} /> Copy client config
           </button>
@@ -427,7 +607,7 @@ export function SettingsPage() {
               <RefreshCw size={14} />
             </button>
           </div>
-          <pre className="code-block">{`<iframe src="${widgetUrl}" style="border:0;width:100%;height:320px"></iframe>`}</pre>
+          <pre className="code-block" tabIndex={0}>{`<iframe src="${widgetUrl}" style="border:0;width:100%;height:320px"></iframe>`}</pre>
           <p className="panel-note" style={{ marginTop: 10 }}>
             Or subscribe to Cal itself in any calendar app — this URL serves a live .ics feed of your tasks and
             events:
@@ -446,6 +626,12 @@ export function SettingsPage() {
             {stats.task} tasks ({stats.done} done), {stats.event} events, {stats.note} notes, {stats.link}{" "}
             links — stored in your own database. Take them with you any time.
           </p>
+          {storage && (
+            <p className="panel-note">
+              Attachments: {(storage.usedBytes / 1048576).toFixed(1)} MB of{" "}
+              {(storage.quotaBytes / 1048576).toFixed(0)} MB used.
+            </p>
+          )}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <a className="btn btn-secondary" href="/api/export" download>
               <Download size={14} /> Export everything (JSON)

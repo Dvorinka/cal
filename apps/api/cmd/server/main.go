@@ -6,8 +6,8 @@ import (
 	"os"
 	"time"
 
-	"cal/apps/api/internal/calendar"
 	"cal/apps/api/internal/caldav"
+	"cal/apps/api/internal/calendar"
 	"cal/apps/api/internal/httpapi"
 	"cal/apps/api/internal/store"
 )
@@ -27,6 +27,7 @@ func main() {
 	go httpapi.RefreshFeedsLoop(context.Background(), s, 30*time.Minute)
 	go httpapi.PushLoop(context.Background(), s, time.Minute)
 	go caldavLoop(context.Background(), s)
+	go httpapi.GoogleSyncLoop(context.Background(), s, 15*time.Minute)
 	go httpapi.BackupLoop(context.Background(), s, env("DATA_DIR", "./data"))
 
 	router := httpapi.New(s, calendar.NewHolidayCache())

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -66,7 +67,7 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authed.PUT("/settings", server.updateSettings)
 	authed.GET("/export", server.export)
 	authed.GET("/feeds", server.listFeeds)
-	authed.POST("/feeds", server.createFeed)
+	authed.POST("/feeds", newRateLimiter(10, time.Minute), server.createFeed)
 	authed.DELETE("/feeds/:id", server.deleteFeed)
 	authed.POST("/feeds/:id/refresh", server.refreshFeed)
 	authed.GET("/feed-events", server.feedEvents)
@@ -77,23 +78,37 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authed.GET("/sessions", server.listSessions)
 	authed.DELETE("/sessions/:id", server.revokeSession)
 	authed.POST("/password", server.changePassword)
+	authed.GET("/webhooks", server.listWebhooks)
+	authed.POST("/webhooks", server.addWebhook)
+	authed.DELETE("/webhooks/:id", server.deleteWebhook)
 	authed.GET("/review/week", server.weeklyReview)
 	authed.GET("/habits", server.habitStreaks)
 	authed.GET("/unfurl", server.unfurl)
-	authed.POST("/files", server.uploadFile)
+	authed.POST("/files", newRateLimiter(20, time.Minute), server.uploadFile)
 	authed.GET("/files/:name", server.serveFile)
+	authed.GET("/storage", server.storageUsage)
 	authed.GET("/push/vapid", server.pushVapid)
 	authed.POST("/push/subscribe", server.subscribePush)
 	authed.POST("/push/unsubscribe", server.unsubscribePush)
 	authed.GET("/caldav", server.listCaldav)
 	authed.POST("/caldav", server.createCaldav)
 	authed.POST("/caldav/test", server.testCaldav)
+	authed.POST("/caldav/discover", server.discoverCaldav)
+	authed.POST("/carddav", server.connectCarddav)
+	authed.POST("/carddav/:id/sync", server.syncCarddav)
+	authed.DELETE("/carddav/:id", server.deleteCarddav)
+	authed.GET("/google/connect", server.googleConnect)
+	authed.GET("/google/status", server.googleStatus)
+	authed.POST("/google/sync", server.googleSyncNow)
+	authed.DELETE("/google", server.googleDisconnect)
 	authed.DELETE("/caldav/:id", server.deleteCaldav)
 	authed.POST("/caldav/:id/sync", server.syncCaldav)
 
 	router.GET("/api/widget/today", server.widgetToday)
 	router.GET("/api/feed.ics", server.exportICS)
-	router.POST("/api/mcp", server.mcp)
+	router.POST("/api/mcp", newRateLimiter(60, time.Minute), server.mcp)
+	router.POST("/api/intake", newRateLimiter(10, time.Minute), server.intake)
+	router.GET("/api/google/callback", server.googleCallback)
 
 	return router
 }
@@ -186,6 +201,7 @@ func (s *Server) createEntry(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "failed to create entry")
 		return
 	}
+	go s.fireWebhooks(context.Background(), currentUser(c).ID, "entry.created", entry)
 	c.JSON(http.StatusCreated, entry)
 }
 
@@ -213,6 +229,7 @@ func (s *Server) updateEntry(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "failed to update entry")
 		return
 	}
+	go s.fireWebhooks(context.Background(), currentUser(c).ID, "entry.updated", entry)
 	c.JSON(http.StatusOK, entry)
 }
 
@@ -223,6 +240,9 @@ func (s *Server) deleteEntry(c *gin.Context) {
 		_ = s.store.Tombstone(c.Request.Context(), accountID, href)
 	}
 	err := s.store.DeleteEntry(c.Request.Context(), userID, id)
+	if err == nil {
+		go s.fireWebhooks(context.Background(), userID, "entry.deleted", gin.H{"id": id})
+	}
 	if errors.Is(err, store.ErrNotFound) {
 		c.String(http.StatusNotFound, "entry not found")
 		return
