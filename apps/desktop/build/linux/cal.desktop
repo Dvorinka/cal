@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Cal
+Comment=Self-hosted calendar, tasks, notes and time tracking
+Exec=cal
+Icon=cal
+Terminal=false
+Categories=Office;Utility;
+StartupWMClass=cal

@@ -50,6 +50,16 @@ jobs:
           - { os: windows-latest, archive: zip, ext: ".exe", label: windows-amd64 }
           - { os: macos-latest, archive: zip, ext: "", label: macos-arm64 }
     runs-on: ${{ matrix.os }}
+    env:
+      # Signing is opt-in: the steps below run only when the secrets exist.
+      # See docs/releasing.md for what each secret is and how to produce it.
+      WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+      WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+      APPLE_CERT_P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+      APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v6
@@ -77,11 +87,46 @@ jobs:
         working-directory: apps/desktop
         run: go build -tags headless -o build/bin/cal-server${{ matrix.ext }} .
 
+      # windows-latest ships signtool via the bundled Windows SDK.
+      - name: Sign (Windows)
+        if: runner.os == 'Windows' && env.WINDOWS_CERT_PFX_BASE64 != ''
+        working-directory: apps/desktop/build/bin
+        shell: pwsh
+        run: |
+          [IO.File]::WriteAllBytes("$PWD/cert.pfx", [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_BASE64))
+          signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f cert.pfx /p $env:WINDOWS_CERT_PASSWORD cal.exe
+          Remove-Item cert.pfx
+
+      # Developer ID Application cert → codesign, then notarize + staple so
+      # Gatekeeper opens the app without the right-click dance.
+      - name: Sign & notarize (macOS)
+        if: runner.os == 'macOS' && env.APPLE_CERT_P12_BASE64 != ''
+        working-directory: apps/desktop/build/bin
+        run: |
+          set -euo pipefail
+          KEYCHAIN=build-sign.keychain-db
+          security create-keychain -p "" $KEYCHAIN
+          security set-keychain-settings $KEYCHAIN
+          security unlock-keychain -p "" $KEYCHAIN
+          echo "$APPLE_CERT_P12_BASE64" | base64 -d > cert.p12
+          security import cert.p12 -k $KEYCHAIN -P "$APPLE_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" $KEYCHAIN
+          security list-keychains -d user -s $KEYCHAIN $(security list-keychains -d user | tr -d '"')
+          rm cert.p12
+          IDENTITY=$(security find-identity -v -p codesigning $KEYCHAIN | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/')
+          codesign --deep --force --options runtime --timestamp --sign "$IDENTITY" cal.app
+          ditto -c -k --keepParent cal.app cal-notarize.zip
+          xcrun notarytool submit cal-notarize.zip --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
+          xcrun stapler staple cal.app
+          rm cal-notarize.zip
+
       - name: Package (Linux)
         if: runner.os == 'Linux'
         working-directory: apps/desktop/build/bin
         run: |
-          tar czf cal-desktop-${{ matrix.label }}.tar.gz cal${{ matrix.ext }}
+          cp ../linux/cal.desktop ../linux/cal.png ../linux/install.sh .
+          chmod +x install.sh
+          tar czf cal-desktop-${{ matrix.label }}.tar.gz cal${{ matrix.ext }} cal.desktop cal.png install.sh
           tar czf cal-server-${{ matrix.label }}.tar.gz cal-server${{ matrix.ext }}
 
       - name: Package (Windows)
