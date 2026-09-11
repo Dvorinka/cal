@@ -15,8 +15,8 @@ external Postgres instead.
   fallback on one `http.Handler`, owns the embedded-Postgres lifecycle.
 - `main.go` — Wails window (`wails build`, default build).
 - `main_headless.go` — TCP server (`-tags headless`), for machines/CI without webkit.
-- `frontend/dist/` — staged copy of `apps/web/dist` (produced by `scripts/build-frontend.sh`, gitignored).
-- `wails.json` — `frontend:build` runs the staging script.
+- `frontend/dist/` — staged copy of `apps/web/dist` (produced by `scripts/build-frontend.mjs`, gitignored).
+- `wails.json` — `frontend:build` runs the staging script (Node, so it works on Windows too).
 - `build/appicon.png` — window/installer icon.
 
 ## Build
@@ -36,7 +36,7 @@ wails dev                        # live-reload dev loop
 ## Headless smoke test (no webkit needed)
 
 ```bash
-./scripts/build-frontend.sh
+node ./scripts/build-frontend.mjs
 go build -tags headless -o /tmp/cal .
 /tmp/cal                       # embedded Postgres, PORT=8080
 # or external DB:
