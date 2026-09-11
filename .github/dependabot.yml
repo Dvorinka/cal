@@ -1,7 +1,9 @@
 version: 2
 updates:
   - package-ecosystem: npm
-    directories: ["/", "/apps/web", "/packages/api-client"]
+    # Workspaces share the root package-lock.json; scanning subdirectories
+    # produces manifest-only PRs that npm ci can never install.
+    directories: ["/"]
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
