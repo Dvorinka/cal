@@ -53,11 +53,11 @@ func checkURL(u *url.URL) error {
 }
 
 var (
-	reTitle = regexp.MustCompile(`(?is)<title[^>]*>\s*(.*?)\s*</title>`)
-	reOG    = regexp.MustCompile(`(?is)<meta[^>]+(?:property|name)=["'](?:og:title|twitter:title)["'][^>]+content=["']([^"']+)["']`)
-	reOGRev = regexp.MustCompile(`(?is)<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["'](?:og:title|twitter:title)["']`)
-	reIcon  = regexp.MustCompile(`(?is)<link[^>]+rel=["'](?:icon|shortcut icon|apple-touch-icon)["'][^>]+href=["']([^"']+)["']`)
-	reDesc  = regexp.MustCompile(`(?is)<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']`)
+	reTitle   = regexp.MustCompile(`(?is)<title[^>]*>\s*(.*?)\s*</title>`)
+	reOG      = regexp.MustCompile(`(?is)<meta[^>]+(?:property|name)=["'](?:og:title|twitter:title)["'][^>]+content=["']([^"']+)["']`)
+	reOGRev   = regexp.MustCompile(`(?is)<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["'](?:og:title|twitter:title)["']`)
+	reIcon    = regexp.MustCompile(`(?is)<link[^>]+rel=["'](?:icon|shortcut icon|apple-touch-icon)["'][^>]+href=["']([^"']+)["']`)
+	reDesc    = regexp.MustCompile(`(?is)<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']`)
 	reOGImage = regexp.MustCompile(`(?is)<meta[^>]+(?:property|name)=["'](?:og:image|twitter:image)["'][^>]+content=["']([^"']+)["']`)
 )
 

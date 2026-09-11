@@ -150,8 +150,8 @@ func (s *Server) deleteColumn(c *gin.Context) {
 // unnecessary at personal-planner scale.
 func (s *Server) moveCard(c *gin.Context) {
 	var body struct {
-		ColumnID *string  `json:"columnId"`
-		Position float64  `json:"position"`
+		ColumnID *string `json:"columnId"`
+		Position float64 `json:"position"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.String(http.StatusBadRequest, "invalid")

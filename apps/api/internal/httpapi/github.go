@@ -52,15 +52,17 @@ func (s *Server) ghToken(c *gin.Context) (string, bool) {
 }
 
 type ghIssue struct {
-	Number   int    `json:"number"`
-	Title    string `json:"title"`
-	State    string `json:"state"`
-	HTMLURL  string `json:"html_url"`
-	RepoURL  string `json:"repository_url"`
-	IsPR     bool   `json:"-"`
-	PR       *struct{} `json:"pull_request"`
-	Labels   []struct{ Name string `json:"name"` } `json:"labels"`
-	Updated  string `json:"updated_at"`
+	Number  int       `json:"number"`
+	Title   string    `json:"title"`
+	State   string    `json:"state"`
+	HTMLURL string    `json:"html_url"`
+	RepoURL string    `json:"repository_url"`
+	IsPR    bool      `json:"-"`
+	PR      *struct{} `json:"pull_request"`
+	Labels  []struct {
+		Name string `json:"name"`
+	} `json:"labels"`
+	Updated string `json:"updated_at"`
 }
 
 // GET /github/inbox — open issues + PRs that involve you.
@@ -101,7 +103,9 @@ func (s *Server) githubActivity(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var user struct{ Login string `json:"login"` }
+	var user struct {
+		Login string `json:"login"`
+	}
 	if err := ghGet(c.Request.Context(), token, "/user", &user); err != nil {
 		c.String(http.StatusBadGateway, "github fetch failed")
 		return
@@ -158,12 +162,12 @@ func (s *Server) githubImport(c *gin.Context) {
 		return
 	}
 	input := store.EntryInput{
-		Title:   fmt.Sprintf("%s/%s #%s — %s", owner, repo, num, it.Title),
-		Type:    "task",
-		LinkURL: body.URL,
-		Date:    time.Now().Format("2006-01-02"),
-		Tags:    []string{"github", owner + "/" + repo},
-		BoardID: body.BoardID,
+		Title:    fmt.Sprintf("%s/%s #%s — %s", owner, repo, num, it.Title),
+		Type:     "task",
+		LinkURL:  body.URL,
+		Date:     time.Now().Format("2006-01-02"),
+		Tags:     []string{"github", owner + "/" + repo},
+		BoardID:  body.BoardID,
 		ColumnID: body.ColumnID,
 	}
 	entry, err := s.store.CreateEntry(c.Request.Context(), currentUser(c).ID, input)
@@ -205,7 +209,9 @@ func ghIssueState(ctx context.Context, token, issueURL string) (string, error) {
 	if m == nil {
 		return "", nil
 	}
-	var it struct{ State string `json:"state"` }
+	var it struct {
+		State string `json:"state"`
+	}
 	kind := "issues"
 	if strings.Contains(issueURL, "/pull/") {
 		kind = "pulls"

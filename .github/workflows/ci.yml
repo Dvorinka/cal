@@ -28,6 +28,8 @@ jobs:
           go-version: "1.26"
       - run: go vet ./...
         working-directory: apps/api
+      - run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+        working-directory: apps/api
       - run: go test ./...
         working-directory: apps/api
 
@@ -44,3 +46,22 @@ jobs:
         working-directory: apps/desktop
       - run: go build -tags headless ./...
         working-directory: apps/desktop
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build all-in-one image
+        run: docker build -t cal:ci .
+      - name: Smoke test — embedded Postgres, SPA, register roundtrip
+        run: |
+          docker run -d --name cal -p 8080:8080 cal:ci
+          for i in $(seq 1 120); do
+            curl -fsS http://localhost:8080/api/health && break || sleep 1
+          done
+          curl -fsS http://localhost:8080/ | grep -qi "html"
+          curl -fsS -c /tmp/jar -H 'Content-Type: application/json' \
+            -d '{"email":"ci@cal.local","password":"ci-password-123"}' \
+            http://localhost:8080/api/auth/register
+          curl -fsS -b /tmp/jar http://localhost:8080/api/me | grep -q "ci@cal.local"
+          docker rm -f cal
