@@ -31,6 +31,7 @@ type feedEvent struct {
 	Color     string  `json:"color"`
 	Location  string  `json:"location,omitempty"`
 	URL       string  `json:"url,omitempty"`
+	Image     string  `json:"image,omitempty"`
 	Details   string  `json:"details,omitempty"`
 }
 
@@ -85,6 +86,7 @@ func (s *Server) createFeed(c *gin.Context) {
 		Name  string `json:"name"`
 		URL   string `json:"url"`
 		Color string `json:"color"`
+		Kind  string `json:"kind"` // "calendar" (default) | "links"
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.String(http.StatusBadRequest, "invalid json")
@@ -106,10 +108,17 @@ func (s *Server) createFeed(c *gin.Context) {
 	if body.Color == "" {
 		body.Color = "sky"
 	}
-	feed, err := s.store.CreateFeed(c.Request.Context(), currentUser(c).ID, body.Name, body.URL, body.Color, ics)
+	if body.Kind != "links" {
+		body.Kind = "calendar"
+	}
+	userID := currentUser(c).ID
+	feed, err := s.store.CreateFeed(c.Request.Context(), userID, body.Name, body.URL, body.Color, body.Kind, ics)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "failed to save feed")
 		return
+	}
+	if feed.Kind == "links" {
+		go syncLinkFeed(context.Background(), s.store, userID, feed.ID, ics)
 	}
 	c.JSON(http.StatusCreated, feed)
 }
@@ -152,7 +161,54 @@ func (s *Server) refreshFeed(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "failed to refresh feed")
 		return
 	}
+	if target.Kind == "links" {
+		syncLinkFeed(c.Request.Context(), s.store, user.ID, feedID, ics)
+	}
 	c.Status(http.StatusNoContent)
+}
+
+// syncLinkFeed turns a "links"-kind feed's cached ICS into link entries:
+// each unseen item URL becomes a bookmark entry carrying its feed image
+// (YouTube channel videos keep their media:thumbnail as the card image).
+func syncLinkFeed(ctx context.Context, s *store.Store, userID, feedID, ics string) {
+	events, err := ical.Parse(ics)
+	if err != nil {
+		return
+	}
+	for _, e := range events {
+		url := e.URL
+		if url == "" {
+			continue
+		}
+		seen, err := s.LinkEntryExists(ctx, userID, url)
+		if err != nil || seen {
+			continue
+		}
+		input := store.EntryInput{
+			Title:   strings.TrimSpace(e.Summary),
+			Type:    "link",
+			LinkURL: url,
+			Date:    e.Start.Format("2006-01-02"),
+		}
+		if input.Title == "" {
+			input.Title = url
+		}
+		entry, err := s.CreateEntry(ctx, userID, input)
+		if err != nil {
+			continue
+		}
+		vid := ""
+		if m := reYouTube.FindStringSubmatch(url); m != nil {
+			vid = m[1]
+		}
+		image := e.Image
+		if image == "" && vid != "" {
+			image = "https://i.ytimg.com/vi/" + vid + "/hqdefault.jpg"
+		}
+		if image != "" || vid != "" {
+			s.SetLinkMeta(ctx, userID, entry.ID, "", image, "", vid, "")
+		}
+	}
 }
 
 // feedEvents expands every subscribed feed's cache into occurrences inside
@@ -176,6 +232,9 @@ func (s *Server) feedEvents(c *gin.Context) {
 	}
 	out := []feedEvent{}
 	for feed, ics := range caches {
+		if feed.Kind == "links" {
+			continue // items live as link entries, not calendar events
+		}
 		events, err := ical.Parse(ics)
 		if err != nil {
 			continue
@@ -190,6 +249,7 @@ func (s *Server) feedEvents(c *gin.Context) {
 				Color:    feed.Color,
 				Location: e.Location,
 				URL:      e.URL,
+				Image:    e.Image,
 				Details:  e.Description,
 			}
 			if !e.AllDay {
@@ -294,6 +354,10 @@ func RefreshFeedsLoop(ctx context.Context, s *store.Store, every time.Duration) 
 			}
 			if err := s.RefreshFeedCache(ctx, userID, feed.ID, ics); err != nil {
 				log.Printf("feeds sync %s: %v", feed.Name, err)
+				continue
+			}
+			if feed.Kind == "links" {
+				syncLinkFeed(ctx, s, userID, feed.ID, ics)
 			}
 		}
 	}

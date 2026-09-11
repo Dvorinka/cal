@@ -60,3 +60,39 @@ func TestLooksLike(t *testing.T) {
 		t.Fatal("ics misdetected as feed")
 	}
 }
+
+// YouTube channel feeds are Atom with media:group thumbnails — the thumb
+// must survive to the ICS IMAGE property so link cards can render it.
+func TestYouTubeChannelThumb(t *testing.T) {
+	body := `<?xml version="1.0" encoding="UTF-8"?>
+	<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/" xmlns="http://www.w3.org/2005/Atom">
+		<entry>
+			<yt:videoId>abc123XYZ</yt:videoId>
+			<yt:channelId>UCxyz</yt:channelId>
+			<title>Build a Wails App</title>
+			<link rel="alternate" href="https://www.youtube.com/watch?v=abc123XYZ"/>
+			<id>yt:video:abc123XYZ</id>
+			<published>2025-09-10T15:00:00+00:00</published>
+			<updated>2025-09-10T15:00:00+00:00</updated>
+			<media:group>
+				<media:title>Build a Wails App</media:title>
+				<media:content url="https://www.youtube.com/v/abc123XYZ?version=3" type="application/x-shockwave-flash" width="640" height="390"/>
+				<media:thumbnail url="https://i4.ytimg.com/vi/abc123XYZ/hqdefault.jpg" width="480" height="360"/>
+				<media:description>Description here</media:description>
+			</media:group>
+		</entry>
+	</feed>`
+	ics, err := ToICS(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(ics, "SUMMARY:Build a Wails App") {
+		t.Fatalf("title missing: %s", ics)
+	}
+	if !strings.Contains(ics, "IMAGE;VALUE=URI:https://i4.ytimg.com/vi/abc123XYZ/hqdefault.jpg") {
+		t.Fatalf("thumbnail lost: %s", ics)
+	}
+	if !strings.Contains(ics, "URL:https://www.youtube.com/watch?v=abc123XYZ") {
+		t.Fatalf("video url missing: %s", ics)
+	}
+}

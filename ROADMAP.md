@@ -219,9 +219,14 @@ solidtime-style timesheet depth and a mail module.
 - [x] **Board time sums** — `minutes` on board tiles.
 - [x] **Desktop app** — `apps/desktop`: Wails 2 shell, API in-process,
       SPA embedded; `-tags headless` variant for servers/CI.
-- [ ] **In-app YouTube channel feeds** — poll channel RSS.
+- [x] **Channel feeds → link cards** — a feed kind "links" turns RSS/Atom
+  items (e.g. `youtube.com/feeds/videos.xml?channel_id=…`) into real link
+  entries with `media:thumbnail` cards; dedupes by URL, runs in the sync
+  loop. Calendar feeds keep landing as dated events.
 - [ ] **Editable shared boards** — write-token tier.
-- [ ] **Mobile nav audit** — bottom nav still covers five tabs.
+- [x] **Mobile nav audit** — bottom nav now shows the first four enabled
+  module tabs + a More tab that opens the full sidebar drawer (Files,
+  Boards, Time, Mail, settings, trash all reachable on phones).
 
 ### Still excluded (per spec)
 

@@ -50,6 +50,7 @@ export function SettingsPage() {
 
   const [feedName, setFeedName] = useState("");
   const [feedUrl, setFeedUrl] = useState("");
+  const [feedKind, setFeedKind] = useState<"calendar" | "links">("calendar");
   const [adding, setAdding] = useState(false);
   const [pushOn, setPushOn] = useState<boolean>();
   const [davName, setDavName] = useState("");
@@ -201,7 +202,7 @@ export function SettingsPage() {
   async function submitFeed() {
     if (!feedUrl.trim()) return;
     setAdding(true);
-    const ok = await addFeed({ name: feedName.trim(), url: feedUrl.trim() });
+    const ok = await addFeed({ name: feedName.trim(), url: feedUrl.trim(), kind: feedKind });
     setAdding(false);
     if (ok) {
       setFeedName("");
@@ -388,17 +389,17 @@ export function SettingsPage() {
         </section>
 
         <section className="panel">
-          <h3>Calendar feeds</h3>
+          <h3>Feeds</h3>
           <p className="panel-note">
-            Subscribe to any iCalendar (.ics) or RSS/Atom URL — Google Calendar's secret address,
-            iCloud public calendars, Nextcloud shared links, blog feeds. RSS items land as dated,
-            read-only entries.
+            Subscribe to iCalendar (.ics) or RSS/Atom URLs — Google Calendar's secret address,
+            iCloud public calendars, blog feeds. "To links" feeds (e.g. a YouTube channel's
+            <code>feeds/videos.xml</code>) save new items as link cards with thumbnails instead.
           </p>
           {feeds.map((feed) => (
             <div key={feed.id} className="feed-row">
               <span className="swatch" style={{ "--swatch": `var(--c-${feed.color})` } as React.CSSProperties} />
               <div className="feed-meta">
-                <span className="feed-name">{feed.name}</span>
+                <span className="feed-name">{feed.name}{feed.kind === "links" && <span className="feed-kind">→ links</span>}</span>
                 <span className="feed-url">{feed.url}</span>
               </div>
               {feed.fetchedAt && (
@@ -420,6 +421,10 @@ export function SettingsPage() {
               value={feedUrl}
               onChange={(e) => setFeedUrl(e.target.value)}
             />
+            <select className="input feed-kind-select" value={feedKind} onChange={(e) => setFeedKind(e.target.value as "calendar" | "links")} aria-label="Feed kind">
+              <option value="calendar">→ calendar</option>
+              <option value="links">→ links</option>
+            </select>
             <button type="button" className="btn btn-primary" disabled={adding || !feedUrl.trim()} onClick={() => void submitFeed()}>
               <Plus size={14} /> Add
             </button>

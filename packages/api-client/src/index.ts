@@ -167,6 +167,7 @@ export interface Feed {
   name: string;
   url: string;
   color: string;
+  kind: string; // "calendar" | "links" — links feeds create bookmark entries
   fetchedAt?: string;
 }
 
@@ -181,6 +182,7 @@ export interface FeedEvent {
   color: string;
   location?: string;
   url?: string;
+  image?: string;
   details?: string;
 }
 
@@ -275,7 +277,7 @@ export class CalApi {
     return this.request<Feed[]>("/feeds");
   }
 
-  async createFeed(input: { name: string; url: string; color?: string }): Promise<Feed> {
+  async createFeed(input: { name: string; url: string; color?: string; kind?: string }): Promise<Feed> {
     return this.request<Feed>("/feeds", { method: "POST", body: input });
   }
 

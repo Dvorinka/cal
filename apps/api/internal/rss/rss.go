@@ -19,6 +19,7 @@ type Item struct {
 	Summary string
 	Date    time.Time
 	GUID    string
+	Thumb   string // media:thumbnail / image enclosure — YouTube, blogs
 }
 
 // LooksLikeFeed reports whether a body sniffs as RSS/Atom rather than ICS.
@@ -46,6 +47,7 @@ func ToICS(body string) (string, error) {
 			Summary:     it.Title,
 			Description: it.Summary,
 			URL:         it.Link,
+			Image:       it.Thumb,
 			Start:       it.Date,
 			End:         it.Date.AddDate(0, 0, 1),
 			AllDay:      true,
@@ -58,20 +60,27 @@ func ToICS(body string) (string, error) {
 
 type rssDoc struct {
 	Items []struct {
-		Title   string `xml:"title"`
-		Link    string `xml:"link"`
-		GUID    string `xml:"guid"`
-		PubDate string `xml:"pubDate"`
-		DCDate  string `xml:"date"`
-		Desc    string `xml:"description"`
+		Title     string `xml:"title"`
+		Link      string `xml:"link"`
+		GUID      string `xml:"guid"`
+		PubDate   string `xml:"pubDate"`
+		DCDate    string `xml:"date"`
+		Desc      string `xml:"description"`
+		Enclosure []struct {
+			URL  string `xml:"url,attr"`
+			Type string `xml:"type,attr"`
+		} `xml:"enclosure"`
+		Thumb struct {
+			URL string `xml:"url,attr"`
+		} `xml:"http://search.yahoo.com/mrss/ thumbnail"`
 	} `xml:"channel>item"`
 }
 
 type atomDoc struct {
 	XMLName xml.Name `xml:"feed"`
 	Entries []struct {
-		Title   string `xml:"title"`
-		Links   []struct {
+		Title string `xml:"title"`
+		Links []struct {
 			Rel  string `xml:"rel,attr"`
 			Href string `xml:"href,attr"`
 		} `xml:"link"`
@@ -80,6 +89,11 @@ type atomDoc struct {
 		Published string `xml:"published"`
 		Summary   string `xml:"summary"`
 		Content   string `xml:"content"`
+		Group     struct {
+			Thumb struct {
+				URL string `xml:"url,attr"`
+			} `xml:"http://search.yahoo.com/mrss/ thumbnail"`
+		} `xml:"http://search.yahoo.com/mrss/ group"`
 	} `xml:"entry"`
 }
 
@@ -90,12 +104,22 @@ func parse(body string) ([]Item, error) {
 	var rss rssDoc
 	if err := xml.NewDecoder(bytes.NewReader(data)).Decode(&rss); err == nil && len(rss.Items) > 0 {
 		for _, i := range rss.Items {
+			thumb := strings.TrimSpace(i.Thumb.URL)
+			if thumb == "" {
+				for _, enc := range i.Enclosure {
+					if strings.HasPrefix(enc.Type, "image/") {
+						thumb = strings.TrimSpace(enc.URL)
+						break
+					}
+				}
+			}
 			out = append(out, Item{
 				Title:   strings.TrimSpace(i.Title),
 				Link:    strings.TrimSpace(i.Link),
 				Summary: stripTags(i.Desc),
 				Date:    parseDate(i.PubDate, i.DCDate),
 				GUID:    firstNonEmpty(i.GUID, i.Link, i.Title),
+				Thumb:   thumb,
 			})
 		}
 		return out, nil
@@ -119,6 +143,7 @@ func parse(body string) ([]Item, error) {
 			Summary: stripTags(firstNonEmpty(e.Summary, e.Content)),
 			Date:    parseDate(e.Published, e.Updated),
 			GUID:    firstNonEmpty(e.ID, link, e.Title),
+			Thumb:   strings.TrimSpace(e.Group.Thumb.URL),
 		})
 	}
 	return out, nil

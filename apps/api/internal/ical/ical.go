@@ -19,6 +19,7 @@ type Event struct {
 	Description string
 	Location    string
 	URL         string
+	Image       string // RFC 7986 IMAGE;VALUE=URI
 	Start       time.Time
 	End         time.Time
 	AllDay      bool
@@ -90,6 +91,8 @@ func Parse(data string) ([]Event, error) {
 			cur.Location = unescape(p.value)
 		case p.name == "URL":
 			cur.URL = p.value
+		case p.name == "IMAGE":
+			cur.Image = p.value
 		case p.name == "DTSTART":
 			t, allDay, err := parseTime(p)
 			if err != nil {
@@ -439,6 +442,9 @@ func encodeVevent(e Event) string {
 	}
 	if e.URL != "" {
 		b.WriteString("URL:" + e.URL + "\r\n")
+	}
+	if e.Image != "" {
+		b.WriteString("IMAGE;VALUE=URI:" + e.Image + "\r\n")
 	}
 	if e.AllDay {
 		b.WriteString("DTSTART;VALUE=DATE:" + e.Start.Format("20060102") + "\r\n")

@@ -82,7 +82,7 @@ interface PlannerState {
   removeAccount: (id: string) => Promise<void>;
   syncAccount: (id: string) => Promise<void>;
   loadFeedEvents: (params: { from: string; to: string }) => Promise<void>;
-  addFeed: (input: { name: string; url: string; color?: string }) => Promise<boolean>;
+  addFeed: (input: { name: string; url: string; color?: string; kind?: string }) => Promise<boolean>;
   removeFeed: (id: string) => Promise<void>;
   refreshFeed: (id: string) => Promise<void>;
   importIcs: (file: File) => Promise<void>;

@@ -2146,6 +2146,10 @@ button {
     font-weight: 600;
     color: var(--text-3);
     text-decoration: none;
+    background: none;
+    border: 0;
+    font-family: inherit;
+    cursor: pointer;
   }
   .bottom-nav .tab.active {
     color: var(--accent-strong);
@@ -2800,3 +2804,8 @@ button {
   color: var(--text-3);
 }
 .link-favicon-lg { width: 40px; height: 40px; border-radius: 8px; }
+
+/* feed kind badge + selector */
+.feed-kind { margin-left: 6px; font-size: 10px; font-weight: 700; letter-spacing: .04em; color: var(--text-3); text-transform: uppercase; }
+.feed-kind-select { flex: 0 0 auto; width: auto; }
+.agenda-thumb { width: 44px; aspect-ratio: 16/9; object-fit: cover; border-radius: 4px; flex: 0 0 auto; }

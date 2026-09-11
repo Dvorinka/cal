@@ -299,6 +299,7 @@ export function TodayPage() {
                         {e.startTime ? formatTime(e.startTime) : "all day"}
                         <i>{e.endTime ? formatTime(e.endTime) : e.feedName}</i>
                       </span>
+                      {e.image && <img className="agenda-thumb" src={e.image} alt="" loading="lazy" onError={(ev) => { ev.currentTarget.style.display = "none"; }} />}
                       <span className="agenda-title">{e.title}</span>
                       {live && <span className="live-pill">Now</span>}
                     </li>

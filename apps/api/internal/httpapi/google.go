@@ -167,7 +167,7 @@ func (s *Server) ensureGoogleFeed(ctx context.Context, userID string) (string, e
 			return f.ID, nil
 		}
 	}
-	feed, err := s.store.CreateFeed(ctx, userID, "Google", "google:primary", "iris", "")
+	feed, err := s.store.CreateFeed(ctx, userID, "Google", "google:primary", "iris", "calendar", "")
 	if err != nil {
 		return "", err
 	}

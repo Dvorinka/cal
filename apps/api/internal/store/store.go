@@ -100,6 +100,7 @@ type Feed struct {
 	Name      string     `json:"name"`
 	URL       string     `json:"url"`
 	Color     string     `json:"color"`
+	Kind      string     `json:"kind"` // "calendar" (default) | "links" — items become link entries
 	FetchedAt *time.Time `json:"fetchedAt,omitempty"`
 }
 
@@ -1220,7 +1221,7 @@ func (s *Store) EntryExternalRef(ctx context.Context, userID, id string) (accoun
 
 func (s *Store) ListFeeds(ctx context.Context, userID string) ([]Feed, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT id::text, name, url, color, fetched_at FROM feeds WHERE user_id = $1 ORDER BY created_at
+		SELECT id::text, name, url, color, kind, fetched_at FROM feeds WHERE user_id = $1 ORDER BY created_at
 	`, userID)
 	if err != nil {
 		return nil, err
@@ -1229,7 +1230,7 @@ func (s *Store) ListFeeds(ctx context.Context, userID string) ([]Feed, error) {
 	feeds := []Feed{}
 	for rows.Next() {
 		var f Feed
-		if err := rows.Scan(&f.ID, &f.Name, &f.URL, &f.Color, &f.FetchedAt); err != nil {
+		if err := rows.Scan(&f.ID, &f.Name, &f.URL, &f.Color, &f.Kind, &f.FetchedAt); err != nil {
 			return nil, err
 		}
 		feeds = append(feeds, f)
@@ -1237,13 +1238,13 @@ func (s *Store) ListFeeds(ctx context.Context, userID string) ([]Feed, error) {
 	return feeds, rows.Err()
 }
 
-func (s *Store) CreateFeed(ctx context.Context, userID, name, url, color, ics string) (Feed, error) {
+func (s *Store) CreateFeed(ctx context.Context, userID, name, url, color, kind, ics string) (Feed, error) {
 	var f Feed
 	err := s.db.QueryRow(ctx, `
-		INSERT INTO feeds (id, user_id, name, url, color, ics_cache, fetched_at)
-		VALUES ($1, $2, $3, $4, $5, $6, now())
-		RETURNING id::text, name, url, color, fetched_at
-	`, uuid.NewString(), userID, name, url, color, ics).Scan(&f.ID, &f.Name, &f.URL, &f.Color, &f.FetchedAt)
+		INSERT INTO feeds (id, user_id, name, url, color, kind, ics_cache, fetched_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+		RETURNING id::text, name, url, color, kind, fetched_at
+	`, uuid.NewString(), userID, name, url, color, kind, ics).Scan(&f.ID, &f.Name, &f.URL, &f.Color, &f.Kind, &f.FetchedAt)
 	return f, err
 }
 
@@ -1261,7 +1262,7 @@ func (s *Store) DeleteFeed(ctx context.Context, userID, id string) error {
 // FeedCache returns the stored ICS body for every feed the user owns.
 func (s *Store) FeedCaches(ctx context.Context, userID string) (map[Feed]string, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT id::text, name, url, color, fetched_at, ics_cache FROM feeds WHERE user_id = $1
+		SELECT id::text, name, url, color, kind, fetched_at, ics_cache FROM feeds WHERE user_id = $1
 	`, userID)
 	if err != nil {
 		return nil, err
@@ -1271,7 +1272,7 @@ func (s *Store) FeedCaches(ctx context.Context, userID string) (map[Feed]string,
 	for rows.Next() {
 		var f Feed
 		var cache *string
-		if err := rows.Scan(&f.ID, &f.Name, &f.URL, &f.Color, &f.FetchedAt, &cache); err != nil {
+		if err := rows.Scan(&f.ID, &f.Name, &f.URL, &f.Color, &f.Kind, &f.FetchedAt, &cache); err != nil {
 			return nil, err
 		}
 		if cache != nil {
@@ -1283,7 +1284,7 @@ func (s *Store) FeedCaches(ctx context.Context, userID string) (map[Feed]string,
 
 // AllFeeds returns every feed across users — used by the background sync loop.
 func (s *Store) AllFeeds(ctx context.Context) (map[string]Feed, error) {
-	rows, err := s.db.Query(ctx, `SELECT id::text, user_id::text, name, url, color, fetched_at FROM feeds`)
+	rows, err := s.db.Query(ctx, `SELECT id::text, user_id::text, name, url, color, kind, fetched_at FROM feeds`)
 	if err != nil {
 		return nil, err
 	}
@@ -1292,7 +1293,7 @@ func (s *Store) AllFeeds(ctx context.Context) (map[string]Feed, error) {
 	var userID string
 	for rows.Next() {
 		var f Feed
-		if err := rows.Scan(&f.ID, &userID, &f.Name, &f.URL, &f.Color, &f.FetchedAt); err != nil {
+		if err := rows.Scan(&f.ID, &userID, &f.Name, &f.URL, &f.Color, &f.Kind, &f.FetchedAt); err != nil {
 			return nil, err
 		}
 		out[userID+"/"+f.ID] = f
@@ -1306,6 +1307,15 @@ func (s *Store) RefreshFeedCache(ctx context.Context, userID, feedID, ics string
 		UPDATE feeds SET ics_cache = $3, fetched_at = now() WHERE id = $1 AND user_id = $2
 	`, feedID, userID, ics)
 	return err
+}
+
+// LinkEntryExists — dedupe for channel feeds: a link with this URL was already saved.
+func (s *Store) LinkEntryExists(ctx context.Context, userID, linkURL string) (bool, error) {
+	var ok bool
+	err := s.db.QueryRow(ctx, `
+		SELECT EXISTS(SELECT 1 FROM entries WHERE user_id = $1 AND link_url = $2 AND deleted_at IS NULL)
+	`, userID, linkURL).Scan(&ok)
+	return ok, err
 }
 
 // --- Files ---

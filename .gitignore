@@ -19,3 +19,4 @@ apps/desktop/frontend/dist/
 !apps/desktop/frontend/dist/.gitkeep
 apps/desktop/build/bin/
 apps/api/data/
+apps/desktop/desktop
