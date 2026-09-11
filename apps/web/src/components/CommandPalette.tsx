@@ -170,6 +170,16 @@ export function CommandPalette() {
         },
       },
       {
+        id: "people",
+        label: "Go to people",
+        icon: <ArrowRight size={15} />,
+        module: "people",
+        run: () => {
+          close();
+          navigate("/people");
+        },
+      },
+      {
         id: "timer",
         label: "Start focus timer",
         icon: <ArrowRight size={15} />,

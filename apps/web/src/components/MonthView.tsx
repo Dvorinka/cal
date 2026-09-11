@@ -3,21 +3,24 @@ import { Plus, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { draggedEntryId, dropTargetProps } from "../lib/dnd";
 import { formatDayTitle, formatTime, iso, monthMatrix, timeToMinutes, todayIso, weekdayNames, type WeekStartPref } from "../lib/date";
+import type { PersonOccurrence } from "../lib/people";
 import { useUi } from "../stores/ui";
 import { EntryChip } from "./EntryChip";
+import { PersonChip } from "./PersonChip";
 
 interface Props {
   anchor: Date;
   entries: Entry[];
   feedEvents: FeedEvent[];
   holidays: Holiday[];
+  personDates?: PersonOccurrence[];
   weekStart: WeekStartPref;
   onMoveEntry: (id: string, date: string) => void;
 }
 
 const MAX_VISIBLE = 4;
 
-export function MonthView({ anchor, entries, feedEvents, holidays, weekStart, onMoveEntry }: Props) {
+export function MonthView({ anchor, entries, feedEvents, holidays, personDates = [], weekStart, onMoveEntry }: Props) {
   const selectDate = useUi((state) => state.selectDate);
   const selectedDate = useUi((state) => state.selectedDate);
   const openCreate = useUi((state) => state.openCreate);
@@ -59,9 +62,20 @@ export function MonthView({ anchor, entries, feedEvents, holidays, weekStart, on
     return map;
   }, [feedEvents]);
 
+  const personByDate = useMemo(() => {
+    const map = new Map<string, PersonOccurrence[]>();
+    for (const p of personDates) {
+      const list = map.get(p.date) ?? [];
+      list.push(p);
+      map.set(p.date, list);
+    }
+    return map;
+  }, [personDates]);
+
   const modalDate = dayModal;
   const modalEntries = modalDate ? byDate.get(modalDate) ?? [] : [];
   const modalFeeds = modalDate ? feedByDate.get(modalDate) ?? [] : [];
+  const modalPeople = modalDate ? personByDate.get(modalDate) ?? [] : [];
 
   return (
     <div className="month-wrap">
@@ -75,10 +89,12 @@ export function MonthView({ anchor, entries, feedEvents, holidays, weekStart, on
           const date = iso(day);
           const dayEntries = byDate.get(date) ?? [];
           const dayFeeds = feedByDate.get(date) ?? [];
+          const dayPeople = personByDate.get(date) ?? [];
           const isOutside = day.getMonth() !== anchor.getMonth();
           const visible = dayEntries.slice(0, MAX_VISIBLE);
           const visibleFeeds = dayFeeds.slice(0, Math.max(0, MAX_VISIBLE - visible.length));
-          const hidden = dayEntries.length + dayFeeds.length - visible.length - visibleFeeds.length;
+          const visiblePeople = dayPeople.slice(0, Math.max(0, MAX_VISIBLE - visible.length - visibleFeeds.length));
+          const hidden = dayEntries.length + dayFeeds.length + dayPeople.length - visible.length - visibleFeeds.length - visiblePeople.length;
           return (
             <div
               key={date}
@@ -123,6 +139,9 @@ export function MonthView({ anchor, entries, feedEvents, holidays, weekStart, on
                   {event.startTime && <span className="time">{formatTime(event.startTime)}</span>}
                   <span className="title">{event.title}</span>
                 </div>
+              ))}
+              {visiblePeople.map((p) => (
+                <PersonChip key={p.id} occasion={p} />
               ))}
               {hidden > 0 && (
                 <button
@@ -174,7 +193,10 @@ export function MonthView({ anchor, entries, feedEvents, holidays, weekStart, on
                   <span className="title">{event.title}</span>
                 </div>
               ))}
-              {modalEntries.length === 0 && modalFeeds.length === 0 && (
+              {modalPeople.map((p) => (
+                <PersonChip key={p.id} occasion={p} onOpen={() => setDayModal(null)} />
+              ))}
+              {modalEntries.length === 0 && modalFeeds.length === 0 && modalPeople.length === 0 && (
                 <p className="panel-empty">Nothing on this day.</p>
               )}
             </div>

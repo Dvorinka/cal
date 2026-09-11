@@ -169,6 +169,10 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authed.DELETE("/google", server.googleDisconnect)
 	authed.DELETE("/caldav/:id", server.deleteCaldav)
 	authed.POST("/caldav/:id/sync", server.syncCaldav)
+	authed.GET("/people", server.listPeople)
+	authed.POST("/people", server.createPerson)
+	authed.PATCH("/people/:id", server.updatePerson)
+	authed.DELETE("/people/:id", server.deletePerson)
 
 	router.GET("/api/widget/today", server.widgetToday)
 	router.GET("/api/shared/files/:token", server.serveSharedFile)

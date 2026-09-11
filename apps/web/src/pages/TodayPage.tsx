@@ -1,10 +1,12 @@
 import type { DashboardStats, Habit, TimeSummary, WeekReview } from "@cal/api-client";
 import {
   AlarmClock,
+  Cake,
   Check,
   Crosshair,
   File,
   Flame,
+  Heart,
   Link2,
   NotebookPen,
   Pencil,
@@ -16,8 +18,11 @@ import {
 } from "lucide-react";
 import { Cloud, CloudDrizzle, CloudFog, CloudLightning, CloudRain, CloudSun, Snowflake, Sun } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { PageHeader } from "../components/PageHeader";
 import { addDays, formatTime, iso, timeToMinutes, todayIso } from "../lib/date";
+import { moduleOn } from "../lib/modules";
+import { daysLabel, upcomingDates } from "../lib/people";
 import { fetchWeather, weatherIcon, type Weather } from "../lib/weather";
 import { reportErr, usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
@@ -56,6 +61,8 @@ const JOURNAL_TEMPLATE = `## Journal — {date}
 export function TodayPage() {
   const entries = usePlanner((state) => state.entries);
   const feedEvents = usePlanner((state) => state.feedEvents);
+  const people = usePlanner((state) => state.people);
+  const loadPeople = usePlanner((state) => state.loadPeople);
   const loadEntries = usePlanner((state) => state.loadEntries);
   const loadFeeds = usePlanner((state) => state.loadFeeds);
   const loadFeedEvents = usePlanner((state) => state.loadFeedEvents);
@@ -67,6 +74,7 @@ export function TodayPage() {
   const openCreate = useUi((state) => state.openCreate);
   const openEdit = useUi((state) => state.openEdit);
   const selectDate = useUi((state) => state.selectDate);
+  const navigate = useNavigate();
   const [now, setNow] = useState(() => new Date());
   const [weather, setWeather] = useState<Weather | null>(null);
   const [habits, setHabits] = useState<Habit[]>([]);
@@ -87,16 +95,19 @@ export function TodayPage() {
 
   useEffect(() => selectDate(today), [today, selectDate]);
 
+  const peopleOn = moduleOn(settings, "people");
+
   // Deep-link landing: ensure entries exist even if the calendar never mounted.
   useEffect(() => {
     void loadEntries({ from: addDaysIso(today, -14), to: addDaysIso(today, 14) });
     void loadFeeds();
+    if (peopleOn) void loadPeople();
     void api.habits().then(setHabits).catch(reportErr("Could not load habits"));
     void api.activity().then(setActivity).catch(reportErr("Could not load activity"));
     void api.timeSummary().then(setTime).catch(reportErr("Could not load time totals"));
     void api.dashboard(activeWorkspace ?? "").then(setDash).catch(reportErr("Could not load dashboard"));
     void api.storage().then(setStorage).catch(reportErr("Could not load storage"));
-  }, [today, loadEntries, loadFeeds, api, activeWorkspace]);
+  }, [today, loadEntries, loadFeeds, loadPeople, api, activeWorkspace, peopleOn]);
 
   useEffect(() => {
     if (settings.city) {
@@ -131,6 +142,15 @@ export function TodayPage() {
     return s <= nowMinutes && nowMinutes < en;
   });
   const openTasks = untimedTasks.filter((e) => !e.completed);
+
+  // Birthdays/anniversaries coming up — workspace-scoped like the entries.
+  const upcomingPeople = useMemo(() => {
+    if (!peopleOn) return [];
+    const ws = activeWorkspace ?? "";
+    const scoped =
+      ws === "none" ? people.filter((p) => !p.workspaceId) : ws ? people.filter((p) => p.workspaceId === ws) : people;
+    return upcomingDates(scoped, 14);
+  }, [people, peopleOn, activeWorkspace]);
 
   const WeatherIcon = weather ? WEATHER_ICONS[weatherIcon(weather.code).icon] : null;
 
@@ -244,6 +264,21 @@ export function TodayPage() {
                   <span key={h.id} className={`habit-chip ${h.streak > 0 ? "on" : ""}`} title={`${h.title} — ${h.recur}, streak ${h.streak}`}>
                     <Flame size={12} /> {h.title} <b>{h.streak}</b>
                   </span>
+                ))}
+              </div>
+            )}
+            {upcomingPeople.length > 0 && (
+              <div className="habit-row">
+                {upcomingPeople.map((o) => (
+                  <button
+                    key={o.id}
+                    type="button"
+                    className={`habit-chip ${o.daysUntil <= 1 ? "on" : ""}`}
+                    title={`${o.name} · ${o.label}${o.turning ? ` — turns ${o.turning}` : ""}`}
+                    onClick={() => navigate(`/people?edit=${o.personId}`)}
+                  >
+                    {o.label === "birthday" ? <Cake size={12} /> : <Heart size={12} />} {o.name} <b>{daysLabel(o.daysUntil)}</b>
+                  </button>
                 ))}
               </div>
             )}

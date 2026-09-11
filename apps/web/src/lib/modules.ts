@@ -13,6 +13,7 @@ export const MODULES = [
   { key: "github", label: "GitHub", hint: "Issue/PR inbox and activity" },
   { key: "mail", label: "Mail", hint: "IMAP/SMTP inbox and compose" },
   { key: "tags", label: "Tags", hint: "Tag browser and counts" },
+  { key: "people", label: "People", hint: "Birthdays, anniversaries, important dates" },
 ] as const;
 
 export type ModuleKey = (typeof MODULES)[number]["key"];
@@ -33,5 +34,6 @@ export function moduleForPath(path: string): ModuleKey | null {
   if (path.startsWith("/github")) return "github";
   if (path.startsWith("/mail")) return "mail";
   if (path.startsWith("/tags")) return "tags";
+  if (path.startsWith("/people")) return "people";
   return null;
 }

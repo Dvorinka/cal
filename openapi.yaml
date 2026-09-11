@@ -317,7 +317,7 @@ paths:
           description: Invalid token
   /mcp:
     post:
-      summary: Model Context Protocol endpoint (JSON-RPC 2.0 over HTTP). Auth via `Authorization: Bearer <apiToken>`. Supports initialize, ping, tools/list, tools/call.
+      summary: "Model Context Protocol endpoint (JSON-RPC 2.0 over HTTP). Auth via `Authorization: Bearer <apiToken>`. Supports initialize, ping, tools/list, tools/call."
       requestBody:
         required: true
         content:
@@ -571,6 +571,25 @@ paths:
       summary: Update workspace {name?, color?, icon?, position?}
     delete:
       summary: Delete workspace — contents fall back to Personal
+  /people:
+    get:
+      summary: Personal relationship records (names, relations, birthdays, named dates)
+    post:
+      summary: Create person {name, relation?, birthday?, dates? [{label,date}], notes?, color?, workspaceId?}
+      responses:
+        "400":
+          description: Invalid person (missing name, bad date, unknown workspace)
+  /people/{id}:
+    patch:
+      summary: Update person — full replace of the editable record
+      responses:
+        "404":
+          description: Not found
+    delete:
+      summary: Delete person — permanent, no trash
+      responses:
+        "404":
+          description: Not found
   /files/{id}:
     patch:
       summary: Update file tags/workspace {tags?, workspaceId?}

@@ -195,6 +195,37 @@ export interface Holiday {
   country: string;
 }
 
+/** One named yearly date on a person — anniversary, nameday, "first met".
+ *  Recurs on month+day; the year only feeds "turns N" displays. */
+export interface PersonDate {
+  label: string;
+  date: string; // YYYY-MM-DD
+}
+
+export interface Person {
+  id: string;
+  name: string;
+  /** Free-ish text — family | partner | friend | colleague | acquaintance by convention. */
+  relation: string;
+  birthday?: string;
+  dates: PersonDate[];
+  notes: string;
+  color: string;
+  workspaceId?: string;
+  createdAt: string;
+}
+
+export interface PersonInput {
+  name: string;
+  relation?: string;
+  /** YYYY-MM-DD or "" to clear. */
+  birthday?: string;
+  dates?: PersonDate[];
+  notes?: string;
+  color?: string;
+  workspaceId?: string;
+}
+
 export interface Country {
   code: string;
   name: string;
@@ -522,6 +553,19 @@ export class CalApi {
 
   async updateFile(id: string, patch: { tags?: string[]; workspaceId?: string }): Promise<FileRec> {
     return this.request(`/files/${id}`, { method: "PATCH", body: patch });
+  }
+
+  async people(): Promise<Person[]> {
+    return this.request("/people");
+  }
+  async createPerson(input: PersonInput): Promise<Person> {
+    return this.request("/people", { method: "POST", body: input });
+  }
+  async updatePerson(id: string, input: PersonInput): Promise<Person> {
+    return this.request(`/people/${id}`, { method: "PATCH", body: input });
+  }
+  async deletePerson(id: string): Promise<void> {
+    await this.request(`/people/${id}`, { method: "DELETE" });
   }
 
   async filters(): Promise<SavedFilter[]> {

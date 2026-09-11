@@ -8,6 +8,8 @@ import {
   type Feed,
   type FeedEvent,
   type Holiday,
+  type Person,
+  type PersonInput,
   type Settings,
   type User,
   type Workspace,
@@ -52,6 +54,7 @@ interface PlannerState {
   entries: Entry[];
   feedEvents: FeedEvent[];
   feeds: Feed[];
+  people: Person[];
   holidays: Holiday[];
   countries: Country[];
   settings: Settings;
@@ -86,6 +89,10 @@ interface PlannerState {
   addFeed: (input: { name: string; url: string; color?: string; kind?: string }) => Promise<boolean>;
   removeFeed: (id: string) => Promise<void>;
   refreshFeed: (id: string) => Promise<void>;
+  loadPeople: () => Promise<void>;
+  addPerson: (input: PersonInput) => Promise<Person | undefined>;
+  savePerson: (id: string, input: PersonInput) => Promise<Person | undefined>;
+  removePerson: (id: string) => Promise<void>;
   importIcs: (file: File) => Promise<void>;
   restore: (file: File) => Promise<void>;
   rotateToken: (kind: "widget" | "api") => Promise<void>;
@@ -100,6 +107,7 @@ export const usePlanner = create<PlannerState>((set, get) => ({
   entries: readCachedEntries(),
   feedEvents: [],
   feeds: [],
+  people: [],
   accounts: [],
   holidays: [],
   countries: [],
@@ -448,6 +456,52 @@ export const usePlanner = create<PlannerState>((set, get) => ({
     }
   },
 
+  async loadPeople() {
+    try {
+      const people = await get().api.people();
+      set({ people });
+    } catch (error) {
+      reportErr("Could not load people")(error);
+    }
+  },
+
+  async addPerson(input) {
+    try {
+      // New people inherit the active workspace (not "none" — that's Personal).
+      const ws = get().settings.activeWorkspace;
+      if (!input.workspaceId && ws && ws !== "none") input = { ...input, workspaceId: ws };
+      const person = await get().api.createPerson(input);
+      set({ people: [...get().people, person].sort(byName) });
+      return person;
+    } catch (error) {
+      get().toast(error instanceof Error ? error.message : "Failed to add person");
+      return undefined;
+    }
+  },
+
+  async savePerson(id, input) {
+    try {
+      const person = await get().api.updatePerson(id, input);
+      set({ people: get().people.map((p) => (p.id === id ? person : p)).sort(byName) });
+      return person;
+    } catch (error) {
+      get().toast(error instanceof Error ? error.message : "Failed to save person");
+      return undefined;
+    }
+  },
+
+  async removePerson(id) {
+    const snapshot = get().people;
+    set({ people: snapshot.filter((p) => p.id !== id) });
+    try {
+      await get().api.deletePerson(id);
+      get().toast("Deleted");
+    } catch (error) {
+      set({ people: snapshot });
+      get().toast(error instanceof Error ? error.message : "Failed to delete person");
+    }
+  },
+
   async loadAccounts() {
     try {
       const accounts = await get().api.caldavAccounts();
@@ -545,6 +599,11 @@ export const usePlanner = create<PlannerState>((set, get) => ({
     set({ toasts: get().toasts.filter((toast) => toast.id !== id) });
   },
 }));
+
+// byName keeps the people list alphabetical regardless of insert order.
+function byName(a: Person, b: Person): number {
+  return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+}
 
 // reportErr — catch handler for background reads: surfaces the server's
 // message on real failures, stays quiet when simply offline (the TopBar

@@ -11,9 +11,11 @@ import {
   type CalendarView,
   type WeekStartPref,
 } from "../lib/date";
+import type { PersonOccurrence } from "../lib/people";
 import { usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
 import { EntryChip } from "./EntryChip";
+import { PersonChip } from "./PersonChip";
 
 const HOUR_H = 52;
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -24,6 +26,7 @@ interface Props {
   entries: Entry[];
   feedEvents: FeedEvent[];
   holidays: Holiday[];
+  personDates?: PersonOccurrence[];
   weekStart: WeekStartPref;
   onMoveEntry: (id: string, patch: { date: string; startTime?: string; endTime?: string }) => void;
 }
@@ -60,7 +63,7 @@ function lanes(events: { entry: Entry; start: number; end: number }[]) {
   return result;
 }
 
-export function TimeGridView({ view, anchor, entries, feedEvents, holidays, weekStart, onMoveEntry }: Props) {
+export function TimeGridView({ view, anchor, entries, feedEvents, holidays, personDates = [], weekStart, onMoveEntry }: Props) {
   const selectDate = useUi((state) => state.selectDate);
   const openCreate = useUi((state) => state.openCreate);
   const openEdit = useUi((state) => state.openEdit);
@@ -137,6 +140,11 @@ export function TimeGridView({ view, anchor, entries, feedEvents, holidays, week
                   <div key={e.id} className={`feed-chip color-${e.color}`} title={`${e.title} — ${e.feedName}`}>
                     <span className="title">{e.title}</span>
                   </div>
+                ))}
+              {personDates
+                .filter((p) => p.date === date)
+                .map((p) => (
+                  <PersonChip key={p.id} occasion={p} />
                 ))}
             </div>
           );

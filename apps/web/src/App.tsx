@@ -20,6 +20,7 @@ import { GitHubPage } from "./pages/GitHubPage";
 import { LinksPage } from "./pages/LinksPage";
 import { MailPage } from "./pages/MailPage";
 import { NotesPage } from "./pages/NotesPage";
+import { PeoplePage } from "./pages/PeoplePage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { TasksPage } from "./pages/TasksPage";
 import { TodayPage } from "./pages/TodayPage";
@@ -138,6 +139,7 @@ function Shell() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/trash" element={<TrashPage />} />
           <Route path="/tags" element={<Gated><TagsPage /></Gated>} />
+          <Route path="/people" element={<Gated><PeoplePage /></Gated>} />
           <Route path="/time" element={<Gated><TimePage /></Gated>} />
           <Route path="/mail" element={<Gated><MailPage /></Gated>} />
           <Route path="/github" element={<Gated><GitHubPage /></Gated>} />

@@ -2830,3 +2830,87 @@ button {
 .day-modal-list .entry-chip, .day-modal-list .feed-chip { font-size: 13px; padding: 7px 9px; }
 .row-edit { opacity: 0; transition: opacity .15s; }
 .check-list li:hover .row-edit { opacity: 1; }
+
+/* ── People — personal relationship manager ─────────────────────────────── */
+
+.people-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm, 8px);
+  background: var(--bg-field);
+  color: var(--text-3);
+}
+.people-search-input {
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text-1);
+  width: 140px;
+  outline: none;
+}
+.people-upcoming {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.people-upcoming .habit-chip { cursor: pointer; }
+.people-group { margin-bottom: 10px; }
+.people-group-label { margin-bottom: 2px; }
+.people-list { list-style: none; margin: 0; padding: 0; }
+.person-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.person-avatar {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--pc, var(--c-slate)) 18%, transparent);
+  color: var(--pc, var(--c-slate));
+  font-size: 12px;
+  font-weight: 700;
+}
+.person-name { display: flex; align-items: baseline; gap: 8px; }
+.person-note {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.person-next { display: inline-flex; align-items: center; gap: 4px; }
+.person-date-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.person-date-row .person-date-when { flex: 0 0 auto; width: 150px; }
+
+/* calendar chip — birthday/anniversary markers, tinted like feed chips */
+.person-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.4;
+  background: var(--chip-bg);
+  color: var(--chip);
+  border: 1px solid color-mix(in srgb, var(--chip) 30%, transparent);
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+}
+.person-chip .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.person-chip svg { flex: none; }
+.day-modal-list .person-chip { font-size: 13px; padding: 6px 9px; }
