@@ -1,8 +1,8 @@
 import type { Entry, FeedEvent, Holiday } from "@cal/api-client";
-import { Plus } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { draggedEntryId, dropTargetProps } from "../lib/dnd";
-import { formatTime, iso, monthMatrix, timeToMinutes, todayIso, weekdayNames, type WeekStartPref } from "../lib/date";
+import { formatDayTitle, formatTime, iso, monthMatrix, timeToMinutes, todayIso, weekdayNames, type WeekStartPref } from "../lib/date";
 import { useUi } from "../stores/ui";
 import { EntryChip } from "./EntryChip";
 
@@ -21,8 +21,7 @@ export function MonthView({ anchor, entries, feedEvents, holidays, weekStart, on
   const selectDate = useUi((state) => state.selectDate);
   const selectedDate = useUi((state) => state.selectedDate);
   const openCreate = useUi((state) => state.openCreate);
-  const setView = useUi((state) => state.setView);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [dayModal, setDayModal] = useState<string | null>(null);
   const today = todayIso();
 
   const days = useMemo(() => monthMatrix(anchor, weekStart), [anchor, weekStart]);
@@ -60,14 +59,9 @@ export function MonthView({ anchor, entries, feedEvents, holidays, weekStart, on
     return map;
   }, [feedEvents]);
 
-  function toggleExpanded(date: string) {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(date)) next.delete(date);
-      else next.add(date);
-      return next;
-    });
-  }
+  const modalDate = dayModal;
+  const modalEntries = modalDate ? byDate.get(modalDate) ?? [] : [];
+  const modalFeeds = modalDate ? feedByDate.get(modalDate) ?? [] : [];
 
   return (
     <div className="month-wrap">
@@ -82,9 +76,8 @@ export function MonthView({ anchor, entries, feedEvents, holidays, weekStart, on
           const dayEntries = byDate.get(date) ?? [];
           const dayFeeds = feedByDate.get(date) ?? [];
           const isOutside = day.getMonth() !== anchor.getMonth();
-          const isExpanded = expanded.has(date);
-          const visible = isExpanded ? dayEntries : dayEntries.slice(0, MAX_VISIBLE);
-          const visibleFeeds = isExpanded ? dayFeeds : dayFeeds.slice(0, Math.max(0, MAX_VISIBLE - visible.length));
+          const visible = dayEntries.slice(0, MAX_VISIBLE);
+          const visibleFeeds = dayFeeds.slice(0, Math.max(0, MAX_VISIBLE - visible.length));
           const hidden = dayEntries.length + dayFeeds.length - visible.length - visibleFeeds.length;
           return (
             <div
@@ -137,8 +130,8 @@ export function MonthView({ anchor, entries, feedEvents, holidays, weekStart, on
                   className="more-link"
                   onClick={(event) => {
                     event.stopPropagation();
-                    toggleExpanded(date);
                     selectDate(date);
+                    setDayModal(date);
                   }}
                 >
                   {`+${hidden} more`}
@@ -148,6 +141,46 @@ export function MonthView({ anchor, entries, feedEvents, holidays, weekStart, on
           );
         })}
       </div>
+      {modalDate && (
+        <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && setDayModal(null)}>
+          <div className="palette day-modal" role="dialog" aria-label={`Entries on ${modalDate}`}>
+            <div className="day-modal-head">
+              <h3>{formatDayTitle(modalDate)}</h3>
+              <button
+                type="button"
+                className="btn btn-primary btn-xs"
+                onClick={() => {
+                  openCreate(modalDate);
+                  setDayModal(null);
+                }}
+              >
+                <Plus size={12} /> Add
+              </button>
+              <button type="button" className="icon-btn" aria-label="Close" onClick={() => setDayModal(null)}>
+                <X size={15} />
+              </button>
+            </div>
+            <div className="day-modal-list">
+              {modalEntries.map((entry) => (
+                <EntryChip key={entry.id} entry={entry} />
+              ))}
+              {modalFeeds.map((event) => (
+                <div
+                  key={event.id}
+                  className={`feed-chip color-${event.color}`}
+                  title={`${event.title} — ${event.feedName}${event.location ? ` · ${event.location}` : ""}`}
+                >
+                  {event.startTime && <span className="time">{formatTime(event.startTime)}</span>}
+                  <span className="title">{event.title}</span>
+                </div>
+              ))}
+              {modalEntries.length === 0 && modalFeeds.length === 0 && (
+                <p className="panel-empty">Nothing on this day.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

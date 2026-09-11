@@ -1668,7 +1668,7 @@ func (s *Store) StartTimer(ctx context.Context, userID string, entryID *string, 
 	var t TimeEntry
 	err := s.db.QueryRow(ctx, `
 		INSERT INTO time_entries (user_id, entry_id, note, planned_minutes, billable, hourly_rate, project_id, tags)
-		VALUES ($1, $2::uuid, $3, nullif($4, 0), $5, $6, $7::uuid, coalesce($8, '{}'))
+		VALUES ($1, $2::uuid, $3, nullif($4, 0), $5, $6, $7::uuid, coalesce($8::text[], '{}'))
 		ON CONFLICT (user_id) WHERE end_at IS NULL DO NOTHING
 		RETURNING id::text, entry_id::text, start_at`, userID, entryID, note, planned, billable, rate, projectID, tags).
 		Scan(&t.ID, &t.EntryID, &t.StartAt)
@@ -1718,7 +1718,7 @@ func (s *Store) TimeSummary(ctx context.Context, userID string) (map[string]any,
 		FROM time_entries WHERE user_id = $1 AND start_at >= current_date - 6`, userID).Scan(&week)
 	rows, err := s.db.Query(ctx, `
 		SELECT t.entry_id::text, coalesce(e.title,''),
-		       sum(EXTRACT(EPOCH FROM coalesce(t.end_at, now()) - t.start_at))/60::int AS mins
+		       (sum(EXTRACT(EPOCH FROM coalesce(t.end_at, now()) - t.start_at))/60)::int AS mins
 		FROM time_entries t LEFT JOIN entries e ON e.id = t.entry_id
 		WHERE t.user_id = $1 AND t.start_at::date = current_date AND t.entry_id IS NOT NULL
 		GROUP BY t.entry_id, e.title ORDER BY mins DESC`, userID)
@@ -1741,7 +1741,7 @@ func (s *Store) TimeSummary(ctx context.Context, userID string) (map[string]any,
 // MinutesByEntry — for the card "time spent" chip.
 func (s *Store) MinutesByEntry(ctx context.Context, userID string) (map[string]int, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT entry_id::text, sum(EXTRACT(EPOCH FROM coalesce(end_at, now()) - start_at))/60::int
+		SELECT entry_id::text, (sum(EXTRACT(EPOCH FROM coalesce(end_at, now()) - start_at))/60)::int
 		FROM time_entries WHERE user_id = $1 AND entry_id IS NOT NULL GROUP BY entry_id`, userID)
 	if err != nil {
 		return nil, err

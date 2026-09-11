@@ -7,6 +7,7 @@ import {
   Flame,
   Link2,
   NotebookPen,
+  Pencil,
   Plus,
   StickyNote,
   Timer,
@@ -367,8 +368,16 @@ export function TodayPage() {
                 {links.map((e) => (
                   <li key={e.id}>
                     <Link2 size={13} className="row-ic" />
-                    <button type="button" className="row-title" onClick={() => openEdit(e)}>
+                    <button
+                      type="button"
+                      className="row-title"
+                      title={e.linkUrl}
+                      onClick={() => (e.linkUrl ? window.open(e.linkUrl, "_blank", "noopener") : openEdit(e))}
+                    >
                       {e.title}
+                    </button>
+                    <button type="button" className="icon-btn row-edit" aria-label={`Edit ${e.title}`} onClick={() => openEdit(e)}>
+                      <Pencil size={11} />
                     </button>
                   </li>
                 ))}

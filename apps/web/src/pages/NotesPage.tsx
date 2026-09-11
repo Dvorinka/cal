@@ -26,6 +26,18 @@ function contentTags(content: string): string[] {
   return [...new Set(found.map((t) => t.slice(1).toLowerCase()))].slice(0, 5);
 }
 
+// Plain-text excerpt for cards — strips markdown sigils so previews read clean.
+function excerpt(content: string, max: number): string {
+  const text = content
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "") // images
+    .replace(/\[\[([^\]]+)\]\]/g, "$1")   // wiki links
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1") // md links
+    .replace(/[#*_`>~-]+/g, " ")           // heading/emphasis/list markers
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.length > max ? text.slice(0, max).trimEnd() + "…" : text;
+}
+
 export function NotesPage() {
   const entries = usePlanner((state) => state.entries);
   const loadEntries = usePlanner((state) => state.loadEntries);
@@ -145,7 +157,7 @@ export function NotesPage() {
               >
                 {note.pinned && <Pin size={11} className="note-pin" aria-label="Pinned" />}
                 <strong>{note.title}</strong>
-                {note.content && <p>{note.content.slice(0, 160)}</p>}
+                {note.content && <p>{excerpt(note.content, 160)}</p>}
                 <span className="note-date">{formatDayShort(note.date)}</span>
               </button>
             ))}
@@ -159,7 +171,7 @@ export function NotesPage() {
                   <button key={note.id} type="button" className="stream-row" onClick={() => openEdit(note)}>
                     {note.pinned && <Pin size={11} className="note-pin" aria-label="Pinned" />}
                     <span className="stream-title">{note.title || "Untitled"}</span>
-                    {note.content && <span className="stream-excerpt">{note.content.slice(0, 90)}</span>}
+                    {note.content && <span className="stream-excerpt">{excerpt(note.content, 90)}</span>}
                     {[...note.tags, ...contentTags(note.content ?? "")].slice(0, 4).map((t) => (
                       <span key={t} className="stream-tag">
                         #{t}

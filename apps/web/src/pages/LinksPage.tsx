@@ -90,6 +90,7 @@ export function LinksPage() {
                         alt=""
                         loading="lazy"
                         style={{ position: "absolute", inset: 0 }}
+                        onLoad={(e) => { if (e.currentTarget.naturalWidth === 0) e.currentTarget.style.display = "none"; }}
                         onError={(e) => { e.currentTarget.style.display = "none"; }}
                       />
                     )}

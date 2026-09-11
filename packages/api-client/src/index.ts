@@ -358,7 +358,7 @@ export class CalApi {
   }
 
   async addWebhook(url: string): Promise<Webhook> {
-    return this.request("/webhooks", { method: "POST", body: JSON.stringify({ url }) });
+    return this.request("/webhooks", { method: "POST", body: { url } });
   }
 
   async deleteWebhook(id: string): Promise<void> {
@@ -366,11 +366,11 @@ export class CalApi {
   }
 
   async discoverCaldav(input: { url: string; username: string; password: string }): Promise<{ href: string; name: string }[]> {
-    return this.request("/caldav/discover", { method: "POST", body: JSON.stringify(input) });
+    return this.request("/caldav/discover", { method: "POST", body: input });
   }
 
   async connectCarddav(input: { name?: string; url: string; username: string; password: string }): Promise<{ imported: number; found: number }> {
-    return this.request("/carddav", { method: "POST", body: JSON.stringify(input) });
+    return this.request("/carddav", { method: "POST", body: input });
   }
 
   async googleStatus(): Promise<{ connected: boolean }> {
@@ -402,7 +402,7 @@ export class CalApi {
   }
 
   async shareFile(id: string, on: boolean): Promise<{ shareToken: string | null }> {
-    return this.request(`/files/${id}/share`, { method: "POST", body: JSON.stringify({ on }) });
+    return this.request(`/files/${id}/share`, { method: "POST", body: { on } });
   }
 
   async boards(): Promise<Board[]> {
@@ -410,7 +410,7 @@ export class CalApi {
   }
 
   async createBoard(name: string, color?: string, template?: string): Promise<Board> {
-    return this.request("/boards", { method: "POST", body: JSON.stringify({ name, color, template }) });
+    return this.request("/boards", { method: "POST", body: { name, color, template } });
   }
 
   async deleteBoard(id: string): Promise<void> {
@@ -422,11 +422,11 @@ export class CalApi {
   }
 
   async createColumn(boardId: string, name: string): Promise<BoardColumn> {
-    return this.request(`/boards/${boardId}/columns`, { method: "POST", body: JSON.stringify({ name }) });
+    return this.request(`/boards/${boardId}/columns`, { method: "POST", body: { name } });
   }
 
   async updateColumn(id: string, patch: { name?: string; wipLimit?: number }): Promise<void> {
-    return this.request(`/columns/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+    return this.request(`/columns/${id}`, { method: "PATCH", body: patch });
   }
 
   async deleteColumn(id: string): Promise<void> {
@@ -434,14 +434,14 @@ export class CalApi {
   }
 
   async moveCard(entryId: string, columnId: string | null, position: number): Promise<void> {
-    return this.request(`/cards/${entryId}/move`, { method: "POST", body: JSON.stringify({ columnId, position }) });
+    return this.request(`/cards/${entryId}/move`, { method: "POST", body: { columnId, position } });
   }
 
   async startTimer(opts: { entryId?: string; note?: string; planned?: number; billable?: boolean; rate?: number; projectId?: string } = {}): Promise<TimeEntry> {
-    return this.request("/timer/start", { method: "POST", body: JSON.stringify(opts) });
+    return this.request("/timer/start", { method: "POST", body: opts });
   }
   async stopTimer(): Promise<TimeEntry> {
-    return this.request("/timer/stop", { method: "POST", body: "{}" });
+    return this.request("/timer/stop", { method: "POST" });
   }
   async currentTimer(): Promise<TimeEntry | null> {
     const r = await fetch(`${this.root}/timer/current`, { credentials: "include", headers: this.headers(false) });
@@ -463,10 +463,10 @@ export class CalApi {
     return this.request(`/trash/${id}`, { method: "DELETE" });
   }
   async updateBoard(id: string, patch: { description?: string; targetDate?: string }): Promise<void> {
-    return this.request(`/boards/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+    return this.request(`/boards/${id}`, { method: "PATCH", body: patch });
   }
   async shareBoard(id: string, on: boolean, edit = false): Promise<{ shareToken: string; edit: boolean }> {
-    return this.request(`/boards/${id}/share`, { method: "POST", body: JSON.stringify({ on, edit }) });
+    return this.request(`/boards/${id}/share`, { method: "POST", body: { on, edit } });
   }
   async sharedBoard(token: string): Promise<{ name: string; description: string; targetDate?: string; edit: boolean; columns: { id: string; name: string }[]; cards: { id: string; columnId?: string; title: string; completed: boolean; date: string; tags: string[] }[] }> {
     const r = await fetch(`${this.root}/shared/boards/${token}`, { headers: this.headers(false) });
@@ -573,7 +573,7 @@ export class CalApi {
     return this.request("/github/activity");
   }
   async githubImport(url: string, boardId?: string, columnId?: string): Promise<Entry> {
-    return this.request("/github/import", { method: "POST", body: JSON.stringify({ url, boardId, columnId }) });
+    return this.request("/github/import", { method: "POST", body: { url, boardId, columnId } });
   }
 
   async search(q: string): Promise<{ entries: Entry[]; files: { id: string; name: string; origName: string }[]; boards: Board[] }> {

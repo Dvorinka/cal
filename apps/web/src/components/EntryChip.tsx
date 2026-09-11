@@ -27,7 +27,11 @@ export function EntryChip({ entry, showTime = true }: { entry: Entry; showTime?:
       onDragEnd={() => setDragging(false)}
       onClick={(event) => {
         event.stopPropagation();
-        openEdit(entry);
+        if (entry.type === "link" && entry.linkUrl) {
+          window.open(entry.linkUrl, "_blank", "noopener");
+        } else {
+          openEdit(entry);
+        }
       }}
       onContextMenu={(event) => {
         event.preventDefault();

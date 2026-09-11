@@ -3,8 +3,8 @@
 // Manual entries and editing mean no delete-and-restart corrections.
 
 import type { TimeEntry, TimeEntryInput, TimeEntryPatch } from "@cal/api-client";
-import { Download, Pencil, Plus, Tag, Timer, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Download, Pencil, Play, Plus, Square, Tag, Timer, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { formatDayShort, todayIso } from "../lib/date";
 import { usePlanner } from "../stores/planner";
@@ -44,12 +44,49 @@ export function TimePage() {
   const [tagFilter, setTagFilter] = useState("");
   const [editing, setEditing] = useState<TimeEntry | null>(null);
   const [adding, setAdding] = useState(false);
+  const [running, setRunning] = useState<TimeEntry | null>(null);
+  const [tick, setTick] = useState(0);
 
-  const load = () => {
+  const load = useCallback(() => {
     void api.timeLog().then(setLog).catch(() => {});
     void api.timeSummary().then(setSum).catch(() => {});
-  };
-  useEffect(load, [api]);
+    void api.currentTimer().then(setRunning).catch(() => setRunning(null));
+  }, [api]);
+  useEffect(load, [load]);
+
+  // Live elapsed counter while a timer runs.
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [running]);
+
+  const elapsed = running ? Math.max(0, Math.floor((Date.now() - new Date(running.startAt).getTime()) / 1000)) : 0;
+  void tick;
+
+  // Today's timed calendar entries — "track" starts a linked timer.
+  const todaysTimed = useMemo(
+    () =>
+      entries
+        .filter((e) => e.date === todayIso() && e.startTime)
+        .sort((a, b) => (a.startTime ?? "").localeCompare(b.startTime ?? "")),
+    [entries],
+  );
+
+  async function startOn(entryId?: string) {
+    try {
+      await api.startTimer(entryId ? { entryId } : {});
+      load();
+    } catch {
+      // already running — the hero row reflects it after reload
+      load();
+    }
+  }
+
+  async function stop() {
+    await api.stopTimer().catch(() => {});
+    load();
+  }
 
   const allTags = useMemo(() => {
     const set = new Set<string>();
@@ -94,9 +131,10 @@ export function TimePage() {
         <button
           type="button"
           className="btn btn-primary btn-xs"
-          onClick={() => void api.startTimer({}).then(load).catch(() => {})}
+          onClick={() => void startOn()}
+          disabled={!!running}
         >
-          <Timer size={12} /> Start timer
+          <Timer size={12} /> {running ? "Timer running" : "Start timer"}
         </button>
         <button
           type="button"
@@ -113,6 +151,40 @@ export function TimePage() {
         </a>
       </PageHeader>
       <div className="page-scroll">
+        {running && (
+          <div className="time-running">
+            <span className="live-dot" />
+            <span className="time-running-title">{running.title || running.note || "Untitled session"}</span>
+            <span className="time-running-clock">
+              {String(Math.floor(elapsed / 3600)).padStart(2, "0")}:{String(Math.floor((elapsed % 3600) / 60)).padStart(2, "0")}:{String(elapsed % 60).padStart(2, "0")}
+            </span>
+            <button type="button" className="btn btn-primary btn-xs" onClick={() => void stop()}>
+              <Square size={11} /> Stop
+            </button>
+          </div>
+        )}
+        {!running && todaysTimed.length > 0 && (
+          <section className="panel" style={{ marginBottom: 10 }}>
+            <h3>Today's agenda — track it</h3>
+            <ul className="time-agenda">
+              {todaysTimed.map((e) => (
+                <li key={e.id} className="time-agenda-row">
+                  <span className="time-agenda-time">
+                    {e.startTime}{e.endTime ? `–${e.endTime}` : ""}
+                  </span>
+                  <span className="time-agenda-title">{e.title}</span>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-xs"
+                    onClick={() => void startOn(e.id)}
+                  >
+                    <Play size={11} /> Track
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
         {allTags.length > 0 && (
           <div className="tag-filter-row">
             <Tag size={12} style={{ color: "var(--text-3)" }} />
