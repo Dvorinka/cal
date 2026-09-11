@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"cal/apps/api/app"
@@ -60,17 +61,18 @@ func NewHandler() (http.Handler, func(), error) {
 	mux.Handle("/api/", api)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// SPA fallback — missing files serve index.html so client routes work.
-		p := filepath.Clean("/" + r.URL.Path)
-		f, ferr := web.Open(p)
-		if ferr != nil {
-			r.URL.Path = "/"
-		} else {
+		// fs.FS paths never start with "/", so strip before probing.
+		p := strings.TrimPrefix(filepath.Clean("/"+r.URL.Path), "/")
+		if f, ferr := web.Open(p); ferr == nil {
 			st, _ := f.Stat()
 			_ = f.Close()
 			if st.IsDir() {
 				r.URL.Path = "/"
 			}
+		} else {
+			r.URL.Path = "/"
 		}
+		securityHeaders(w, r.URL.Path)
 		files.ServeHTTP(w, r)
 	})
 	return mux, func() {
@@ -79,6 +81,25 @@ func NewHandler() (http.Handler, func(), error) {
 			_ = pg.Stop()
 		}
 	}, nil
+}
+
+// securityHeaders mirrors the headers nginx used to set when the web build was
+// served standalone. connect-src allows the keyless Open-Meteo endpoints;
+// the service worker must never be served stale.
+func securityHeaders(w http.ResponseWriter, path string) {
+	h := w.Header()
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("X-Frame-Options", "SAMEORIGIN")
+	h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+	h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+	h.Set("Content-Security-Policy",
+		"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "+
+			"img-src 'self' data: https:; font-src 'self' data:; "+
+			"connect-src 'self' https://api.open-meteo.com https://geocoding-api.open-meteo.com; "+
+			"frame-ancestors 'self'; base-uri 'self'; form-action 'self'")
+	if path == "/sw.js" || path == "/sw-push.js" {
+		h.Set("Cache-Control", "no-cache")
+	}
 }
 
 // startEmbeddedPostgres boots a private Postgres in dir on a free port.
