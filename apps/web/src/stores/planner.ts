@@ -24,6 +24,7 @@ import {
 } from "../lib/offline";
 import { ApiError } from "@cal/api-client";
 import { enqueue, isOfflineError, newTempId, readQueue, writeQueue } from "../lib/opqueue";
+import { useUi } from "./ui";
 
 export interface Toast {
   id: number;
@@ -118,6 +119,7 @@ export const usePlanner = create<PlannerState>((set, get) => ({
       cacheUser(user);
       pushWidgetConfig(settings);
       set({ user, settings, booted: true, offline: false });
+      useUi.getState().applyDefaultView(settings.defaultView);
       void get().loadCountries();
       void get().loadWorkspaces();
       void get().flushQueue();
@@ -140,6 +142,7 @@ export const usePlanner = create<PlannerState>((set, get) => ({
     cacheUser(user);
     pushWidgetConfig(settings);
     set({ user, settings, error: undefined, offline: false });
+    useUi.getState().applyDefaultView(settings.defaultView);
     void get().loadCountries();
   },
 
@@ -151,6 +154,7 @@ export const usePlanner = create<PlannerState>((set, get) => ({
     cacheUser(user);
     pushWidgetConfig(settings);
     set({ user, settings, error: undefined, offline: false });
+    useUi.getState().applyDefaultView(settings.defaultView);
     void get().loadCountries();
   },
 
@@ -524,6 +528,8 @@ export const usePlanner = create<PlannerState>((set, get) => ({
       const saved = await get().api.updateSettings(settings);
       cacheSettings(saved);
       set({ settings: saved });
+      // Changing the default view is an explicit choice — apply it here too.
+      if (saved.defaultView) useUi.getState().setView(saved.defaultView);
     } catch (error) {
       get().toast(error instanceof Error ? error.message : "Failed to save settings");
     }

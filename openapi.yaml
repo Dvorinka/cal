@@ -981,6 +981,9 @@ components:
         apiToken:
           type: string
           description: Full-access bearer token for the MCP endpoint
+        defaultView:
+          enum: [month, week, day]
+          description: Calendar view fresh devices open on (default month)
     Feed:
       type: object
       required: [id, name, url, color]

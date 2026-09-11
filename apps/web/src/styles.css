@@ -395,6 +395,8 @@ button {
   grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
   height: 100dvh;
   overflow: hidden;
+  /* Capacitor edge-to-edge draws under the status bar. */
+  padding-top: env(safe-area-inset-top);
 }
 
 .sidebar {

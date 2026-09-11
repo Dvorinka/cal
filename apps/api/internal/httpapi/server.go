@@ -736,7 +736,9 @@ func validSettings(settings store.Settings) bool {
 	if settings.DigestTime != "" && !validTime(settings.DigestTime) {
 		return false
 	}
-	return len(settings.Country) == 2 && validTheme &&
+	validView := settings.DefaultView == "" || settings.DefaultView == "month" ||
+		settings.DefaultView == "week" || settings.DefaultView == "day"
+	return len(settings.Country) == 2 && validTheme && validView &&
 		(settings.WeekStart == "monday" || settings.WeekStart == "sunday")
 }
 

@@ -266,6 +266,18 @@ export function SettingsPage() {
               </select>
             </label>
             <label className="field">
+              <span>Default view</span>
+              <select
+                className="select"
+                value={settings.defaultView ?? "month"}
+                onChange={(e) => set({ defaultView: e.target.value as typeof settings.defaultView })}
+              >
+                <option value="month">Month</option>
+                <option value="week">Week</option>
+                <option value="day">Day</option>
+              </select>
+            </label>
+            <label className="field">
               <span>Timezone</span>
               <select
                 className="select"

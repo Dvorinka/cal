@@ -15,6 +15,9 @@ const config: CapacitorConfig = {
   },
   android: {
     allowMixedContent: false,
+    // Android 15+ enforces edge-to-edge; without this the app draws under
+    // the status bar (WebView doesn't populate env(safe-area-inset-*)).
+    adjustMarginsForEdgeToEdge: "auto",
   },
   plugins: {
     SplashScreen: { launchAutoHide: true },

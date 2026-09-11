@@ -93,6 +93,9 @@ type Settings struct {
 	// Modules gates feature areas; absent key = enabled.
 	Modules         map[string]bool `json:"modules,omitempty"`
 	ActiveWorkspace *string         `json:"activeWorkspace,omitempty"`
+	// DefaultView is the calendar view fresh devices open on; a device's own
+	// last-used view (localStorage) still wins once set.
+	DefaultView string `json:"defaultView"`
 }
 
 type Feed struct {
@@ -729,16 +732,16 @@ func (s *Store) Settings(ctx context.Context, userID string) (Settings, error) {
 	err := s.db.QueryRow(ctx, `
 		SELECT country, show_holidays, theme, week_start, accent, timezone, coalesce(city, ''), quota_mb,
 		       coalesce(to_char(digest_time,'HH24:MI'), ''), widget_token, api_token, default_rate, coalesce(github_token,''),
-		       modules, active_workspace::text FROM settings WHERE user_id = $1
-	`, userID).Scan(&settings.Country, &settings.ShowHolidays, &settings.Theme, &settings.WeekStart, &settings.Accent, &settings.Timezone, &settings.City, &settings.QuotaMB, &settings.DigestTime, &settings.WidgetToken, &settings.ApiToken, &settings.DefaultRate, &settings.GithubToken, &settings.Modules, &settings.ActiveWorkspace)
+		       modules, active_workspace::text, default_view FROM settings WHERE user_id = $1
+	`, userID).Scan(&settings.Country, &settings.ShowHolidays, &settings.Theme, &settings.WeekStart, &settings.Accent, &settings.Timezone, &settings.City, &settings.QuotaMB, &settings.DigestTime, &settings.WidgetToken, &settings.ApiToken, &settings.DefaultRate, &settings.GithubToken, &settings.Modules, &settings.ActiveWorkspace, &settings.DefaultView)
 	return settings, err
 }
 
 func (s *Store) UpdateSettings(ctx context.Context, userID string, settings Settings) (Settings, error) {
 	var out Settings
 	err := s.db.QueryRow(ctx, `
-		INSERT INTO settings (user_id, country, show_holidays, theme, week_start, accent, timezone, city, digest_time, default_rate, github_token, modules, active_workspace)
-		VALUES ($1, $2, $3, $4, $5, $6, coalesce(nullif($7, ''), 'UTC'), nullif($8, ''), nullif($9, '')::time, $10, nullif($11, ''), coalesce($12::jsonb, '{}'::jsonb), $13::uuid)
+		INSERT INTO settings (user_id, country, show_holidays, theme, week_start, accent, timezone, city, digest_time, default_rate, github_token, modules, active_workspace, default_view)
+		VALUES ($1, $2, $3, $4, $5, $6, coalesce(nullif($7, ''), 'UTC'), nullif($8, ''), nullif($9, '')::time, $10, nullif($11, ''), coalesce($12::jsonb, '{}'::jsonb), $13::uuid, nullif($14, ''))
 		ON CONFLICT (user_id) DO UPDATE
 		SET country = EXCLUDED.country,
 		    show_holidays = EXCLUDED.show_holidays,
@@ -751,12 +754,13 @@ func (s *Store) UpdateSettings(ctx context.Context, userID string, settings Sett
 		    default_rate = EXCLUDED.default_rate,
 		    github_token = EXCLUDED.github_token,
 		    modules = EXCLUDED.modules,
-		    active_workspace = EXCLUDED.active_workspace
+		    active_workspace = EXCLUDED.active_workspace,
+		    default_view = coalesce(EXCLUDED.default_view, 'month')
 		RETURNING country, show_holidays, theme, week_start, accent, timezone, coalesce(city, ''), quota_mb,
 		          coalesce(to_char(digest_time,'HH24:MI'), ''), widget_token, api_token, default_rate, coalesce(github_token,''),
-		          modules, active_workspace::text
-	`, userID, settings.Country, settings.ShowHolidays, settings.Theme, settings.WeekStart, settings.Accent, settings.Timezone, settings.City, settings.DigestTime, settings.DefaultRate, settings.GithubToken, settings.Modules, settings.ActiveWorkspace).
-		Scan(&out.Country, &out.ShowHolidays, &out.Theme, &out.WeekStart, &out.Accent, &out.Timezone, &out.City, &out.QuotaMB, &out.DigestTime, &out.WidgetToken, &out.ApiToken, &out.DefaultRate, &out.GithubToken, &out.Modules, &out.ActiveWorkspace)
+		          modules, active_workspace::text, default_view
+	`, userID, settings.Country, settings.ShowHolidays, settings.Theme, settings.WeekStart, settings.Accent, settings.Timezone, settings.City, settings.DigestTime, settings.DefaultRate, settings.GithubToken, settings.Modules, settings.ActiveWorkspace, settings.DefaultView).
+		Scan(&out.Country, &out.ShowHolidays, &out.Theme, &out.WeekStart, &out.Accent, &out.Timezone, &out.City, &out.QuotaMB, &out.DigestTime, &out.WidgetToken, &out.ApiToken, &out.DefaultRate, &out.GithubToken, &out.Modules, &out.ActiveWorkspace, &out.DefaultView)
 	return out, err
 }
 

@@ -45,6 +45,7 @@ interface UiState {
   closeSidebar: () => void;
   toggleType: (type: string) => void;
   toggleFeed: (id: string) => void;
+  applyDefaultView: (view: CalendarView | undefined) => void;
 }
 
 const persisted = (() => {
@@ -71,13 +72,12 @@ function persist(state: Pick<UiState, "view" | "hiddenTypes" | "hiddenFeeds">) {
 }
 
 export const useUi = create<UiState>((set, get) => ({
-  // No persisted view → phones start on day view; month cells are unreadable under ~700px.
+  // Last-used view wins; fresh devices start on month (settings.defaultView
+  // replaces it when the server settings land — see applyDefaultView).
   view:
-    persisted.view === "week" || persisted.view === "day"
+    persisted.view === "month" || persisted.view === "week" || persisted.view === "day"
       ? persisted.view
-      : typeof window !== "undefined" && window.innerWidth < 700
-        ? "day"
-        : "month",
+      : "month",
   anchor: new Date(),
   selectedDate: todayIso(),
   paletteOpen: false,
@@ -143,5 +143,10 @@ export const useUi = create<UiState>((set, get) => ({
     else hiddenFeeds.add(id);
     set({ hiddenFeeds });
     persist(get());
+  },
+  // Server default applies only when this device never chose a view itself.
+  applyDefaultView(view) {
+    if (!view || persisted.view) return;
+    if (get().view !== view) get().setView(view);
   },
 }));

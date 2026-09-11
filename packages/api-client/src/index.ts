@@ -94,6 +94,8 @@ export interface Settings {
   apiToken: string;
   /** Feature modules on/off; absent key = enabled. */
   modules?: Record<string, boolean>;
+  /** Calendar view fresh devices open on; per-device last-used view still wins. */
+  defaultView?: "month" | "week" | "day";
   /** Active workspace id; undefined/"none"/"" semantics handled client-side. */
   activeWorkspace?: string;
 }
