@@ -3,7 +3,7 @@
   "name": "Cal",
   "outputfilename": "cal",
   "frontend:install": "",
-  "frontend:build": "node ./scripts/build-frontend.mjs",
+  "frontend:build": "node ../scripts/build-frontend.mjs",
   "frontend:dev:watcher": "",
   "frontend:dev:serverUrl": "",
   "author": {
