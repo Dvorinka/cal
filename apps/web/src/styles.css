@@ -21,6 +21,7 @@
   --border-1: rgb(0 0 0 / 0.12);
   --border-2: rgb(0 0 0 / 0.08);
   --border-3: rgb(0 0 0 / 0.04);
+  --line: rgb(0 0 0 / 0.10);
 
   --bg-app: #f4f3ef;
   --bg-sidepanel: #ecebe5;
@@ -75,6 +76,7 @@
   --border-1: rgb(255 255 255 / 0.12);
   --border-2: rgb(255 255 255 / 0.08);
   --border-3: rgb(255 255 255 / 0.05);
+  --line: rgb(255 255 255 / 0.10);
 
   --bg-app: #151513;
   --bg-sidepanel: #1a1a17;
@@ -599,6 +601,14 @@ button {
   gap: 4px;
   border-top: 1px solid var(--border-2);
   padding-top: 10px;
+  position: sticky;
+  bottom: -14px;
+  margin-left: -12px;
+  margin-right: -12px;
+  padding-left: 12px;
+  padding-right: 12px;
+  padding-bottom: 2px;
+  background: var(--bg-sidepanel);
 }
 
 /* settings popover */
@@ -661,6 +671,15 @@ button {
 }
 .topbar .spacer {
   flex: 1;
+}
+.topbar > div {
+  min-width: 0;
+}
+.page-sub {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 .nav-group {
   display: flex;
@@ -1242,7 +1261,14 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding-top: 4px;
+  padding-top: 10px;
+  position: sticky;
+  bottom: -18px;
+  margin: 0 -18px -18px;
+  padding: 10px 18px 14px;
+  background: var(--bg-overlay);
+  border-top: 1px solid var(--border-2);
+  border-radius: 0 0 var(--r-xl) var(--r-xl);
 }
 .editor-foot .spacer {
   flex: 1;
@@ -2155,6 +2181,13 @@ button {
   .topbar h1 {
     font-size: 17px;
   }
+  .topbar .page-sub {
+    font-size: 11px;
+  }
+  .topbar .btn {
+    padding: 6px 10px;
+    font-size: 12.5px;
+  }
   .note-grid {
     grid-template-columns: 1fr;
   }
@@ -2499,7 +2532,7 @@ button {
 .board-tile { display: flex; align-items: center; gap: 10px; padding: 18px 16px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-panel); color: var(--text-1); text-decoration: none; font: inherit; }
 .board-tile:hover { border-color: var(--accent); }
 .board-name { font-weight: 600; flex: 1; }
-.kanban { display: flex; gap: 12px; align-items: flex-start; padding: 4px 24px 48px; overflow-x: auto; min-height: 60vh; }
+.kanban { display: flex; gap: 12px; align-items: flex-start; padding: 4px 24px 48px; overflow-x: auto; flex: 1; min-height: 0; }
 .kanban-col { width: 260px; flex-shrink: 0; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-panel); }
 .kanban-col.over { border-color: var(--accent); }
 .kanban-col-new { padding: 12px; border-style: dashed; background: transparent; }
@@ -2678,7 +2711,10 @@ button {
 .feed-title { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .feed-title b { color: var(--text-1); font-weight: 600; }
 .feed-row time { font-size: 11px; color: var(--text-3); flex: none; }
-.storage-row { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); display: grid; gap: 4px; }
+.storage-row { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 10px; }
+.storage-row .meter { flex: 1; margin-top: 0; max-width: none; }
+.storage-row .meter i { min-width: 4px; }
+.storage-row .panel-note { white-space: nowrap; }
 
 /* ── Mail ── */
 .mail-layout { display: grid; grid-template-columns: 180px minmax(220px, 1fr) minmax(0, 1.4fr); gap: 0; padding: 0; height: 100%; }
@@ -2735,6 +2771,9 @@ button {
 .field-check input { width: auto; min-height: 0; }
 .field-check > span { font-size: 12.5px; font-weight: 600; color: var(--text-2); }
 .field input, .field select, .field textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   min-height: 34px;
   padding: 6px 10px;
   font: inherit; font-size: 13px;
@@ -2743,9 +2782,21 @@ button {
   border: 1px solid var(--line);
   border-radius: var(--r-sm, 8px);
 }
+@media (max-width: 560px) {
+  .field-row { grid-template-columns: 1fr; }
+}
 
 @media (max-width: 860px) {
   .mail-layout { grid-template-columns: 1fr; }
   .mail-rail, .mail-list { border-right: 0; border-bottom: 1px solid var(--line); max-height: 40vh; }
   .mail-reader { min-height: 40vh; }
 }
+
+/* link thumb fallbacks — domain letter tile instead of a bare icon */
+.link-thumb-letter {
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-weight: 560;
+  color: var(--text-3);
+}
+.link-favicon-lg { width: 40px; height: 40px; border-radius: 8px; }

@@ -485,7 +485,7 @@ func (s *Store) activityFeed(ctx context.Context, userID string) ([]FeedItem, er
 			UNION ALL
 			SELECT 'entry', CASE WHEN completed THEN 'completed' ELSE 'created' END,
 			       title, id::text, created_at
-			FROM entries WHERE user_id = $1 AND deleted_at IS NULL
+			FROM entries WHERE user_id = $1 AND deleted_at IS NULL AND board_id IS NULL
 			UNION ALL
 			SELECT 'file', 'uploaded', orig_name, '', created_at
 			FROM files WHERE user_id = $1

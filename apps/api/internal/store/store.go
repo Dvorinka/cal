@@ -1333,7 +1333,7 @@ func (s *Store) CreateFile(ctx context.Context, userID, name, origName, mime str
 	var f File
 	err := s.db.QueryRow(ctx, `
 		INSERT INTO files (user_id, name, orig_name, size, mime, tags, workspace_id)
-		VALUES ($1, $2, $3, $4, $5, coalesce($6, '{}'), $7::uuid)
+		VALUES ($1, $2, $3, $4, $5, coalesce($6::text[], '{}'::text[]), $7::uuid)
 		RETURNING `+fileCols+`
 	`, userID, name, origName, size, mime, tags, workspaceID).Scan(&f.ID, &f.Name, &f.OrigName, &f.Size, &f.Mime, &f.ShareToken, &f.CreatedAt, &f.Tags, &f.WorkspaceID)
 	return f, err
@@ -1866,9 +1866,9 @@ func (s *Store) TagCounts(ctx context.Context, userID string) (map[string]int, e
 			SELECT unnest(e.tags) AS tag, count(*) AS n FROM entries e
 			WHERE e.user_id = $1 AND e.deleted_at IS NULL GROUP BY tag
 			UNION ALL
-			SELECT unnest(f.tags), count(*) FROM files f WHERE f.user_id = $1 GROUP BY tag
+			SELECT unnest(f.tags) AS tag, count(*) FROM files f WHERE f.user_id = $1 GROUP BY tag
 			UNION ALL
-			SELECT unnest(t.tags), count(*) FROM time_entries t WHERE t.user_id = $1 GROUP BY tag
+			SELECT unnest(t.tags) AS tag, count(*) FROM time_entries t WHERE t.user_id = $1 GROUP BY tag
 		) counts GROUP BY tag ORDER BY sum(n) DESC`, userID)
 	if err != nil {
 		return nil, err

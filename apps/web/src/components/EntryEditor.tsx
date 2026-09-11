@@ -258,7 +258,7 @@ export function EntryEditor() {
               className="editor-title"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              placeholder={type === "note" ? "Untitled note" : type === "event" ? "Event title" : type === "link" ? "Link title" : "Task"}
+              placeholder={type === "note" ? "Untitled note" : type === "event" ? "Event title" : type === "link" ? "Link title" : "Task title"}
               aria-label="Title"
             />
             <div className="seg" role="group" aria-label="Entry type">

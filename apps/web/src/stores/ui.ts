@@ -71,7 +71,13 @@ function persist(state: Pick<UiState, "view" | "hiddenTypes" | "hiddenFeeds">) {
 }
 
 export const useUi = create<UiState>((set, get) => ({
-  view: persisted.view === "week" || persisted.view === "day" ? persisted.view : "month",
+  // No persisted view → phones start on day view; month cells are unreadable under ~700px.
+  view:
+    persisted.view === "week" || persisted.view === "day"
+      ? persisted.view
+      : typeof window !== "undefined" && window.innerWidth < 700
+        ? "day"
+        : "month",
   anchor: new Date(),
   selectedDate: todayIso(),
   paletteOpen: false,

@@ -141,7 +141,7 @@ export function MonthView({ anchor, entries, feedEvents, holidays, weekStart, on
                     selectDate(date);
                   }}
                 >
-                  +{hidden} more
+                  {`+${hidden} more`}
                 </button>
               )}
             </div>

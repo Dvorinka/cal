@@ -74,12 +74,24 @@ export function LinksPage() {
               return (
                 <article key={link.id} className={`link-card ${link.watched ? "watched" : ""}`}>
                   <a href={link.linkUrl} target="_blank" rel="noopener noreferrer" className="link-thumb">
-                    {link.linkImage ? (
-                      <img src={link.linkImage} alt="" loading="lazy" />
-                    ) : (
-                      <span className="link-thumb-plain">
-                        {link.linkFavicon ? <img src={link.linkFavicon} alt="" className="link-favicon" /> : <Link2 size={20} />}
-                      </span>
+                    {/* Fallback sits under the image — a broken og:image hides, the mark shows through. */}
+                    <span className="link-thumb-plain">
+                      {link.linkFavicon ? (
+                        <img src={link.linkFavicon} alt="" className="link-favicon link-favicon-lg" />
+                      ) : domain ? (
+                        <span className="link-thumb-letter">{domain.replace(/^www\./, "")[0].toUpperCase()}</span>
+                      ) : (
+                        <Link2 size={24} />
+                      )}
+                    </span>
+                    {link.linkImage && (
+                      <img
+                        src={link.linkImage}
+                        alt=""
+                        loading="lazy"
+                        style={{ position: "absolute", inset: 0 }}
+                        onError={(e) => { e.currentTarget.style.display = "none"; }}
+                      />
                     )}
                     {isVideo && (
                       <span className="link-play">

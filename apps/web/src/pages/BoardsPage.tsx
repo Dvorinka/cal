@@ -238,7 +238,7 @@ export function BoardsPage() {
                         {card.title}
                       </button>
                       {card.blockedBy && <span className="meta-chip overdue">blocked</span>}
-                      <span className="meta-chip">{card.date}</span>
+                      <span className="meta-chip">{formatDayShort(card.date)}</span>
                       {card.tags.map((t) => (
                         <span key={t} className="meta-chip">{t}</span>
                       ))}

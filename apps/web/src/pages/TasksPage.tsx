@@ -1,5 +1,5 @@
 import type { SavedFilter } from "@cal/api-client";
-import { Check, CheckSquare, Plus, Save, Square, Trash2 } from "lucide-react";
+import { Bookmark, Check, CheckSquare, Plus, Save, Square, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { allTags, groupTasks } from "../lib/entries";
@@ -194,7 +194,7 @@ export function TasksPage() {
                 }}
                 title="Click to apply · right-click to delete"
               >
-                {f.name}
+                <Bookmark size={10} /> {f.name}
               </button>
             ))}
           </div>

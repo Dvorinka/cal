@@ -171,12 +171,12 @@ export function TodayPage() {
             <WeatherIcon size={13} /> {weather.temp}° · {weather.low}–{weather.high}°
           </span>
         )}
-        <button type="button" className="btn btn-secondary" onClick={() => void openJournal()}>
+        <button type="button" className="btn btn-secondary hide-sm" onClick={() => void openJournal()}>
           <NotebookPen size={14} /> Journal
         </button>
         <button
           type="button"
-          className={`btn ${focus ? "btn-primary" : "btn-secondary"}`}
+          className={`btn hide-sm ${focus ? "btn-primary" : "btn-secondary"}`}
           aria-pressed={focus}
           onClick={() => setFocus((v) => !v)}
         >
@@ -487,10 +487,10 @@ function relTime(isoStr: string): string {
 }
 
 function fmtBytes(n: number): string {
-  if (n < 1024) return `${n}B`;
-  if (n < 1024 ** 2) return `${Math.round(n / 1024)}KB`;
-  if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1)}MB`;
-  return `${(n / 1024 ** 3).toFixed(2)}GB`;
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 ** 2) return `${Math.round(n / 1024)} KB`;
+  if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1)} MB`;
+  return `${(n / 1024 ** 3).toFixed(2)} GB`;
 }
 
 // ActivityGrid — contributions-style grid, last ~17 weeks, oldest → newest.
