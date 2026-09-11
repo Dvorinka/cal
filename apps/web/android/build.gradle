@@ -22,6 +22,14 @@ allprojects {
         google()
         mavenCentral()
     }
+    configurations.all {
+        // kotlin-stdlib >=1.8 already carries the jdk7/jdk8 classes; the old
+        // standalone artifacts are empty shells deferring to it. Older
+        // cordova/androidx deps still request 1.6.x, which trips AGP's
+        // duplicate-class check — pin them to the resolved stdlib version.
+        resolutionStrategy.force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22',
+                                 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22'
+    }
 }
 
 task clean(type: Delete) {
