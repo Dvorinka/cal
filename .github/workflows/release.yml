@@ -10,7 +10,7 @@ permissions:
   packages: write
 
 env:
-  WAILS_VERSION: v2.10.2
+  WAILS_VERSION: v2.15.0
 
 jobs:
   docker:
