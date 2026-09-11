@@ -3,38 +3,30 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
 	"time"
 
-	"cal/apps/api/internal/caldav"
-	"cal/apps/api/internal/calendar"
-	"cal/apps/api/internal/httpapi"
-	"cal/apps/api/internal/store"
+	"cal/apps/api/app"
 )
 
 func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	db, err := store.Connect(ctx, env("DATABASE_URL", "postgres://cal:cal@localhost:5432/cal?sslmode=disable"))
+	handler, closeDB, err := app.New(ctx,
+		env("DATABASE_URL", "postgres://cal:cal@localhost:5432/cal?sslmode=disable"),
+		env("DATA_DIR", "./data"),
+	)
 	if err != nil {
-		slog.Error("connect database", "error", err)
+		slog.Error("init api", "error", err)
 		os.Exit(1)
 	}
-	defer db.Close()
+	defer closeDB()
 
-	s := store.New(db)
-	go httpapi.RefreshFeedsLoop(context.Background(), s, 30*time.Minute)
-	go httpapi.PushLoop(context.Background(), s, time.Minute)
-	go caldavLoop(context.Background(), s)
-	go httpapi.GoogleSyncLoop(context.Background(), s, 15*time.Minute)
-	go httpapi.GitHubSyncLoop(context.Background(), s, 15*time.Minute)
-	go httpapi.BackupLoop(context.Background(), s, env("DATA_DIR", "./data"))
-
-	router := httpapi.New(s, calendar.NewHolidayCache())
 	addr := ":" + env("PORT", "8080")
 	slog.Info("api listening", "addr", addr)
-	if err := router.Run(addr); err != nil {
+	if err := http.ListenAndServe(addr, handler); err != nil {
 		slog.Error("serve api", "error", err)
 		os.Exit(1)
 	}
@@ -45,20 +37,4 @@ func env(key, fallback string) string {
 		return value
 	}
 	return fallback
-}
-
-// caldavLoop syncs every connected account every 15 minutes.
-func caldavLoop(ctx context.Context, s *store.Store) {
-	syncer := caldav.NewSyncer(s)
-	syncer.SyncAll(ctx)
-	ticker := time.NewTicker(15 * time.Minute)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			syncer.SyncAll(ctx)
-		}
-	}
 }

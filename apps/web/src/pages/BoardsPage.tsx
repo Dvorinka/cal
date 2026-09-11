@@ -17,6 +17,7 @@ export function BoardsPage() {
   const toast = usePlanner((s) => s.toast);
   const openEdit = useUi((s) => s.openEdit);
   const createEntry = usePlanner((s) => s.createEntry);
+  const updateEntry = usePlanner((s) => s.updateEntry);
 
   const [boards, setBoards] = useState<Board[]>([]);
   const [board, setBoard] = useState<Board>();
@@ -28,6 +29,7 @@ export function BoardsPage() {
   const [newCard, setNewCard] = useState<Record<string, string>>({});
   const [dragId, setDragId] = useState<string>();
   const [overCol, setOverCol] = useState<string>();
+  const [cardView, setCardView] = useState<"board" | "list">("board");
 
   const loadBoards = useCallback(() => void api.boards().then(setBoards).catch(() => {}), [api]);
   const loadView = useCallback(
@@ -146,6 +148,7 @@ export function BoardsPage() {
                       {b.done}/{b.total}
                     </span>
                   )}
+                  {b.minutes > 0 && <span className="meta-chip">{b.minutes >= 60 ? `${Math.floor(b.minutes / 60)}h ${b.minutes % 60}m` : `${b.minutes}m`}</span>}
                   <button
                     type="button"
                     className="icon-btn"
@@ -199,9 +202,55 @@ export function BoardsPage() {
         >
           <Link2 size={12} /> Share
         </button>
+        <button
+          type="button"
+          className={`btn btn-secondary btn-xs ${cardView === "list" ? "on" : ""}`}
+          aria-pressed={cardView === "list"}
+          onClick={() => setCardView(cardView === "list" ? "board" : "list")}
+        >
+          {cardView === "list" ? "Board view" : "List view"}
+        </button>
         <Link to="/boards" className="btn btn-secondary btn-xs">All boards</Link>
       </PageHeader>
       {board?.description && <p className="board-desc">{board.description}</p>}
+      {cardView === "list" ? (
+        <div className="page-scroll" style={{ paddingTop: 0 }}>
+          {columns.map((col) => {
+            const items = (byColumn.get(col.id) ?? []).sort((a, b) => a.date.localeCompare(b.date));
+            return (
+              <section key={col.id} className="panel" style={{ marginBottom: 10 }}>
+                <h3>
+                  {col.name}
+                  <span className="kanban-count" style={{ marginLeft: 8 }}>{items.length}</span>
+                </h3>
+                <ul className="check-list">
+                  {items.map((card) => (
+                    <li key={card.id} className={card.completed ? "done" : ""}>
+                      <button
+                        type="button"
+                        className="tickbox"
+                        aria-label={card.completed ? "Reopen" : "Complete"}
+                        onClick={() => void updateEntry(card.id, { completed: !card.completed })}
+                      >
+                        {card.completed && <Check size={12} strokeWidth={3} />}
+                      </button>
+                      <button type="button" className="row-title" onClick={() => openEdit(card)}>
+                        {card.title}
+                      </button>
+                      {card.blockedBy && <span className="meta-chip overdue">blocked</span>}
+                      <span className="meta-chip">{card.date}</span>
+                      {card.tags.map((t) => (
+                        <span key={t} className="meta-chip">{t}</span>
+                      ))}
+                    </li>
+                  ))}
+                  {items.length === 0 && <li className="panel-empty">Empty column.</li>}
+                </ul>
+              </section>
+            );
+          })}
+        </div>
+      ) : (
       <div className="kanban">
         {columns.map((col) => (
           <section
@@ -278,6 +327,7 @@ export function BoardsPage() {
                   <div className="kanban-card-meta">
                     <CardDue date={card.date} done={card.completed} />
                     <CardChecklist content={card.content} />
+                    {card.blockedBy && <span className="meta-chip overdue">blocked</span>}
                     {card.tags.slice(0, 3).map((t) => (
                       <span key={t} className="stream-tag">#{t}</span>
                     ))}
@@ -309,6 +359,7 @@ export function BoardsPage() {
           />
         </div>
       </div>
+      )}
     </>
   );
 }

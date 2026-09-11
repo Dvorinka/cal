@@ -1,8 +1,9 @@
-import { CalendarDays, ChevronLeft, ChevronRight, FolderOpen, Github as GithubIcon, Hash, Link2, ListChecks, Plus, Search, Settings2, StickyNote, Sun, Timer as TimerIcon, Trash2, Trello } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, FolderOpen, Github as GithubIcon, Hash, Link2, ListChecks, Mail, Plus, Search, Settings2, StickyNote, Sun, Timer as TimerIcon, Trash2, Trello } from "lucide-react";
 import { TimerPill } from "./TimerPill";
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { addMonths, fromIso, iso, monthMatrix, todayIso, weekdayNames, type WeekStartPref } from "../lib/date";
+import { moduleOn, type ModuleKey } from "../lib/modules";
 import { usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
 
@@ -13,17 +14,18 @@ const FILTERS = [
   { type: "link", label: "Links", color: "var(--c-violet)" },
 ] as const;
 
-const NAV: { to: string; label: string; icon: typeof Sun; end?: boolean }[] = [
+const NAV: { to: string; label: string; icon: typeof Sun; end?: boolean; module?: ModuleKey }[] = [
   { to: "/today", label: "Today", icon: Sun },
   { to: "/", label: "Calendar", icon: CalendarDays, end: true },
-  { to: "/tasks", label: "Tasks", icon: ListChecks },
-  { to: "/notes", label: "Notes", icon: StickyNote },
-  { to: "/links", label: "Links", icon: Link2 },
-  { to: "/files", label: "Files", icon: FolderOpen },
-  { to: "/boards", label: "Boards", icon: Trello },
-  { to: "/tags", label: "Tags", icon: Hash },
-  { to: "/time", label: "Time", icon: TimerIcon },
-  { to: "/github", label: "GitHub", icon: GithubIcon },
+  { to: "/tasks", label: "Tasks", icon: ListChecks, module: "tasks" },
+  { to: "/notes", label: "Notes", icon: StickyNote, module: "notes" },
+  { to: "/links", label: "Links", icon: Link2, module: "links" },
+  { to: "/files", label: "Files", icon: FolderOpen, module: "files" },
+  { to: "/boards", label: "Boards", icon: Trello, module: "boards" },
+  { to: "/tags", label: "Tags", icon: Hash, module: "tags" },
+  { to: "/time", label: "Time", icon: TimerIcon, module: "time" },
+  { to: "/mail", label: "Mail", icon: Mail, module: "mail" },
+  { to: "/github", label: "GitHub", icon: GithubIcon, module: "github" },
 ];
 
 function MiniMonth({ weekStart }: { weekStart: WeekStartPref }) {
@@ -103,6 +105,30 @@ function MiniMonth({ weekStart }: { weekStart: WeekStartPref }) {
 
 
 
+// WorkspaceSwitcher — compact scope picker above "New entry". Persists to
+// settings.activeWorkspace; "" = all spaces, "none" = Personal.
+function WorkspaceSwitcher() {
+  const workspaces = usePlanner((state) => state.workspaces);
+  const active = usePlanner((state) => state.settings.activeWorkspace) ?? "";
+  const setWorkspace = usePlanner((state) => state.setWorkspace);
+  if (workspaces.length === 0 && !active) return null;
+  return (
+    <div className="ws-switch">
+      <select
+        aria-label="Workspace"
+        value={active}
+        onChange={(e) => void setWorkspace(e.target.value)}
+      >
+        <option value="">All spaces</option>
+        <option value="none">Personal</option>
+        {workspaces.map((w) => (
+          <option key={w.id} value={w.id}>{w.name}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 export function Sidebar() {
   const user = usePlanner((state) => state.user);
   const entries = usePlanner((state) => state.entries);
@@ -137,6 +163,8 @@ export function Sidebar() {
           </span>
         </div>
 
+        <WorkspaceSwitcher />
+
         <button
           type="button"
           className="btn btn-primary new-btn"
@@ -162,7 +190,7 @@ export function Sidebar() {
         </button>
 
         <nav className="side-nav" aria-label="Primary">
-          {NAV.map(({ to, label, icon: Icon, end }) => (
+          {NAV.filter((item) => !item.module || moduleOn(settings, item.module)).map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}

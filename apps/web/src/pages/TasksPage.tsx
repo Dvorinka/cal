@@ -1,4 +1,5 @@
-import { Check, CheckSquare, Plus, Square, Trash2 } from "lucide-react";
+import type { SavedFilter } from "@cal/api-client";
+import { Check, CheckSquare, Plus, Save, Square, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { allTags, groupTasks } from "../lib/entries";
@@ -70,12 +71,36 @@ export function TasksPage() {
   const [showDone, setShowDone] = useState(false);
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
+  const api = usePlanner((state) => state.api);
   const today = todayIso();
 
   // The task list needs every entry, not just the visible calendar range.
   useEffect(() => {
     void loadEntries({});
-  }, [loadEntries]);
+    void api.filters().then(setSavedFilters).catch(() => {});
+  }, [loadEntries, api]);
+
+  function applyFilter(f: SavedFilter) {
+    const flt = (f.filter ?? {}) as { tag?: string; done?: boolean };
+    setTag(flt.tag);
+    setShowDone(flt.done ?? false);
+  }
+
+  async function saveCurrent() {
+    const name = window.prompt("Save this filter as", tag ?? "All tasks");
+    if (!name?.trim()) return;
+    const filter: Record<string, unknown> = { type: "task" };
+    if (tag) filter.tag = tag;
+    if (showDone) filter.done = true;
+    try {
+      const f = await api.createFilter(name.trim(), filter);
+      setSavedFilters((l) => [...l, f]);
+      toast("Filter saved");
+    } catch {
+      toast("Could not save filter");
+    }
+  }
 
   const tasks = useMemo(
     () => (tag ? entries.filter((e) => e.tags.includes(tag)) : entries),
@@ -159,7 +184,22 @@ export function TasksPage() {
           />
         </div>
 
-        {tags.length > 0 && (
+        {savedFilters.length > 0 && (
+          <div className="tag-row">
+            {savedFilters.map((f) => (
+              <button key={f.id} type="button" className="tag-chip" onClick={() => applyFilter(f)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  void api.deleteFilter(f.id).then(() => setSavedFilters((l) => l.filter((x) => x.id !== f.id)));
+                }}
+                title="Click to apply · right-click to delete"
+              >
+                {f.name}
+              </button>
+            ))}
+          </div>
+        )}
+        {(tags.length > 0 || tag) && (
           <div className="tag-row">
             <button type="button" className={`tag-chip ${!tag ? "active" : ""}`} onClick={() => setTag(undefined)}>
               All
@@ -174,6 +214,11 @@ export function TasksPage() {
                 {t}
               </button>
             ))}
+            {tag && (
+              <button type="button" className="tag-chip" onClick={() => void saveCurrent()} title="Save as a filter">
+                <Save size={10} /> save
+              </button>
+            )}
           </div>
         )}
 

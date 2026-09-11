@@ -62,7 +62,7 @@ func (s *Server) uploadFile(c *gin.Context) {
 	if mime == "" {
 		mime = "application/octet-stream"
 	}
-	rec, err := s.store.CreateFile(c.Request.Context(), currentUser(c).ID, name, header.Filename, mime, header.Size)
+	rec, err := s.store.CreateFile(c.Request.Context(), currentUser(c).ID, name, header.Filename, mime, header.Size, splitTags(c.PostForm("tags")), nilIfEmptyStr(c.PostForm("workspaceId")))
 	if err != nil {
 		c.String(http.StatusInternalServerError, "record failed")
 		return

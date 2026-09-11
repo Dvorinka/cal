@@ -2605,3 +2605,147 @@ button {
 .gh-num { font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; min-width: 34px; }
 
 .btn-secondary.on { border-color: var(--accent); color: var(--accent); }
+
+/* ── Phase 8: workspaces, modules, dashboard, mail ──────────────────────── */
+
+/* workspace switcher in the sidebar */
+.ws-switch { padding: 0 14px 10px; }
+.ws-switch select {
+  width: 100%;
+  min-height: 32px;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--bg-field);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm, 8px);
+  cursor: pointer;
+}
+.ws-switch select:hover { border-color: var(--accent); }
+
+/* module toggles in Settings */
+.module-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.module-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--bg-field);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm, 8px);
+  cursor: pointer;
+  text-align: left;
+}
+.module-toggle .module-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--line); flex: none;
+  transition: background .12s;
+}
+.module-toggle.on .module-dot { background: var(--accent); }
+.module-toggle.on { border-color: var(--accent); color: var(--text-1); }
+.module-toggle i { margin-left: auto; font-style: normal; font-size: 10.5px; color: var(--text-3); text-transform: uppercase; letter-spacing: .05em; }
+
+/* tag filter chip rows (Files / Time) */
+.tag-filter-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 24px 10px; }
+.tag-filter-row .meta-chip { cursor: pointer; border: 1px solid transparent; font: inherit; font-size: 10.5px; }
+.tag-filter-row .meta-chip:hover { border-color: var(--line); }
+.tag-filter-row .meta-chip.on { background: var(--accent); color: #fff; }
+
+/* file tag chips inside the name cell */
+.files-tags { display: inline-flex; gap: 4px; margin-left: 8px; vertical-align: 1px; }
+
+/* deadline chips */
+.meta-chip.soon { color: var(--c-orange); }
+.meta-chip.overdue { color: var(--c-red, #d33); background: rgb(220 60 60 / .12); }
+
+/* Today activity feed + storage */
+.feed-list { list-style: none; margin: 0; padding: 0; }
+.feed-list .feed-row { gap: 8px; }
+.feed-ic {
+  width: 20px; height: 20px; border-radius: 6px;
+  display: grid; place-items: center; flex: none;
+  color: var(--text-3); background: var(--bg-sidepanel);
+}
+.feed-ic.kind-card { color: var(--c-mint); }
+.feed-ic.kind-file { color: var(--c-sky); }
+.feed-ic.kind-entry { color: var(--c-violet); }
+.feed-title { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feed-title b { color: var(--text-1); font-weight: 600; }
+.feed-row time { font-size: 11px; color: var(--text-3); flex: none; }
+.storage-row { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); display: grid; gap: 4px; }
+
+/* ── Mail ── */
+.mail-layout { display: grid; grid-template-columns: 180px minmax(220px, 1fr) minmax(0, 1.4fr); gap: 0; padding: 0; height: 100%; }
+.mail-rail { border-right: 1px solid var(--line); padding: 10px 8px; overflow-y: auto; }
+.mail-acct-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-list { border-right: 1px solid var(--line); overflow-y: auto; }
+.mail-items { list-style: none; margin: 0; padding: 0; }
+.mail-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "from date" "subject subject";
+  gap: 2px 8px;
+  width: 100%;
+  padding: 10px 14px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  font: inherit;
+  text-align: left;
+  color: var(--text-1);
+  cursor: pointer;
+}
+.mail-item:hover { background: var(--bg-field); }
+.mail-item.active { background: var(--bg-field); box-shadow: inset 2px 0 0 var(--accent); }
+.mail-item.seen .mail-subject { font-weight: 400; color: var(--text-2); }
+.mail-item.seen .mail-from { font-weight: 500; color: var(--text-2); }
+.mail-from { grid-area: from; font-size: 12.5px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-subject { grid-area: subject; font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-date { grid-area: date; font-size: 10.5px; color: var(--text-3); }
+.mail-reader { overflow-y: auto; padding: 16px 20px; }
+.mail-body h3 { margin: 0 0 4px; font-size: 15px; }
+.mail-actions { display: flex; gap: 6px; margin: 12px 0; }
+.mail-text { white-space: pre-wrap; font: inherit; font-size: 13px; line-height: 1.6; color: var(--text-1); word-break: break-word; }
+.mail-html { white-space: normal; }
+.mail-html img { max-width: 100%; height: auto; }
+
+/* shared dialog shape (mail/time/files) */
+.mail-dialog { padding: 18px; min-width: min(480px, 92vw); }
+.mail-dialog h3 { margin: 0 0 14px; font-size: 15px; }
+.mail-dialog .field { margin-bottom: 10px; }
+.mail-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.mail-compose {
+  width: 100%;
+  font: inherit; font-size: 13px;
+  color: var(--text-1);
+  background: var(--bg-field);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm, 8px);
+  padding: 10px 12px;
+  resize: vertical;
+}
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.field-check { display: flex !important; align-items: center; gap: 8px; }
+.field-check input { width: auto; min-height: 0; }
+.field-check > span { font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+.field input, .field select, .field textarea {
+  min-height: 34px;
+  padding: 6px 10px;
+  font: inherit; font-size: 13px;
+  color: var(--text-1);
+  background: var(--bg-field);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm, 8px);
+}
+
+@media (max-width: 860px) {
+  .mail-layout { grid-template-columns: 1fr; }
+  .mail-rail, .mail-list { border-right: 0; border-bottom: 1px solid var(--line); max-height: 40vh; }
+  .mail-reader { min-height: 40vh; }
+}

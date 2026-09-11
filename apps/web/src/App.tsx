@@ -1,4 +1,5 @@
 import { CalendarDays } from "lucide-react";
+import { moduleForPath, moduleOn } from "./lib/modules";
 import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AuthPanel } from "./components/AuthPanel";
@@ -17,6 +18,7 @@ import { TrashPage } from "./pages/TrashPage";
 import { FilesPage } from "./pages/FilesPage";
 import { GitHubPage } from "./pages/GitHubPage";
 import { LinksPage } from "./pages/LinksPage";
+import { MailPage } from "./pages/MailPage";
 import { NotesPage } from "./pages/NotesPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { TasksPage } from "./pages/TasksPage";
@@ -127,17 +129,18 @@ function Shell() {
         <Routes>
           <Route path="/" element={<CalendarPage />} />
           <Route path="/today" element={<TodayPage />} />
-          <Route path="/tasks" element={<TasksPage />} />
-          <Route path="/notes" element={<NotesPage />} />
-          <Route path="/links" element={<LinksPage />} />
-          <Route path="/files" element={<FilesPage />} />
-          <Route path="/boards" element={<BoardsPage />} />
-          <Route path="/boards/:boardId" element={<BoardsPage />} />
+          <Route path="/tasks" element={<Gated><TasksPage /></Gated>} />
+          <Route path="/notes" element={<Gated><NotesPage /></Gated>} />
+          <Route path="/links" element={<Gated><LinksPage /></Gated>} />
+          <Route path="/files" element={<Gated><FilesPage /></Gated>} />
+          <Route path="/boards" element={<Gated><BoardsPage /></Gated>} />
+          <Route path="/boards/:boardId" element={<Gated><BoardsPage /></Gated>} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/trash" element={<TrashPage />} />
-          <Route path="/tags" element={<TagsPage />} />
-          <Route path="/time" element={<TimePage />} />
-          <Route path="/github" element={<GitHubPage />} />
+          <Route path="/tags" element={<Gated><TagsPage /></Gated>} />
+          <Route path="/time" element={<Gated><TimePage /></Gated>} />
+          <Route path="/mail" element={<Gated><MailPage /></Gated>} />
+          <Route path="/github" element={<Gated><GitHubPage /></Gated>} />
           <Route path="/share" element={<ShareTarget />} />
           <Route path="/entry/:id" element={<EntryDeepLink />} />
           <Route path="*" element={<Navigate to="/" replace />} />
@@ -150,6 +153,16 @@ function Shell() {
       <Toasts />
     </main>
   );
+}
+
+// Gated bounces a disabled module's route back to the calendar — the page
+// isn't just hidden in nav, it's unreachable.
+function Gated({ children }: { children: React.ReactNode }) {
+  const settings = usePlanner((s) => s.settings);
+  const location = useLocation();
+  const mod = moduleForPath(location.pathname);
+  if (mod && !moduleOn(settings, mod)) return <Navigate to="/" replace />;
+  return <>{children}</>;
 }
 
 // ShareTarget receives PWA share_target GETs (?title=&text=&url=) and opens

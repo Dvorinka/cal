@@ -2,9 +2,9 @@ package httpapi
 
 import (
 	"context"
-	"log"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -59,6 +59,7 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authed.Use(server.requireUser)
 	authed.GET("/me", server.me)
 	authed.GET("/entries", server.entries)
+	authed.POST("/entries/:id/refresh-link", server.refreshLink)
 	authed.POST("/entries", server.createEntry)
 	authed.PATCH("/entries/:id", server.updateEntry)
 	authed.DELETE("/entries/:id", server.deleteEntry)
@@ -110,6 +111,8 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authed.GET("/timer/current", server.currentTimer)
 	authed.GET("/time/summary", server.timeSummary)
 	authed.GET("/time/log", server.timeLog)
+	authed.POST("/time/log", server.createTimeEntry)
+	authed.PATCH("/time/log/:id", server.updateTimeEntry)
 	authed.DELETE("/time/log/:id", server.deleteTimeEntry)
 	authed.GET("/time/export", server.timeExport)
 	authed.GET("/entries/:id/activity", server.entryActivity)
@@ -121,6 +124,25 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authed.GET("/tags", server.tagCounts)
 	authed.GET("/agenda", server.agendaMarkdown)
 	authed.GET("/search", server.globalSearch)
+	authed.GET("/dashboard", server.dashboard)
+	authed.GET("/workspaces", server.listWorkspaces)
+	authed.POST("/workspaces", server.createWorkspace)
+	authed.PATCH("/workspaces/:id", server.updateWorkspace)
+	authed.DELETE("/workspaces/:id", server.deleteWorkspace)
+	authed.PATCH("/files/:id", server.updateFile)
+	authed.GET("/filters", server.listFilters)
+	authed.POST("/filters", server.createFilter)
+	authed.DELETE("/filters/:id", server.deleteFilter)
+	authed.GET("/mail/accounts", server.listMailAccounts)
+	authed.POST("/mail/accounts", server.createMailAccount)
+	authed.DELETE("/mail/accounts/:id", server.deleteMailAccount)
+	authed.POST("/mail/accounts/:id/test", server.testMailAccount)
+	authed.GET("/mail/:id/mailboxes", server.mailMailboxes)
+	authed.GET("/mail/:id/messages", server.mailMessages)
+	authed.GET("/mail/:id/message/:uid", server.mailMessage)
+	authed.POST("/mail/:id/message/:uid/flag", server.mailFlag)
+	authed.DELETE("/mail/:id/message/:uid", server.mailDelete)
+	authed.POST("/mail/:id/send", server.mailSend)
 	authed.GET("/github/inbox", server.githubInbox)
 	authed.GET("/github/activity", server.githubActivity)
 	authed.POST("/github/import", server.githubImport)
@@ -202,12 +224,13 @@ func (s *Server) me(c *gin.Context) {
 
 func (s *Server) entries(c *gin.Context) {
 	user := currentUser(c)
-	entries, err := s.store.ListEntries(
+	entries, err := s.store.ListEntriesScoped(
 		c.Request.Context(),
 		user.ID,
 		c.Query("from"),
 		c.Query("to"),
 		c.Query("q"),
+		c.Query("workspace"),
 	)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "failed to list entries")
@@ -258,6 +281,23 @@ func (s *Server) createEntry(c *gin.Context) {
 	} else {
 		input.BoardID, input.ColumnID = nil, nil
 	}
+	// workspaceId must belong to the caller; blocked_by likewise.
+	if input.WorkspaceID != nil && *input.WorkspaceID != "" {
+		if !s.store.WorkspaceOwned(c.Request.Context(), currentUser(c).ID, *input.WorkspaceID) {
+			c.String(http.StatusBadRequest, "unknown workspace")
+			return
+		}
+	} else {
+		input.WorkspaceID = nil
+	}
+	if input.BlockedBy != nil && *input.BlockedBy != "" {
+		if _, err := s.store.Entry(c.Request.Context(), currentUser(c).ID, *input.BlockedBy); err != nil {
+			c.String(http.StatusBadRequest, "unknown blocker")
+			return
+		}
+	} else {
+		input.BlockedBy = nil
+	}
 	entry, err := s.store.CreateEntry(c.Request.Context(), currentUser(c).ID, input)
 	if err != nil {
 		log.Printf("create entry: %v", err)
@@ -288,6 +328,10 @@ func (s *Server) updateEntry(c *gin.Context) {
 	entry, err := s.store.UpdateEntry(c.Request.Context(), currentUser(c).ID, c.Param("id"), patch)
 	if errors.Is(err, store.ErrNotFound) {
 		c.String(http.StatusNotFound, "entry not found")
+		return
+	}
+	if errors.Is(err, store.ErrBlocked) {
+		c.String(http.StatusConflict, "entry is blocked")
 		return
 	}
 	if errors.Is(err, store.ErrInvalid) {
@@ -583,6 +627,21 @@ func parsePatch(raw map[string]json.RawMessage) (store.EntryPatch, bool) {
 			}
 			patch.Tags = v
 			patch.HasTags = true
+		case "workspaceId", "blockedBy":
+			var v *string
+			if json.Unmarshal(value, &v) != nil {
+				return patch, false
+			}
+			// null and "" both mean "clear"; uuid sets.
+			v2 := ""
+			if v != nil {
+				v2 = *v
+			}
+			if key == "workspaceId" {
+				patch.WorkspaceID = &v2
+			} else {
+				patch.BlockedBy = &v2
+			}
 		default:
 			return patch, false
 		}

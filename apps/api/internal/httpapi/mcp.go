@@ -609,7 +609,7 @@ func (s *Server) mcpCall(c *gin.Context, user store.User, req rpcRequest) {
 		if st, err := s.store.Settings(ctx, user.ID); err == nil {
 			rate = st.DefaultRate
 		}
-		t, err := s.store.StartTimer(ctx, user.ID, ePtr, args.Note, args.Planned, args.Billable, rate, pPtr)
+		t, err := s.store.StartTimer(ctx, user.ID, ePtr, args.Note, args.Planned, args.Billable, rate, pPtr, nil)
 		if err != nil {
 			fail("a timer is already running")
 			return

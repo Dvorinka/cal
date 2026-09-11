@@ -35,6 +35,8 @@ export interface Entry {
   /** Minutes before startTime to fire a reminder; absent = none. */
   remind?: number;
   accountId?: string;
+  workspaceId?: string;
+  blockedBy?: string;
   createdAt: string;
 }
 
@@ -53,6 +55,8 @@ export interface EntryInput {
   accountId?: string;
   boardId?: string;
   columnId?: string;
+  workspaceId?: string;
+  blockedBy?: string;
 }
 
 export type EntryPatch = Partial<EntryInput & { completed: boolean; pinned: boolean; watched: boolean }>;
@@ -88,6 +92,10 @@ export interface Settings {
   githubToken?: string;
   widgetToken: string;
   apiToken: string;
+  /** Feature modules on/off; absent key = enabled. */
+  modules?: Record<string, boolean>;
+  /** Active workspace id; undefined/"none"/"" semantics handled client-side. */
+  activeWorkspace?: string;
 }
 
 export interface WeekReview {
@@ -150,6 +158,8 @@ export interface FileRec {
   total: number;
   done: number;
   createdAt: string;
+  tags: string[];
+  workspaceId?: string;
 }
 
 export interface Feed {
@@ -219,13 +229,18 @@ export class CalApi {
     return this.request<User>("/me");
   }
 
-  async entries(params: { from?: string; to?: string; q?: string } = {}): Promise<Entry[]> {
+  async entries(params: { from?: string; to?: string; q?: string; workspace?: string } = {}): Promise<Entry[]> {
     const search = new URLSearchParams();
     if (params.from) search.set("from", params.from);
     if (params.to) search.set("to", params.to);
     if (params.q) search.set("q", params.q);
+    if (params.workspace) search.set("workspace", params.workspace);
     const suffix = search.size ? `?${search.toString()}` : "";
     return this.request<Entry[]>(`/entries${suffix}`);
+  }
+
+  async refreshLink(id: string): Promise<void> {
+    await this.request(`/entries/${id}/refresh-link`, { method: "POST" });
   }
 
   async createEntry(input: EntryInput): Promise<Entry> {
@@ -420,6 +435,80 @@ export class CalApi {
     return this.request(`/time/log/${id}`, { method: "DELETE" });
   }
 
+  async createTimeEntry(input: TimeEntryInput): Promise<TimeEntry> {
+    return this.request("/time/log", { method: "POST", body: input });
+  }
+
+  async updateTimeEntry(id: string, patch: TimeEntryPatch): Promise<TimeEntry> {
+    return this.request(`/time/log/${id}`, { method: "PATCH", body: patch });
+  }
+
+  async dashboard(workspace?: string): Promise<DashboardStats> {
+    const q = workspace ? `?workspace=${encodeURIComponent(workspace)}` : "";
+    return this.request(`/dashboard${q}`);
+  }
+
+  async workspaces(): Promise<Workspace[]> {
+    return this.request("/workspaces");
+  }
+  async createWorkspace(input: { name: string; color?: string; icon?: string }): Promise<Workspace> {
+    return this.request("/workspaces", { method: "POST", body: input });
+  }
+  async updateWorkspace(id: string, patch: { name?: string; color?: string; icon?: string; position?: number }): Promise<void> {
+    return this.request(`/workspaces/${id}`, { method: "PATCH", body: patch });
+  }
+  async deleteWorkspace(id: string): Promise<void> {
+    return this.request(`/workspaces/${id}`, { method: "DELETE" });
+  }
+
+  async updateFile(id: string, patch: { tags?: string[]; workspaceId?: string }): Promise<FileRec> {
+    return this.request(`/files/${id}`, { method: "PATCH", body: patch });
+  }
+
+  async filters(): Promise<SavedFilter[]> {
+    return this.request("/filters");
+  }
+  async createFilter(name: string, filter: Record<string, unknown>): Promise<SavedFilter> {
+    return this.request("/filters", { method: "POST", body: { name, filter } });
+  }
+  async deleteFilter(id: string): Promise<void> {
+    return this.request(`/filters/${id}`, { method: "DELETE" });
+  }
+
+  async mailAccounts(): Promise<MailAccount[]> {
+    return this.request("/mail/accounts");
+  }
+  async createMailAccount(input: {
+    name?: string; email: string; imapHost: string; imapPort?: number;
+    smtpHost: string; smtpPort?: number; username?: string; password: string;
+  }): Promise<MailAccount> {
+    return this.request("/mail/accounts", { method: "POST", body: input });
+  }
+  async deleteMailAccount(id: string): Promise<void> {
+    return this.request(`/mail/accounts/${id}`, { method: "DELETE" });
+  }
+  async testMailAccount(id: string): Promise<{ ok: boolean }> {
+    return this.request(`/mail/accounts/${id}/test`, { method: "POST", body: "{}" });
+  }
+  async mailMailboxes(id: string): Promise<{ name: string; delimiter: string }[]> {
+    return this.request(`/mail/${id}/mailboxes`);
+  }
+  async mailMessages(id: string, mailbox = "INBOX", page = 0): Promise<{ total: number; messages: MailSummary[] }> {
+    return this.request(`/mail/${id}/messages?mailbox=${encodeURIComponent(mailbox)}&page=${page}`);
+  }
+  async mailMessage(id: string, uid: number, mailbox = "INBOX"): Promise<MailMessage> {
+    return this.request(`/mail/${id}/message/${uid}?mailbox=${encodeURIComponent(mailbox)}`);
+  }
+  async mailFlag(id: string, uid: number, seen: boolean, mailbox = "INBOX"): Promise<void> {
+    return this.request(`/mail/${id}/message/${uid}/flag?mailbox=${encodeURIComponent(mailbox)}`, { method: "POST", body: { seen } });
+  }
+  async mailDelete(id: string, uid: number, mailbox = "INBOX"): Promise<void> {
+    return this.request(`/mail/${id}/message/${uid}?mailbox=${encodeURIComponent(mailbox)}`, { method: "DELETE" });
+  }
+  async mailSend(id: string, input: { to: string; cc?: string; subject: string; text: string }): Promise<void> {
+    return this.request(`/mail/${id}/send`, { method: "POST", body: input });
+  }
+
   async githubInbox(): Promise<{ number: number; title: string; state: string; url: string; repo: string; isPR: boolean; labels: string[] }[]> {
     return this.request("/github/inbox");
   }
@@ -450,9 +539,11 @@ export class CalApi {
     return this.request(`/push/subscriptions/${id}`, { method: "DELETE" });
   }
 
-  async upload(file: File): Promise<{ url: string; name: string; markdown: string }> {
+  async upload(file: File, opts: { tags?: string[]; workspaceId?: string } = {}): Promise<{ url: string; name: string; markdown: string }> {
     const form = new FormData();
     form.append("file", file);
+    if (opts.tags?.length) form.append("tags", opts.tags.join(","));
+    if (opts.workspaceId) form.append("workspaceId", opts.workspaceId);
     const response = await fetch(`${this.baseUrl}/files`, {
       method: "POST",
       credentials: "include",
@@ -576,6 +667,7 @@ export interface Board {
   shareToken?: string;
   total: number;
   done: number;
+  minutes: number; // tracked time against this board
   createdAt: string;
 }
 
@@ -599,7 +691,99 @@ export interface TimeEntry {
   rate?: number;
   projectId?: string;
   project?: string;
+  tags: string[];
 }
+
+export interface Workspace {
+  id: string;
+  name: string;
+  color: string;
+  icon: string;
+  position: number;
+  createdAt: string;
+}
+
+export interface FeedItem {
+  kind: "entry" | "file" | "card";
+  action: string;
+  title: string;
+  entryId?: string;
+  at: string;
+}
+
+export interface DashboardStats {
+  tasksTotal: number;
+  tasksDone: number;
+  doneThisWeek: number;
+  weekActivity: Record<string, number>;
+  deadlines: Entry[];
+  feed: FeedItem[];
+  timeTodayMin: number;
+  timeWeekMin: number;
+  running?: TimeEntry;
+}
+
+export interface SavedFilter {
+  id: string;
+  name: string;
+  filter: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface MailAccount {
+  id: string;
+  name: string;
+  email: string;
+  imapHost: string;
+  imapPort: number;
+  smtpHost: string;
+  smtpPort: number;
+  username: string;
+  createdAt: string;
+}
+
+export interface MailSummary {
+  uid: number;
+  from: string;
+  to?: string[];
+  subject: string;
+  date: string;
+  seen: boolean;
+  size: number;
+}
+
+export interface MailMessage {
+  uid: number;
+  from: string;
+  to: string[];
+  subject: string;
+  text: string;
+  html: string;
+}
+
+export interface TimeEntryInput {
+  entryId?: string;
+  note?: string;
+  startAt?: string;
+  endAt?: string;
+  planned?: number;
+  billable?: boolean;
+  rate?: number;
+  projectId?: string;
+  tags?: string[];
+}
+
+export type TimeEntryPatch = Partial<{
+  startAt: string | null;
+  endAt: string | null;
+  note: string;
+  tags: string[];
+  billable: boolean;
+  rate: number | null;
+  projectId: string | null;
+  entryId: string | null;
+  planned: number | null;
+}>;
 
 export interface ActivityItem {
   id: string;

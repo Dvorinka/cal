@@ -4,6 +4,7 @@ import { ArrowRight, CalendarDays, Check, FolderOpen, Link2, Moon, Plus, Search,
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { formatDayShort } from "../lib/date";
+import { moduleOn, type ModuleKey } from "../lib/modules";
 import { usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
 
@@ -11,6 +12,7 @@ interface Action {
   id: string;
   label: string;
   icon: React.ReactNode;
+  module?: ModuleKey;
   run: () => void;
 }
 
@@ -70,6 +72,7 @@ export function CommandPalette() {
         id: "tasks",
         label: "Go to tasks",
         icon: <ArrowRight size={15} />,
+        module: "tasks",
         run: () => {
           close();
           navigate("/tasks");
@@ -79,6 +82,7 @@ export function CommandPalette() {
         id: "notes",
         label: "Go to notes",
         icon: <ArrowRight size={15} />,
+        module: "notes",
         run: () => {
           close();
           navigate("/notes");
@@ -88,9 +92,20 @@ export function CommandPalette() {
         id: "links",
         label: "Go to links",
         icon: <ArrowRight size={15} />,
+        module: "links",
         run: () => {
           close();
           navigate("/links");
+        },
+      },
+      {
+        id: "mail",
+        label: "Go to mail",
+        icon: <ArrowRight size={15} />,
+        module: "mail",
+        run: () => {
+          close();
+          navigate("/mail");
         },
       },
       {
@@ -127,6 +142,7 @@ export function CommandPalette() {
         id: "boards",
         label: "Go to boards",
         icon: <ArrowRight size={15} />,
+        module: "boards",
         run: () => {
           close();
           navigate("/boards");
@@ -136,6 +152,7 @@ export function CommandPalette() {
         id: "files",
         label: "Go to files",
         icon: <ArrowRight size={15} />,
+        module: "files",
         run: () => {
           close();
           navigate("/files");
@@ -145,6 +162,7 @@ export function CommandPalette() {
         id: "tags",
         label: "Go to tags",
         icon: <ArrowRight size={15} />,
+        module: "tags",
         run: () => {
           close();
           navigate("/tags");
@@ -154,6 +172,7 @@ export function CommandPalette() {
         id: "timer",
         label: "Start focus timer",
         icon: <ArrowRight size={15} />,
+        module: "time",
         run: () => {
           close();
           void api.startTimer().catch(() => {});
@@ -220,10 +239,11 @@ export function CommandPalette() {
   }, [query, open, api]);
 
   const filteredActions = useMemo(() => {
+    const allowed = actions.filter((a) => !a.module || moduleOn(settings, a.module));
     const q = query.trim().toLowerCase();
-    if (!q) return actions;
-    return actions.filter((action) => action.label.toLowerCase().includes(q));
-  }, [actions, query]);
+    if (!q) return allowed;
+    return allowed.filter((action) => action.label.toLowerCase().includes(q));
+  }, [actions, query, settings]);
 
   const items = useMemo(
     () => [

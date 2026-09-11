@@ -1,7 +1,9 @@
-import type { Habit, TimeSummary, WeekReview } from "@cal/api-client";
+import type { DashboardStats, Habit, TimeSummary, WeekReview } from "@cal/api-client";
 import {
+  AlarmClock,
   Check,
   Crosshair,
+  File,
   Flame,
   Link2,
   NotebookPen,
@@ -70,6 +72,9 @@ export function TodayPage() {
   const [focus, setFocus] = useState(false);
   const [activity, setActivity] = useState<Record<string, number>>({});
   const [time, setTime] = useState<TimeSummary | null>(null);
+  const [dash, setDash] = useState<DashboardStats | null>(null);
+  const [storage, setStorage] = useState<{ usedBytes: number; quotaBytes: number } | null>(null);
+  const activeWorkspace = usePlanner((state) => state.settings.activeWorkspace);
   const today = todayIso();
 
   useEffect(() => {
@@ -86,7 +91,9 @@ export function TodayPage() {
     void api.habits().then(setHabits).catch(() => {});
     void api.activity().then(setActivity).catch(() => {});
     void api.timeSummary().then(setTime).catch(() => {});
-  }, [today, loadEntries, loadFeeds, api]);
+    void api.dashboard(activeWorkspace ?? "").then(setDash).catch(() => {});
+    void api.storage().then(setStorage).catch(() => {});
+  }, [today, loadEntries, loadFeeds, api, activeWorkspace]);
 
   useEffect(() => {
     if (settings.city) {
@@ -367,6 +374,36 @@ export function TodayPage() {
               </ul>
             </section>
 
+            {dash && dash.deadlines.length > 0 && (
+              <section className="panel">
+                <h3>
+                  <AlarmClock size={13} style={{ verticalAlign: "-2px", marginRight: 5 }} />
+                  Upcoming deadlines
+                </h3>
+                <ul className="check-list">
+                  {dash.deadlines.map((e) => {
+                    const daysLeft = Math.round((new Date(`${e.date}T12:00:00`).getTime() - new Date(`${today}T12:00:00`).getTime()) / 86400000);
+                    return (
+                      <li key={e.id}>
+                        <button
+                          type="button"
+                          className="tickbox"
+                          aria-label="Complete"
+                          onClick={() => void updateEntry(e.id, { completed: true })}
+                        />
+                        <button type="button" className="row-title" onClick={() => openEdit(e)}>
+                          {e.title}
+                        </button>
+                        <span className={`meta-chip ${daysLeft <= 0 ? "overdue" : daysLeft <= 2 ? "soon" : ""}`}>
+                          {daysLeft <= 0 ? "today" : daysLeft === 1 ? "tomorrow" : `${daysLeft}d`}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            )}
+
             <section className="panel">
               <h3>
                 This week
@@ -402,6 +439,33 @@ export function TodayPage() {
               )}
             </section>
 
+            {dash && (dash.feed.length > 0 || storage) && (
+              <section className="panel">
+                <h3>Recent activity</h3>
+                <ul className="feed-list">
+                  {dash.feed.slice(0, 10).map((f, i) => (
+                    <li key={i} className="feed-row">
+                      <span className={`feed-ic kind-${f.kind}`}>
+                        {f.kind === "file" ? <File size={11} /> : f.kind === "card" ? <Check size={11} /> : <StickyNote size={11} />}
+                      </span>
+                      <span className="feed-title" title={f.title}>
+                        <b>{f.action}</b> {f.title || "untitled"}
+                      </span>
+                      <time>{relTime(f.at)}</time>
+                    </li>
+                  ))}
+                </ul>
+                {storage && storage.quotaBytes > 0 && (
+                  <div className="storage-row" title={`${fmtBytes(storage.usedBytes)} of ${fmtBytes(storage.quotaBytes)} used`}>
+                    <div className="meter" aria-hidden>
+                      <i style={{ width: `${Math.min(100, (storage.usedBytes / storage.quotaBytes) * 100)}%` }} />
+                    </div>
+                    <span className="panel-note">{fmtBytes(storage.usedBytes)} / {fmtBytes(storage.quotaBytes)}</span>
+                  </div>
+                )}
+              </section>
+            )}
+
             <section className="panel">
               <h3>Activity</h3>
               <ActivityGrid counts={activity} today={today} />
@@ -411,6 +475,22 @@ export function TodayPage() {
       </div>
     </>
   );
+}
+
+function relTime(isoStr: string): string {
+  const mins = Math.max(0, Math.round((Date.now() - new Date(isoStr).getTime()) / 60000));
+  if (mins < 1) return "now";
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
+}
+
+function fmtBytes(n: number): string {
+  if (n < 1024) return `${n}B`;
+  if (n < 1024 ** 2) return `${Math.round(n / 1024)}KB`;
+  if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1)}MB`;
+  return `${(n / 1024 ** 3).toFixed(2)}GB`;
 }
 
 // ActivityGrid — contributions-style grid, last ~17 weeks, oldest → newest.

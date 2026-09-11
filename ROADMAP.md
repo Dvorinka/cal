@@ -189,32 +189,48 @@ Status legend: `[x]` shipped · `[/]` partially shipped · `[ ]` planned
       closes cards whose issues were closed remotely and moves them to
       the done column.
 
+## Phase 8 — Trackeep merge (shipped 2026-09-11)
+
+Single-user reinterpretation of Trackeep's team features, plus the
+solidtime-style timesheet depth and a mail module.
+
+- [x] **Workspaces** — `workspaces` table; nullable scope on entries and
+      files (`NULL` = Personal). Sidebar switcher: All / Personal / named
+      space. Settings → Workspaces manages them.
+- [x] **Feature modules** — `settings.modules` JSON map; every section
+      (tasks/boards/notes/links/files/time/mail/github/tags) toggles off
+      and disappears from nav, routes, palette and settings.
+- [x] **Dashboard** — `GET /api/dashboard` rolls up task counts, this
+      week's completions, upcoming deadlines, per-day activity and a
+      merged activity feed (entries/cards/files); Today renders deadlines
+      (with days-left chips), recent activity and storage usage.
+- [x] **Entry dependencies** — `blocked_by`; a blocked task can't be
+      completed (409), shows a "blocked" chip on boards and in list view.
+- [x] **Time-entry tags, manual entries, editing** — `POST /time/log`,
+      `PATCH /time/log/:id`; tags filter the timesheet; sessions editable.
+- [x] **File tags + workspace** — `PATCH /files/:id`, tag chips and
+      filtering on the Files page, upload honors the active space.
+- [x] **Saved filters** — `GET/POST /filters`; Tasks page applies them
+      as chips (click to apply, right-click to delete).
+- [x] **Link preview refresh** — `POST /entries/:id/refresh-link`.
+- [x] **Mail** — IMAP/SMTP accounts with AES-256-GCM credentials;
+      mailboxes, message list/reader, flags, delete, compose; `/mail`.
+- [x] **Board list view** — boards toggle kanban ↔ column-grouped list.
+- [x] **Board time sums** — `minutes` on board tiles.
+- [x] **Desktop app** — `apps/desktop`: Wails 2 shell, API in-process,
+      SPA embedded; `-tags headless` variant for servers/CI.
+- [ ] **In-app YouTube channel feeds** — poll channel RSS.
+- [ ] **Editable shared boards** — write-token tier.
+- [ ] **Mobile nav audit** — bottom nav still covers five tabs.
+
+### Still excluded (per spec)
+
+- Trackeep: messages, learning, in-app AI assistant (MCP/API instead).
+
 ## Remaining — buildable now
 
-- [ ] **Time-entry tags** — sessions carry their own tag list, separate
-      from the linked task's tags; filter + group the timesheet by them.
-- [ ] **Time-entry editing** — fix a wrong start/end/duration after the
-      fact; today the only correction is delete-and-restart.
-- [ ] **Manual time entry** — log a past session without running the
-      timer (solidtime has this; ours doesn't).
-- [ ] **YouTube video search** — find videos from inside the app, not
-      just save URLs you already have. oEmbed can't search; needs the
-      Data API key or an invidious instance.
-- [ ] **Featured channels** — pin channels; new uploads surface in the
-      Links page. Poll channel RSS feeds (they exist at
-      `youtube.com/feeds/videos.xml?channel_id=` — no key needed).
-- [ ] **Saved filters / smart views** — sidebar presets ("overdue",
-      "this week + #work") instead of re-filtering every visit.
-- [ ] **Entry dependencies** — "blocked by" on cards; blocked cards get
-      a badge and can't be completed until the blocker resolves.
-- [ ] **Editable shared boards** — share tokens are view-only today;
-      a write token tier would let collaborators move cards.
-- [ ] **ICS export EXDATE** — exported recurring events can't express
-      skipped occurrences.
-- [ ] **Link preview refresh** — metadata is fetched once at save;
-      stale titles/thumbnails never update.
-- [ ] **Time summary on board tiles** — minutes logged per project
-      next to the done/total chip.
+- [ ] **YouTube video search** — needs the Data API key or an invidious
+      instance; oEmbed covers save-time metadata only.
 
 ## Remaining — UX/discoverability (found in the visual pass)
 
@@ -249,7 +265,6 @@ Status legend: `[x]` shipped · `[/]` partially shipped · `[ ]` planned
 - Real-time collaboration.
 - E2E-encrypted storage (self-hosted already isolates; revisit if multi-user
   ever lands).
-- In-app email (Skiff tried; it killed them).
 
 ## Principles the roadmap answers to
 

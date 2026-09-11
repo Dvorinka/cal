@@ -15,3 +15,7 @@ ref/
 
 .playwright-mcp/
 apps/web/test-results/
+apps/desktop/frontend/dist/
+!apps/desktop/frontend/dist/.gitkeep
+apps/desktop/build/bin/
+apps/api/data/

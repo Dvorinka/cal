@@ -12,10 +12,10 @@ import (
 
 	"cal/apps/api/internal/store"
 
-	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"context"
 	"encoding/json"
+	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 	"io"
 	"regexp"
 	"time"
@@ -31,6 +31,7 @@ func (s *Server) startTimer(c *gin.Context) {
 		Billable  bool     `json:"billable"`
 		Rate      *float64 `json:"rate"`
 		ProjectID *string  `json:"projectId"`
+		Tags      []string `json:"tags"`
 	}
 	_ = c.ShouldBindJSON(&body)
 	if body.EntryID != nil && *body.EntryID == "" {
@@ -44,7 +45,7 @@ func (s *Server) startTimer(c *gin.Context) {
 			body.Rate = st.DefaultRate
 		}
 	}
-	t, err := s.store.StartTimer(c.Request.Context(), currentUser(c).ID, body.EntryID, body.Note, body.Planned, body.Billable, body.Rate, body.ProjectID)
+	t, err := s.store.StartTimer(c.Request.Context(), currentUser(c).ID, body.EntryID, body.Note, body.Planned, body.Billable, body.Rate, body.ProjectID, body.Tags)
 	if err != nil {
 		c.String(http.StatusConflict, "a timer is already running")
 		return

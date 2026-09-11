@@ -2,8 +2,8 @@
 // get a public share link. Images preview inline; everything else downloads.
 
 import type { FileRec } from "@cal/api-client";
-import { File as FileIcon, FileText, FileImage, FileArchive, FileAudio, FileVideo, Link2, Trash2, Upload, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { File as FileIcon, FileText, FileImage, FileArchive, FileAudio, FileVideo, Link2, Tag, Trash2, Upload, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { usePlanner } from "../stores/planner";
 
@@ -29,17 +29,47 @@ export function FilesPage() {
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<FileRec>();
+  const [tagFilter, setTagFilter] = useState("");
+  const [tagEdit, setTagEdit] = useState<FileRec | null>(null);
+  const activeWorkspace = usePlanner((s) => s.settings.activeWorkspace);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const load = () => void api.files().then(setFiles).catch(() => {});
   useEffect(load, [api]);
+
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const f of files) for (const t of f.tags ?? []) set.add(t);
+    return [...set].sort();
+  }, [files]);
+
+  const visible = useMemo(
+    () =>
+      files.filter((f) => {
+        if (tagFilter && !(f.tags ?? []).includes(tagFilter)) return false;
+        if (activeWorkspace === "none" && f.workspaceId) return false;
+        if (activeWorkspace && activeWorkspace !== "none" && f.workspaceId !== activeWorkspace) return false;
+        return true;
+      }),
+    [files, tagFilter, activeWorkspace],
+  );
+
+  async function saveTags(f: FileRec, tags: string[]) {
+    try {
+      const updated = await api.updateFile(f.id, { tags });
+      setFiles((fs) => fs.map((x) => (x.id === f.id ? updated : x)));
+    } catch {
+      toast("Tag update failed");
+    }
+  }
 
   async function upload(list: FileList | null) {
     if (!list?.length) return;
     setBusy(true);
     try {
       for (const f of Array.from(list)) {
-        await api.upload(f);
+        const ws = activeWorkspace && activeWorkspace !== "none" ? activeWorkspace : undefined;
+        await api.upload(f, { workspaceId: ws });
       }
       load();
       toast(list.length === 1 ? "Uploaded" : `${list.length} files uploaded`);
@@ -92,6 +122,24 @@ export function FilesPage() {
       />
 
       <div className="page-scroll">
+        {allTags.length > 0 && (
+          <div className="tag-filter-row">
+            <Tag size={12} style={{ color: "var(--text-3)" }} />
+            <button type="button" className={`meta-chip ${tagFilter === "" ? "on" : ""}`} onClick={() => setTagFilter("")}>
+              all
+            </button>
+            {allTags.map((t) => (
+              <button
+                key={t}
+                type="button"
+                className={`meta-chip ${tagFilter === t ? "on" : ""}`}
+                onClick={() => setTagFilter(tagFilter === t ? "" : t)}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        )}
         <div
           className={`files-drop ${dragOver ? "over" : ""}`}
           onDragOver={(e) => {
@@ -116,9 +164,14 @@ export function FilesPage() {
               <Upload size={22} strokeWidth={1.5} />
               <p>Drop files here, or click Upload — 20 MB each, quota in Settings.</p>
             </div>
+          ) : visible.length === 0 ? (
+            <div className="files-empty">
+              <Tag size={22} strokeWidth={1.5} />
+              <p>Nothing tagged “{tagFilter}”{activeWorkspace ? " in this space" : ""}.</p>
+            </div>
           ) : (
             <ul className="files-list">
-              {files.map((f) => {
+              {visible.map((f) => {
                 const Icon = iconFor(f.mime);
                 return (
                   <li key={f.id} className="files-item">
@@ -129,10 +182,28 @@ export function FilesPage() {
                       aria-label={`Open ${f.origName}`}
                     >
                       <Icon size={18} strokeWidth={1.8} />
-                      <span className="files-name">{f.origName}</span>
+                      <span className="files-name">
+                        {f.origName}
+                        {(f.tags ?? []).length > 0 && (
+                          <span className="files-tags">
+                            {f.tags.map((t) => (
+                              <span key={t} className="meta-chip">{t}</span>
+                            ))}
+                          </span>
+                        )}
+                      </span>
                       <span className="files-meta">
                         {humanSize(f.size)} · {new Date(f.createdAt).toLocaleDateString()}
                       </span>
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      aria-label={`Tag ${f.origName}`}
+                      title="Edit tags"
+                      onClick={() => setTagEdit(f)}
+                    >
+                      <Tag size={14} />
                     </button>
                     <button
                       type="button"
@@ -154,6 +225,16 @@ export function FilesPage() {
         </div>
       </div>
 
+      {tagEdit && (
+        <TagDialog
+          file={tagEdit}
+          onClose={() => setTagEdit(null)}
+          onSave={(tags) => {
+            void saveTags(tagEdit, tags);
+            setTagEdit(null);
+          }}
+        />
+      )}
       {preview && (
         <div className="files-preview" role="dialog" aria-modal="true" aria-label={preview.origName} onClick={() => setPreview(undefined)}>
           <button type="button" className="files-preview-close" aria-label="Close preview">
@@ -163,5 +244,31 @@ export function FilesPage() {
         </div>
       )}
     </>
+  );
+}
+
+// TagDialog — small comma-tags editor, same shape as the entry editor's.
+function TagDialog({ file, onClose, onSave }: { file: FileRec; onClose: () => void; onSave: (tags: string[]) => void }) {
+  const [value, setValue] = useState((file.tags ?? []).join(", "));
+  return (
+    <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="palette mail-dialog" role="dialog" aria-label={`Tag ${file.origName}`}>
+        <h3>Tags — {file.origName}</h3>
+        <label className="field">
+          <span>Comma-separated</span>
+          <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="receipts, q3, tax" autoFocus />
+        </label>
+        <div className="mail-dialog-actions">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => onSave(value.split(",").map((t) => t.trim().toLowerCase().replace(/^#/, "")).filter(Boolean))}
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

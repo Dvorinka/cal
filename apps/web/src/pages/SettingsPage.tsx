@@ -2,6 +2,7 @@ import type { Accent, SessionInfo, Webhook } from "@cal/api-client";
 import { Bell, BellOff, Copy, Download, FileText, LogOut, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
+import { MODULES, moduleOn } from "../lib/modules";
 import { disablePush, enablePush, pushEnabled } from "../lib/push";
 import { usePlanner } from "../stores/planner";
 
@@ -42,6 +43,10 @@ export function SettingsPage() {
   const toast = usePlanner((state) => state.toast);
   const user = usePlanner((state) => state.user);
   const logout = usePlanner((state) => state.logout);
+  const workspaces = usePlanner((state) => state.workspaces);
+  const addWorkspace = usePlanner((state) => state.addWorkspace);
+  const removeWorkspace = usePlanner((state) => state.removeWorkspace);
+  const [wsName, setWsName] = useState("");
 
   const [feedName, setFeedName] = useState("");
   const [feedUrl, setFeedUrl] = useState("");
@@ -316,6 +321,69 @@ export function SettingsPage() {
                 ))}
               </div>
             </div>
+          </div>
+        </section>
+
+        <section className="panel">
+          <h3>Workspaces</h3>
+          <p className="panel-note">Separate scopes for entries, files and time — Work, Personal, anything. Deleting a space returns its contents to Personal.</p>
+          <ul className="check-list" style={{ marginBottom: 10 }}>
+            {workspaces.map((w) => (
+              <li key={w.id}>
+                <span className="swatch" style={{ "--swatch": `var(--c-${w.color})` } as React.CSSProperties} />
+                <span className="row-title">{w.name}</span>
+                <button
+                  type="button"
+                  className="icon-btn danger"
+                  aria-label={`Delete ${w.name}`}
+                  onClick={() => void removeWorkspace(w.id)}
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+            {workspaces.length === 0 && <li className="panel-empty">No spaces yet — everything lives in Personal.</li>}
+          </ul>
+          <div className="field-row">
+            <input
+              className="input"
+              placeholder="New space name"
+              value={wsName}
+              onChange={(e) => setWsName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && wsName.trim() && void addWorkspace({ name: wsName.trim() }).then(() => setWsName(""))}
+            />
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={!wsName.trim()}
+              onClick={() => void addWorkspace({ name: wsName.trim() }).then((w) => w && setWsName(""))}
+            >
+              Create
+            </button>
+          </div>
+        </section>
+
+        <section className="panel">
+          <h3>Modules</h3>
+          <p className="panel-note">Turn off what you don't use — hidden from navigation, routes and search.</p>
+          <div className="module-grid">
+            {MODULES.map((m) => {
+              const on = moduleOn(settings, m.key);
+              return (
+                <button
+                  key={m.key}
+                  type="button"
+                  className={`module-toggle ${on ? "on" : ""}`}
+                  aria-pressed={on}
+                  title={m.hint}
+                  onClick={() => set({ modules: { ...settings.modules, [m.key]: !on } })}
+                >
+                  <span className="module-dot" />
+                  {m.label}
+                  <i>{on ? "on" : "off"}</i>
+                </button>
+              );
+            })}
           </div>
         </section>
 

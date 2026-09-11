@@ -42,6 +42,7 @@ export function EntryEditor() {
   const toast = usePlanner((state) => state.toast);
 
   const entries = usePlanner((state) => state.entries);
+  const workspaces = usePlanner((state) => state.workspaces);
   const accounts = usePlanner((state) => state.accounts);
   const loadAccounts = usePlanner((state) => state.loadAccounts);
   const loadEntries = usePlanner((state) => state.loadEntries);
@@ -75,6 +76,8 @@ export function EntryEditor() {
   const [color, setColor] = useState("slate");
   const [tags, setTags] = useState("");
   const [content, setContent] = useState("");
+  const [wsId, setWsId] = useState(""); // "" = Personal
+  const [blockedBy, setBlockedBy] = useState("");
   const [noteMode, setNoteMode] = useState<"write" | "preview">("write");
   const [showHistory, setShowHistory] = useState(false);
   const [showActivity, setShowActivity] = useState(false);
@@ -114,6 +117,8 @@ export function EntryEditor() {
       setColor("slate");
       setTags("");
       setContent(p.content ?? "");
+      setWsId("");
+      setBlockedBy("");
       setNoteMode("write");
       setShowHistory(false);
       setRevisions([]);
@@ -133,6 +138,8 @@ export function EntryEditor() {
       setColor(e.color);
       setTags(e.tags.join(", "));
       setContent(e.content ?? "");
+      setWsId(e.workspaceId ?? "");
+      setBlockedBy(e.blockedBy ?? "");
       setNoteMode("write");
       setShowHistory(false);
       setRevisions([]);
@@ -212,6 +219,8 @@ export function EntryEditor() {
       remind: startTime && remind !== "" ? remind : null,
       boardId: type === "task" && boardId ? boardId : undefined,
       columnId: type === "task" && boardId && columnId ? columnId : undefined,
+      workspaceId: wsId, // "" clears to Personal
+      blockedBy: type === "task" ? blockedBy : "",
     };
     try {
       if (editing) await updateEntry(editing.id, fields);
@@ -436,6 +445,37 @@ export function EntryEditor() {
                     </select>
                   )}
                 </label>
+              </div>
+            )}
+            {workspaces.length > 0 && (
+              <div className="editor-row">
+                <label className="field">
+                  <span>Space</span>
+                  <select className="select" value={wsId} onChange={(e) => setWsId(e.target.value)}>
+                    <option value="">Personal</option>
+                    {workspaces.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {type === "task" && (
+                  <label className="field">
+                    <span>Blocked by</span>
+                    <select className="select" value={blockedBy} onChange={(e) => setBlockedBy(e.target.value)}>
+                      <option value="">—</option>
+                      {entries
+                        .filter((e) => e.type === "task" && !e.completed && e.id !== editing?.id)
+                        .slice(0, 60)
+                        .map((e) => (
+                          <option key={e.id} value={e.id}>
+                            {e.title}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                )}
               </div>
             )}
             {type === "task" && boards.length > 0 && (

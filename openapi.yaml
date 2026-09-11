@@ -83,6 +83,11 @@ paths:
           description: Case-insensitive title/content match, or exact tag match. When set without a range, all dates are searched.
           schema:
             type: string
+        - name: workspace
+          in: query
+          description: Workspace scope — uuid for one space, "none" for Personal only, absent for all.
+          schema:
+            type: string
       responses:
         "200":
           description: Entries
@@ -535,6 +540,79 @@ paths:
   /time/summary:
     get:
       summary: todayMinutes, weekMinutes, perEntry
+  /time/log:
+    get:
+      summary: Timesheet entries (from/to optional)
+    post:
+      summary: Manual time entry {entryId?, note?, startAt, endAt?, planned?, billable?, rate?, projectId?, tags?}
+  /time/log/{id}:
+    patch:
+      summary: Edit a logged session — explicit null clears endAt/rate/projectId/entryId/planned
+    delete:
+      summary: Delete a session
+  /time/export:
+    get:
+      summary: Timesheet export ?format=csv|json
+  /dashboard:
+    get:
+      summary: Today widgets — counts, deadlines, weekly activity, merged feed, timer
+      parameters:
+        - name: workspace
+          in: query
+          schema:
+            type: string
+  /workspaces:
+    get:
+      summary: User's workspaces
+    post:
+      summary: Create workspace {name, color?, icon?}
+  /workspaces/{id}:
+    patch:
+      summary: Update workspace {name?, color?, icon?, position?}
+    delete:
+      summary: Delete workspace — contents fall back to Personal
+  /files/{id}:
+    patch:
+      summary: Update file tags/workspace {tags?, workspaceId?}
+  /filters:
+    get:
+      summary: Saved filters
+    post:
+      summary: Create saved filter {name, filter}
+  /filters/{id}:
+    delete:
+      summary: Delete a saved filter
+  /entries/{id}/refresh-link:
+    post:
+      summary: Re-fetch unfurl/oEmbed metadata for a link entry
+  /mail/accounts:
+    get:
+      summary: Mail accounts (no passwords)
+    post:
+      summary: Connect an IMAP/SMTP account — password stored AES-256-GCM
+  /mail/accounts/{id}:
+    delete:
+      summary: Remove a mail account
+  /mail/accounts/{id}/test:
+    post:
+      summary: Verify IMAP login
+  /mail/{id}/mailboxes:
+    get:
+      summary: IMAP mailboxes for an account
+  /mail/{id}/messages:
+    get:
+      summary: Envelope page — ?mailbox=INBOX&page=0 (40/page, newest first)
+  /mail/{id}/message/{uid}:
+    get:
+      summary: Message body (text + sanitized html)
+    delete:
+      summary: Move to Trash (or \Deleted+EXPUNGE fallback)
+  /mail/{id}/message/{uid}/flag:
+    post:
+      summary: Set/clear \\Seen {seen}
+  /mail/{id}/send:
+    post:
+      summary: Send via the account's SMTP {to, cc?, subject, text}
   /entries/{id}/activity:
     get:
       summary: Card activity log

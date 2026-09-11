@@ -33,7 +33,8 @@ const entryCols = `id::text, title, content, type, link_url, date::text,
 	completed, color, tags, recur, remind, pinned,
 	watched, link_image, link_desc, link_favicon, link_video_id,
 	board_id::text, column_id::text, position, created_at,
-	account_id::text, external_uid, external_href, external_etag, dirty`
+	account_id::text, external_uid, external_href, external_etag, dirty,
+	workspace_id::text, blocked_by::text`
 
 type Entry struct {
 	ID           string    `json:"id"`
@@ -65,28 +66,33 @@ type Entry struct {
 	ExternalHref *string   `json:"-"`
 	ExternalETag *string   `json:"-"`
 	Dirty        bool      `json:"-"`
+	WorkspaceID  *string   `json:"workspaceId,omitempty"`
+	BlockedBy    *string   `json:"blockedBy,omitempty"`
 }
 
 func (e *Entry) scan(row interface{ Scan(...any) error }) error {
 	return row.Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date,
 		&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.Watched, &e.LinkImage, &e.LinkDesc, &e.LinkFavicon, &e.LinkVideoID, &e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
-		&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty)
+		&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty, &e.WorkspaceID, &e.BlockedBy)
 }
 
 type Settings struct {
-	Country      string `json:"country"`
-	ShowHolidays bool   `json:"showHolidays"`
-	Theme        string `json:"theme"`
-	WeekStart    string `json:"weekStart"`
-	Accent       string `json:"accent"`
-	Timezone     string `json:"timezone"`
-	City         string `json:"city"`
-	QuotaMB      int       `json:"quotaMb"`
-	DigestTime   string    `json:"digestTime"` // "HH:MM" or ""
-	DefaultRate  *float64  `json:"defaultRate,omitempty"`
-	GithubToken  string    `json:"githubToken"` // PAT; never logged
-	WidgetToken  string `json:"widgetToken"`
-	ApiToken     string `json:"apiToken"`
+	Country      string   `json:"country"`
+	ShowHolidays bool     `json:"showHolidays"`
+	Theme        string   `json:"theme"`
+	WeekStart    string   `json:"weekStart"`
+	Accent       string   `json:"accent"`
+	Timezone     string   `json:"timezone"`
+	City         string   `json:"city"`
+	QuotaMB      int      `json:"quotaMb"`
+	DigestTime   string   `json:"digestTime"` // "HH:MM" or ""
+	DefaultRate  *float64 `json:"defaultRate,omitempty"`
+	GithubToken  string   `json:"githubToken"` // PAT; never logged
+	WidgetToken  string   `json:"widgetToken"`
+	ApiToken     string   `json:"apiToken"`
+	// Modules gates feature areas; absent key = enabled.
+	Modules         map[string]bool `json:"modules,omitempty"`
+	ActiveWorkspace *string         `json:"activeWorkspace,omitempty"`
 }
 
 type Feed struct {
@@ -98,42 +104,47 @@ type Feed struct {
 }
 
 type EntryInput struct {
-	Title     string   `json:"title"`
-	Content   string   `json:"content"`
-	Type      string   `json:"type"`
-	LinkURL   string   `json:"linkUrl"`
-	Date      string   `json:"date"`
-	StartTime string   `json:"startTime"`
-	EndTime   string   `json:"endTime"`
-	Color     string   `json:"color"`
-	Tags      []string `json:"tags"`
-	Recur     string   `json:"recur"`
-	Remind    *int     `json:"remind"`
-	AccountID *string  `json:"accountId"`
-	BoardID   *string  `json:"boardId"`
-	ColumnID  *string  `json:"columnId"`
-	Position  *float64 `json:"-"`
+	Title       string   `json:"title"`
+	Content     string   `json:"content"`
+	Type        string   `json:"type"`
+	LinkURL     string   `json:"linkUrl"`
+	Date        string   `json:"date"`
+	StartTime   string   `json:"startTime"`
+	EndTime     string   `json:"endTime"`
+	Color       string   `json:"color"`
+	Tags        []string `json:"tags"`
+	Recur       string   `json:"recur"`
+	Remind      *int     `json:"remind"`
+	AccountID   *string  `json:"accountId"`
+	BoardID     *string  `json:"boardId"`
+	ColumnID    *string  `json:"columnId"`
+	Position    *float64 `json:"-"`
+	WorkspaceID *string  `json:"workspaceId"`
+	BlockedBy   *string  `json:"blockedBy"`
 }
 
 type EntryPatch struct {
-	Title     *string  `json:"title"`
-	Content   *string  `json:"content"`
-	Type      *string  `json:"type"`
-	LinkURL   *string  `json:"linkUrl"`
-	Date      *string  `json:"date"`
-	StartTime *string  `json:"startTime"`
-	EndTime   *string  `json:"endTime"`
-	Completed *bool    `json:"completed"`
-	Pinned    *bool    `json:"pinned"`
-	Watched   *bool    `json:"watched"`
-	BoardID   *string  `json:"boardId"`
-	ColumnID  *string  `json:"columnId"`
-	ClearBoard bool    `json:"-"`
-	Color     *string  `json:"color"`
-	Recur     *string  `json:"recur"`
-	Remind    *int     `json:"remind"`
-	Tags      []string `json:"tags"`
-	HasTags   bool     `json:"-"`
+	Title      *string  `json:"title"`
+	Content    *string  `json:"content"`
+	Type       *string  `json:"type"`
+	LinkURL    *string  `json:"linkUrl"`
+	Date       *string  `json:"date"`
+	StartTime  *string  `json:"startTime"`
+	EndTime    *string  `json:"endTime"`
+	Completed  *bool    `json:"completed"`
+	Pinned     *bool    `json:"pinned"`
+	Watched    *bool    `json:"watched"`
+	BoardID    *string  `json:"boardId"`
+	ColumnID   *string  `json:"columnId"`
+	ClearBoard bool     `json:"-"`
+	Color      *string  `json:"color"`
+	Recur      *string  `json:"recur"`
+	Remind     *int     `json:"remind"`
+	Tags       []string `json:"tags"`
+	HasTags    bool     `json:"-"`
+	// WorkspaceID/BlockedBy: nil = leave; "" = clear; uuid = set.
+	WorkspaceID *string `json:"workspaceId"`
+	BlockedBy   *string `json:"blockedBy"`
 }
 
 func New(db *pgxpool.Pool) *Store {
@@ -313,12 +324,12 @@ func (s *Store) CreateEntry(ctx context.Context, userID string, input EntryInput
 	}
 	var e Entry
 	err := s.db.QueryRow(ctx, `
-		INSERT INTO entries (user_id, title, content, type, link_url, date, start_time, end_time, color, tags, recur, remind, account_id, board_id, column_id, position, dirty)
-		VALUES ($1, $2, $3, $4, $5, $6, nullif($7, '')::time, nullif($8, '')::time, $9, $10, coalesce(nullif($11, ''), 'none'), $12, $13::uuid, $14::uuid, $15::uuid, $16, $13 IS NOT NULL)
+		INSERT INTO entries (user_id, title, content, type, link_url, date, start_time, end_time, color, tags, recur, remind, account_id, board_id, column_id, position, dirty, workspace_id, blocked_by)
+		VALUES ($1, $2, $3, $4, $5, $6, nullif($7, '')::time, nullif($8, '')::time, $9, $10, coalesce(nullif($11, ''), 'none'), $12, $13::uuid, $14::uuid, $15::uuid, $16, $13 IS NOT NULL, nullif($17, '')::uuid, nullif($18, '')::uuid)
 		RETURNING `+entryCols+`
-	`, userID, input.Title, input.Content, input.Type, input.LinkURL, input.Date, input.StartTime, input.EndTime, input.Color, input.Tags, input.Recur, input.Remind, input.AccountID, input.BoardID, input.ColumnID, input.Position).
+	`, userID, input.Title, input.Content, input.Type, input.LinkURL, input.Date, input.StartTime, input.EndTime, input.Color, input.Tags, input.Recur, input.Remind, input.AccountID, input.BoardID, input.ColumnID, input.Position, input.WorkspaceID, input.BlockedBy).
 		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.Watched, &e.LinkImage, &e.LinkDesc, &e.LinkFavicon, &e.LinkVideoID, &e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
-			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty)
+			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty, &e.WorkspaceID, &e.BlockedBy)
 	return e, err
 }
 
@@ -386,6 +397,19 @@ func (s *Store) UpdateEntry(ctx context.Context, userID, id string, patch EntryP
 	if patch.HasTags {
 		current.Tags = patch.Tags
 	}
+	if patch.WorkspaceID != nil {
+		current.WorkspaceID = nilIfEmpty(*patch.WorkspaceID)
+	}
+	if patch.BlockedBy != nil {
+		current.BlockedBy = nilIfEmpty(*patch.BlockedBy)
+	}
+
+	// Blocked cards can't complete while the blocker is open.
+	if patch.Completed != nil && *patch.Completed && current.BlockedBy != nil {
+		if blocked, err := s.BlockerOpen(ctx, userID, id); err == nil && blocked {
+			return Entry{}, ErrBlocked
+		}
+	}
 
 	// Re-validate the merged row so a partial patch cannot violate the
 	// time-ordering or recur-on-task rules the DB enforces.
@@ -421,15 +445,16 @@ func (s *Store) UpdateEntry(ctx context.Context, userID, id string, patch EntryP
 		    start_time = nullif($6, '')::time, end_time = nullif($7, '')::time,
 		    completed = $8, color = $9, tags = $10, recur = $11, remind = $12,
 		    pinned = $16, board_id = $17::uuid, column_id = $18::uuid, watched = $19,
+		    workspace_id = $20::uuid, blocked_by = $21::uuid,
 		    dirty = CASE WHEN account_id IS NOT NULL THEN true ELSE dirty END,
 		    reminded_at = CASE WHEN $15 THEN NULL ELSE reminded_at END
 		WHERE id = $13 AND user_id = $14
 		RETURNING `+entryCols+`
 	`, current.Title, current.Content, current.Type, current.LinkURL, current.Date,
 		strOrEmpty(current.StartTime), strOrEmpty(current.EndTime),
-		current.Completed, current.Color, current.Tags, current.Recur, current.Remind, id, userID, resetRemind, current.Pinned, current.BoardID, current.ColumnID, current.Watched).
+		current.Completed, current.Color, current.Tags, current.Recur, current.Remind, id, userID, resetRemind, current.Pinned, current.BoardID, current.ColumnID, current.Watched, current.WorkspaceID, current.BlockedBy).
 		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.Watched, &e.LinkImage, &e.LinkDesc, &e.LinkFavicon, &e.LinkVideoID, &e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
-			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty)
+			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty, &e.WorkspaceID, &e.BlockedBy)
 	if err != nil {
 		return Entry{}, err
 	}
@@ -702,16 +727,17 @@ func (s *Store) Settings(ctx context.Context, userID string) (Settings, error) {
 	var settings Settings
 	err := s.db.QueryRow(ctx, `
 		SELECT country, show_holidays, theme, week_start, accent, timezone, coalesce(city, ''), quota_mb,
-		       coalesce(to_char(digest_time,'HH24:MI'), ''), widget_token, api_token, default_rate, coalesce(github_token,'') FROM settings WHERE user_id = $1
-	`, userID).Scan(&settings.Country, &settings.ShowHolidays, &settings.Theme, &settings.WeekStart, &settings.Accent, &settings.Timezone, &settings.City, &settings.QuotaMB, &settings.DigestTime, &settings.WidgetToken, &settings.ApiToken, &settings.DefaultRate, &settings.GithubToken)
+		       coalesce(to_char(digest_time,'HH24:MI'), ''), widget_token, api_token, default_rate, coalesce(github_token,''),
+		       modules, active_workspace::text FROM settings WHERE user_id = $1
+	`, userID).Scan(&settings.Country, &settings.ShowHolidays, &settings.Theme, &settings.WeekStart, &settings.Accent, &settings.Timezone, &settings.City, &settings.QuotaMB, &settings.DigestTime, &settings.WidgetToken, &settings.ApiToken, &settings.DefaultRate, &settings.GithubToken, &settings.Modules, &settings.ActiveWorkspace)
 	return settings, err
 }
 
 func (s *Store) UpdateSettings(ctx context.Context, userID string, settings Settings) (Settings, error) {
 	var out Settings
 	err := s.db.QueryRow(ctx, `
-		INSERT INTO settings (user_id, country, show_holidays, theme, week_start, accent, timezone, city, digest_time, default_rate, github_token)
-		VALUES ($1, $2, $3, $4, $5, $6, coalesce(nullif($7, ''), 'UTC'), nullif($8, ''), nullif($9, '')::time, $10, nullif($11, ''))
+		INSERT INTO settings (user_id, country, show_holidays, theme, week_start, accent, timezone, city, digest_time, default_rate, github_token, modules, active_workspace)
+		VALUES ($1, $2, $3, $4, $5, $6, coalesce(nullif($7, ''), 'UTC'), nullif($8, ''), nullif($9, '')::time, $10, nullif($11, ''), coalesce($12::jsonb, '{}'::jsonb), $13::uuid)
 		ON CONFLICT (user_id) DO UPDATE
 		SET country = EXCLUDED.country,
 		    show_holidays = EXCLUDED.show_holidays,
@@ -722,11 +748,14 @@ func (s *Store) UpdateSettings(ctx context.Context, userID string, settings Sett
 		    city = EXCLUDED.city,
 		    digest_time = EXCLUDED.digest_time,
 		    default_rate = EXCLUDED.default_rate,
-		    github_token = EXCLUDED.github_token
+		    github_token = EXCLUDED.github_token,
+		    modules = EXCLUDED.modules,
+		    active_workspace = EXCLUDED.active_workspace
 		RETURNING country, show_holidays, theme, week_start, accent, timezone, coalesce(city, ''), quota_mb,
-		          coalesce(to_char(digest_time,'HH24:MI'), ''), widget_token, api_token, default_rate, coalesce(github_token,'')
-	`, userID, settings.Country, settings.ShowHolidays, settings.Theme, settings.WeekStart, settings.Accent, settings.Timezone, settings.City, settings.DigestTime, settings.DefaultRate, settings.GithubToken).
-		Scan(&out.Country, &out.ShowHolidays, &out.Theme, &out.WeekStart, &out.Accent, &out.Timezone, &out.City, &out.QuotaMB, &out.DigestTime, &out.WidgetToken, &out.ApiToken, &out.DefaultRate, &out.GithubToken)
+		          coalesce(to_char(digest_time,'HH24:MI'), ''), widget_token, api_token, default_rate, coalesce(github_token,''),
+		          modules, active_workspace::text
+	`, userID, settings.Country, settings.ShowHolidays, settings.Theme, settings.WeekStart, settings.Accent, settings.Timezone, settings.City, settings.DigestTime, settings.DefaultRate, settings.GithubToken, settings.Modules, settings.ActiveWorkspace).
+		Scan(&out.Country, &out.ShowHolidays, &out.Theme, &out.WeekStart, &out.Accent, &out.Timezone, &out.City, &out.QuotaMB, &out.DigestTime, &out.WidgetToken, &out.ApiToken, &out.DefaultRate, &out.GithubToken, &out.Modules, &out.ActiveWorkspace)
 	return out, err
 }
 
@@ -835,7 +864,7 @@ func (s *Store) DueReminders(ctx context.Context) ([]Entry, error) {
 		       e.watched, e.link_image, e.link_desc, e.link_favicon, e.link_video_id,
 		       e.board_id::text, e.column_id::text, e.position, e.created_at,
 		       e.account_id::text, e.external_uid, e.external_href, e.external_etag, e.dirty,
-		       e.user_id::text
+		       e.workspace_id::text, e.blocked_by::text, e.user_id::text
 		FROM entries e JOIN settings st ON st.user_id = e.user_id
 		WHERE e.deleted_at IS NULL AND e.remind IS NOT NULL AND e.reminded_at IS NULL AND e.start_time IS NOT NULL
 		  AND ((e.date + e.start_time) AT TIME ZONE st.timezone - (e.remind || ' minutes')::interval) <= now()
@@ -849,7 +878,7 @@ func (s *Store) DueReminders(ctx context.Context) ([]Entry, error) {
 		var e Entry
 		if err := rows.Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date,
 			&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.Watched, &e.LinkImage, &e.LinkDesc, &e.LinkFavicon, &e.LinkVideoID, &e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
-			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty, &e.OwnerID); err != nil {
+			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty, &e.WorkspaceID, &e.BlockedBy, &e.OwnerID); err != nil {
 			return nil, err
 		}
 		entries = append(entries, e)
@@ -1281,30 +1310,38 @@ func (s *Store) RefreshFeedCache(ctx context.Context, userID, feedID, ics string
 
 // --- Files ---
 
+// fileCols is the canonical files column list (id last-but-two style kept stable).
+const fileCols = `id::text, name, orig_name, size, mime, share_token, created_at, tags, workspace_id::text`
+
 type File struct {
-	ID         string    `json:"id"`
-	Name       string    `json:"name"`       // random name on disk
-	OrigName   string    `json:"origName"`   // client filename for display
-	Size       int64     `json:"size"`
-	Mime       string    `json:"mime"`
-	ShareToken *string   `json:"shareToken,omitempty"`
-	CreatedAt  time.Time `json:"createdAt"`
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`     // random name on disk
+	OrigName    string    `json:"origName"` // client filename for display
+	Size        int64     `json:"size"`
+	Mime        string    `json:"mime"`
+	ShareToken  *string   `json:"shareToken,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
+	Tags        []string  `json:"tags"`
+	WorkspaceID *string   `json:"workspaceId,omitempty"`
 }
 
-func (s *Store) CreateFile(ctx context.Context, userID, name, origName, mime string, size int64) (File, error) {
+func (f *File) scan(row interface{ Scan(...any) error }) error {
+	return row.Scan(&f.ID, &f.Name, &f.OrigName, &f.Size, &f.Mime, &f.ShareToken, &f.CreatedAt, &f.Tags, &f.WorkspaceID)
+}
+
+func (s *Store) CreateFile(ctx context.Context, userID, name, origName, mime string, size int64, tags []string, workspaceID *string) (File, error) {
 	var f File
 	err := s.db.QueryRow(ctx, `
-		INSERT INTO files (user_id, name, orig_name, size, mime)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id::text, name, orig_name, size, mime, share_token, created_at
-	`, userID, name, origName, size, mime).
-		Scan(&f.ID, &f.Name, &f.OrigName, &f.Size, &f.Mime, &f.ShareToken, &f.CreatedAt)
+		INSERT INTO files (user_id, name, orig_name, size, mime, tags, workspace_id)
+		VALUES ($1, $2, $3, $4, $5, coalesce($6, '{}'), $7::uuid)
+		RETURNING `+fileCols+`
+	`, userID, name, origName, size, mime, tags, workspaceID).Scan(&f.ID, &f.Name, &f.OrigName, &f.Size, &f.Mime, &f.ShareToken, &f.CreatedAt, &f.Tags, &f.WorkspaceID)
 	return f, err
 }
 
 func (s *Store) ListFiles(ctx context.Context, userID string) ([]File, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT id::text, name, orig_name, size, mime, share_token, created_at
+		SELECT `+fileCols+`
 		FROM files WHERE user_id = $1 ORDER BY created_at DESC`, userID)
 	if err != nil {
 		return nil, err
@@ -1313,7 +1350,7 @@ func (s *Store) ListFiles(ctx context.Context, userID string) ([]File, error) {
 	out := []File{}
 	for rows.Next() {
 		var f File
-		if err := rows.Scan(&f.ID, &f.Name, &f.OrigName, &f.Size, &f.Mime, &f.ShareToken, &f.CreatedAt); err != nil {
+		if err := f.scan(rows); err != nil {
 			return nil, err
 		}
 		out = append(out, f)
@@ -1323,10 +1360,9 @@ func (s *Store) ListFiles(ctx context.Context, userID string) ([]File, error) {
 
 func (s *Store) FileByName(ctx context.Context, userID, name string) (File, error) {
 	var f File
-	err := s.db.QueryRow(ctx, `
-		SELECT id::text, name, orig_name, size, mime, share_token, created_at
-		FROM files WHERE user_id = $1 AND name = $2`, userID, name).
-		Scan(&f.ID, &f.Name, &f.OrigName, &f.Size, &f.Mime, &f.ShareToken, &f.CreatedAt)
+	err := f.scan(s.db.QueryRow(ctx, `
+		SELECT `+fileCols+`
+		FROM files WHERE user_id = $1 AND name = $2`, userID, name))
 	return f, err
 }
 
@@ -1335,9 +1371,9 @@ func (s *Store) FileByShareToken(ctx context.Context, token string) (string, Fil
 	var f File
 	var userID string
 	err := s.db.QueryRow(ctx, `
-		SELECT user_id::text, id::text, name, orig_name, size, mime, share_token, created_at
+		SELECT user_id::text, `+fileCols+`
 		FROM files WHERE share_token = $1`, token).
-		Scan(&userID, &f.ID, &f.Name, &f.OrigName, &f.Size, &f.Mime, &f.ShareToken, &f.CreatedAt)
+		Scan(&userID, &f.ID, &f.Name, &f.OrigName, &f.Size, &f.Mime, &f.ShareToken, &f.CreatedAt, &f.Tags, &f.WorkspaceID)
 	return userID, f, err
 }
 
@@ -1389,6 +1425,7 @@ type Board struct {
 	ShareToken  *string   `json:"shareToken,omitempty"`
 	Total       int       `json:"total"`
 	Done        int       `json:"done"`
+	Minutes     int       `json:"minutes"` // time tracked against this board
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
@@ -1404,7 +1441,9 @@ func (s *Store) ListBoards(ctx context.Context, userID string) ([]Board, error) 
 	rows, err := s.db.Query(ctx, `
 		SELECT b.id::text, b.name, b.color, b.description, b.target_date::text, b.share_token, b.created_at,
 		       count(e.id) FILTER (WHERE e.deleted_at IS NULL) AS total,
-		       count(e.id) FILTER (WHERE e.deleted_at IS NULL AND e.completed) AS done
+		       count(e.id) FILTER (WHERE e.deleted_at IS NULL AND e.completed) AS done,
+		       coalesce((SELECT sum(EXTRACT(EPOCH FROM coalesce(t.end_at, now()) - t.start_at))/60
+		                 FROM time_entries t WHERE t.project_id = b.id), 0)::int AS minutes
 		FROM boards b LEFT JOIN entries e ON e.board_id = b.id
 		WHERE b.user_id = $1 GROUP BY b.id ORDER BY b.created_at`, userID)
 	if err != nil {
@@ -1414,7 +1453,7 @@ func (s *Store) ListBoards(ctx context.Context, userID string) ([]Board, error) 
 	out := []Board{}
 	for rows.Next() {
 		var b Board
-		if err := rows.Scan(&b.ID, &b.Name, &b.Color, &b.Description, &b.TargetDate, &b.ShareToken, &b.CreatedAt, &b.Total, &b.Done); err != nil {
+		if err := rows.Scan(&b.ID, &b.Name, &b.Color, &b.Description, &b.TargetDate, &b.ShareToken, &b.CreatedAt, &b.Total, &b.Done, &b.Minutes); err != nil {
 			return nil, err
 		}
 		out = append(out, b)
@@ -1521,7 +1560,7 @@ func (s *Store) BoardCards(ctx context.Context, userID, boardID string) ([]Entry
 		if err := rows.Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date,
 			&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.Watched, &e.LinkImage, &e.LinkDesc, &e.LinkFavicon, &e.LinkVideoID,
 			&e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
-			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty); err != nil {
+			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty, &e.WorkspaceID, &e.BlockedBy); err != nil {
 			return nil, err
 		}
 		out = append(out, e)
@@ -1573,7 +1612,7 @@ func (s *Store) ListTrash(ctx context.Context, userID string) ([]Entry, error) {
 		if err := rows.Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date,
 			&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.Watched, &e.LinkImage, &e.LinkDesc, &e.LinkFavicon, &e.LinkVideoID,
 			&e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
-			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty); err != nil {
+			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty, &e.WorkspaceID, &e.BlockedBy); err != nil {
 			return nil, err
 		}
 		out = append(out, e)
@@ -1611,16 +1650,17 @@ type TimeEntry struct {
 	Rate      *float64   `json:"rate,omitempty"`
 	ProjectID *string    `json:"projectId,omitempty"`
 	Project   string     `json:"project,omitempty"` // board name, joined
+	Tags      []string   `json:"tags"`
 }
 
 // StartTimer opens a running time entry; only one runs per user.
-func (s *Store) StartTimer(ctx context.Context, userID string, entryID *string, note string, planned int, billable bool, rate *float64, projectID *string) (TimeEntry, error) {
+func (s *Store) StartTimer(ctx context.Context, userID string, entryID *string, note string, planned int, billable bool, rate *float64, projectID *string, tags []string) (TimeEntry, error) {
 	var t TimeEntry
 	err := s.db.QueryRow(ctx, `
-		INSERT INTO time_entries (user_id, entry_id, note, planned_minutes, billable, hourly_rate, project_id)
-		VALUES ($1, $2::uuid, $3, nullif($4, 0), $5, $6, $7::uuid)
+		INSERT INTO time_entries (user_id, entry_id, note, planned_minutes, billable, hourly_rate, project_id, tags)
+		VALUES ($1, $2::uuid, $3, nullif($4, 0), $5, $6, $7::uuid, coalesce($8, '{}'))
 		ON CONFLICT (user_id) WHERE end_at IS NULL DO NOTHING
-		RETURNING id::text, entry_id::text, start_at`, userID, entryID, note, planned, billable, rate, projectID).
+		RETURNING id::text, entry_id::text, start_at`, userID, entryID, note, planned, billable, rate, projectID, tags).
 		Scan(&t.ID, &t.EntryID, &t.StartAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return t, fmt.Errorf("timer already running")
@@ -1641,10 +1681,10 @@ func (s *Store) StopTimer(ctx context.Context, userID string) (TimeEntry, error)
 func (s *Store) CurrentTimer(ctx context.Context, userID string) (*TimeEntry, error) {
 	var t TimeEntry
 	err := s.db.QueryRow(ctx, `
-		SELECT t.id::text, t.entry_id::text, coalesce(e.title,''), t.start_at, t.note, t.planned_minutes, t.billable, t.hourly_rate, t.project_id::text
+		SELECT t.id::text, t.entry_id::text, coalesce(e.title,''), t.start_at, t.note, t.planned_minutes, t.billable, t.hourly_rate, t.project_id::text, t.tags
 		FROM time_entries t LEFT JOIN entries e ON e.id = t.entry_id
 		WHERE t.user_id = $1 AND t.end_at IS NULL`, userID).
-		Scan(&t.ID, &t.EntryID, &t.Title, &t.StartAt, &t.Note, &t.Planned, &t.Billable, &t.Rate, &t.ProjectID)
+		Scan(&t.ID, &t.EntryID, &t.Title, &t.StartAt, &t.Note, &t.Planned, &t.Billable, &t.Rate, &t.ProjectID, &t.Tags)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -1822,8 +1862,14 @@ func (s *Store) SharedBoard(ctx context.Context, token string) (map[string]any, 
 // TagCounts — all tags with entry counts for the /tags page.
 func (s *Store) TagCounts(ctx context.Context, userID string) (map[string]int, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT tag, count(*) FROM entries e, unnest(e.tags) tag
-		WHERE e.user_id = $1 AND e.deleted_at IS NULL GROUP BY tag ORDER BY count(*) DESC`, userID)
+		SELECT tag, sum(n) FROM (
+			SELECT unnest(e.tags) AS tag, count(*) AS n FROM entries e
+			WHERE e.user_id = $1 AND e.deleted_at IS NULL GROUP BY tag
+			UNION ALL
+			SELECT unnest(f.tags), count(*) FROM files f WHERE f.user_id = $1 GROUP BY tag
+			UNION ALL
+			SELECT unnest(t.tags), count(*) FROM time_entries t WHERE t.user_id = $1 GROUP BY tag
+		) counts GROUP BY tag ORDER BY sum(n) DESC`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -1839,7 +1885,6 @@ func (s *Store) TagCounts(ctx context.Context, userID string) (map[string]int, e
 	}
 	return out, rows.Err()
 }
-
 
 // newToken returns n random hex chars — share tokens, etc.
 func newToken(n int) string {
@@ -1861,7 +1906,7 @@ func nilIfEmpty(s string) *string {
 func (s *Store) TimeLog(ctx context.Context, userID, from, to string) ([]TimeEntry, error) {
 	rows, err := s.db.Query(ctx, `
 		SELECT t.id::text, t.entry_id::text, coalesce(e.title, t.note), t.start_at, t.end_at, t.note, t.planned_minutes,
-		       t.billable, t.hourly_rate, t.project_id::text, coalesce(b.name, '')
+		       t.billable, t.hourly_rate, t.project_id::text, coalesce(b.name, ''), t.tags
 		FROM time_entries t
 		LEFT JOIN entries e ON e.id = t.entry_id
 		LEFT JOIN boards b ON b.id = t.project_id
@@ -1874,7 +1919,7 @@ func (s *Store) TimeLog(ctx context.Context, userID, from, to string) ([]TimeEnt
 	out := []TimeEntry{}
 	for rows.Next() {
 		var t TimeEntry
-		if err := rows.Scan(&t.ID, &t.EntryID, &t.Title, &t.StartAt, &t.EndAt, &t.Note, &t.Planned, &t.Billable, &t.Rate, &t.ProjectID, &t.Project); err != nil {
+		if err := rows.Scan(&t.ID, &t.EntryID, &t.Title, &t.StartAt, &t.EndAt, &t.Note, &t.Planned, &t.Billable, &t.Rate, &t.ProjectID, &t.Project, &t.Tags); err != nil {
 			return nil, err
 		}
 		out = append(out, t)
@@ -1969,9 +2014,9 @@ func (s *Store) GlobalSearch(ctx context.Context, userID, q string) ([]Entry, er
 // SearchFiles — file-name match for the global search.
 func (s *Store) SearchFiles(ctx context.Context, userID, q string) ([]File, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT id::text, name, orig_name, size, mime, share_token, created_at
-		FROM files WHERE user_id = $1 AND orig_name ILIKE $2 ORDER BY created_at DESC LIMIT 20`,
-		userID, "%"+q+"%")
+		SELECT `+fileCols+`
+		FROM files WHERE user_id = $1 AND (orig_name ILIKE $2 OR $3 = ANY(tags)) ORDER BY created_at DESC LIMIT 20`,
+		userID, "%"+q+"%", q)
 	if err != nil {
 		return nil, err
 	}
@@ -1979,7 +2024,7 @@ func (s *Store) SearchFiles(ctx context.Context, userID, q string) ([]File, erro
 	out := []File{}
 	for rows.Next() {
 		var f File
-		if err := rows.Scan(&f.ID, &f.Name, &f.OrigName, &f.Size, &f.Mime, &f.ShareToken, &f.CreatedAt); err != nil {
+		if err := f.scan(rows); err != nil {
 			return nil, err
 		}
 		out = append(out, f)

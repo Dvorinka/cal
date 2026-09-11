@@ -10,6 +10,7 @@ import {
   type Holiday,
   type Settings,
   type User,
+  type Workspace,
 } from "@cal/api-client";
 import { create } from "zustand";
 import {
@@ -62,7 +63,13 @@ interface PlannerState {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  loadEntries: (params: { from?: string; to?: string; q?: string }) => Promise<void>;
+  loadEntries: (params: { from?: string; to?: string; q?: string; workspace?: string }) => Promise<void>;
+  workspaces: Workspace[];
+  loadWorkspaces: () => Promise<void>;
+  addWorkspace: (input: { name: string; color?: string; icon?: string }) => Promise<Workspace | undefined>;
+  removeWorkspace: (id: string) => Promise<void>;
+  /** undefined/"" = all spaces, "none" = Personal only, uuid = that space. */
+  setWorkspace: (workspace: string) => Promise<void>;
   createEntry: (input: EntryInput) => Promise<Entry | undefined>;
   updateEntry: (id: string, patch: EntryPatch) => Promise<void>;
   deleteEntry: (id: string) => Promise<void>;
@@ -95,6 +102,7 @@ export const usePlanner = create<PlannerState>((set, get) => ({
   accounts: [],
   holidays: [],
   countries: [],
+  workspaces: [],
   settings: readCachedSettings(),
   loading: false,
   booted: false,
@@ -111,6 +119,7 @@ export const usePlanner = create<PlannerState>((set, get) => ({
       pushWidgetConfig(settings);
       set({ user, settings, booted: true, offline: false });
       void get().loadCountries();
+      void get().loadWorkspaces();
       void get().flushQueue();
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
@@ -155,7 +164,9 @@ export const usePlanner = create<PlannerState>((set, get) => ({
   async loadEntries(params) {
     set({ loading: true });
     try {
-      const entries = await get().api.entries(params);
+      // Workspace scope applies globally unless a caller overrides it.
+      const workspace = params.workspace ?? get().settings.activeWorkspace ?? "";
+      const entries = await get().api.entries({ ...params, workspace });
       cacheEntries(entries);
       set({ entries, loading: false, offline: false, error: undefined });
       void get().flushQueue();
@@ -169,8 +180,49 @@ export const usePlanner = create<PlannerState>((set, get) => ({
     }
   },
 
+  async loadWorkspaces() {
+    try {
+      const workspaces = await get().api.workspaces();
+      set({ workspaces });
+    } catch {
+      set({ workspaces: [] });
+    }
+  },
+
+  async addWorkspace(input) {
+    try {
+      const w = await get().api.createWorkspace(input);
+      set({ workspaces: [...get().workspaces, w] });
+      return w;
+    } catch (error) {
+      get().toast(error instanceof Error ? error.message : "Failed to create space");
+      return undefined;
+    }
+  },
+
+  async removeWorkspace(id) {
+    try {
+      await get().api.deleteWorkspace(id);
+      set({ workspaces: get().workspaces.filter((w) => w.id !== id) });
+      // If the deleted space was active, fall back to All.
+      if (get().settings.activeWorkspace === id) await get().setWorkspace("");
+      await get().loadEntries({});
+    } catch (error) {
+      get().toast(error instanceof Error ? error.message : "Failed to delete space");
+    }
+  },
+
+  async setWorkspace(workspace) {
+    const settings = { ...get().settings, activeWorkspace: workspace || undefined };
+    await get().updateSettings(settings);
+    await get().loadEntries({});
+  },
+
   async createEntry(input) {
     try {
+      // New entries inherit the active workspace (not "none" — that's Personal).
+      const ws = get().settings.activeWorkspace;
+      if (!input.workspaceId && ws && ws !== "none") input = { ...input, workspaceId: ws };
       const entry = await get().api.createEntry(input);
       const entries = [...get().entries, entry];
       cacheEntries(entries);
