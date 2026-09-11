@@ -70,7 +70,8 @@ jobs:
 
       - name: Build desktop app
         working-directory: apps/desktop
-        run: wails build -clean
+        # webkit2_41 tag: Ubuntu 24.04+ ships webkit2gtk-4.1 only
+        run: wails build -clean ${{ runner.os == 'Linux' && '-tags webkit2_41' || '' }}
 
       - name: Build headless server binary
         working-directory: apps/desktop
