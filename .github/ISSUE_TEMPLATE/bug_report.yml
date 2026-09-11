@@ -1,0 +1,38 @@
+name: Bug report
+description: Something is broken or misbehaving
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time to report this.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, what actually happened.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / errors
+      description: Browser console, container logs, or API errors. Paste text, not screenshots of text.
+      render: shell
+  - type: dropdown
+    id: install
+    attributes:
+      label: How do you run Cal?
+      options:
+        - Docker (all-in-one)
+        - Docker Compose (external Postgres)
+        - Desktop app
+        - Android app
+        - Dev setup (npm + go)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version / image tag / commit
+      placeholder: v0.1.0, latest, or git sha

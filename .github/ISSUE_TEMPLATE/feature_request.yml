@@ -1,0 +1,20 @@
+name: Feature request
+description: Suggest an idea — keep the surface minimal
+title: "[Feature] "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: Cal is deliberately small. The best requests fit the existing pages rather than adding new ones.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: The workflow or pain point, not just the feature.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Proposed solution
+      description: How it could look or behave. Optional sketches welcome.

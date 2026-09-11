@@ -115,8 +115,8 @@ Status legend: `[x]` shipped · `[/]` partially shipped · `[ ]` planned
 - [x] **Load test** — `perf/k6.js`: 847 iterations, 0 failures, p95 156ms.
 - [x] **a11y audit** — axe-core specs on Today/Tasks/Settings; contrast and
       focusability violations fixed (text-3/4 tokens, scrollable `<pre>`).
-- [x] **Security headers** — CSP + X-Frame-Options + nosniff + Referrer-Policy
-      in `apps/web/nginx.conf`.
+- [x] **Security headers** — CSP + X-Frame-Options + nosniff + Referrer-Policy,
+      set by the Go SPA handler (`apps/desktop/app.go`).
 - [x] **Rate-limit sensitive routes** — files 20/min, feeds 10/min, MCP 60/min,
       intake 10/min, per-IP on top of auth limits.
 - [x] **Per-user storage quota** — `settings.quota_mb` enforced on upload,

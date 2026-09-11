@@ -2,11 +2,15 @@
 
 The self-hosted daily toolkit people actually enjoy opening.
 
+[![CI](https://github.com/Dvorinka/cal/actions/workflows/ci.yml/badge.svg)](https://github.com/Dvorinka/cal/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Dvorinka/cal)](https://github.com/Dvorinka/cal/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 Calendar, tasks, notes, links, files, kanban boards, time tracking and a GitHub
 inbox in one quiet place — month, week and day views, recurring tasks, billable
 sessions, link previews, global search, holidays for 40+ regions, dark mode,
 keyboard-first, installable as a PWA. No accounts to create on someone else's
-server; one `docker compose up` and it's yours.
+server; one `docker run` and it's yours.
 
 ![Month view](docs/screenshot-month.png)
 
@@ -93,7 +97,7 @@ server; one `docker compose up` and it's yours.
 - **Offline-first PWA + Android** — installable, entries cached locally; a
   Capacitor shell produces a native APK
 - **Self-contained** — cookie sessions, bcrypt passwords, login rate limiting,
-  Postgres, zero external services
+  embedded Postgres, zero external services
 
 ## Stack
 
@@ -102,18 +106,61 @@ server; one `docker compose up` and it's yours.
 - **API** — Go, Gin, PostgreSQL (pgx), cookie sessions, Goose migrations
 - **Contracts** — `openapi.yaml` plus a hand-written TS client in
   `packages/api-client`
-- **Infra** — Docker Compose: Postgres + API + Nginx static web
+- **Desktop** — Wails 2 (native window + system webview); the same binary runs
+  headless as the all-in-one server
+- **Infra** — one Docker image: SPA + API + embedded Postgres in a single
+  container
 
-## Quick start
+## Install
+
+### Docker — all-in-one (recommended)
 
 ```bash
-docker compose -f infra/docker-compose.yml up --build
+docker run -d --name cal -p 8080:8080 -v cal-data:/data ghcr.io/dvorinka/cal:latest
 ```
 
-Web: http://localhost:5173 — API: http://localhost:8080
+Open http://localhost:8080 and create your account. Everything — UI, API and an
+embedded Postgres — runs in that one container; the data volume is all you
+need to back up. Prefer an external database? Set `DATABASE_URL` and the
+embedded one stays off:
 
-Ports are overridable when they collide with other stacks:
-`DB_PORT=5434 API_PORT=8082 WEB_PORT=5273 docker compose -f infra/docker-compose.yml up --build`
+```bash
+docker run -d --name cal -p 8080:8080 -v cal-data:/data \
+  -e DATABASE_URL="postgres://user:pass@host:5432/cal?sslmode=disable" \
+  ghcr.io/dvorinka/cal:latest
+```
+
+Or with Compose (`docker-compose.yml` ships both variants, db service included
+but commented out):
+
+```bash
+docker compose up -d --build
+```
+
+### Desktop app
+
+Windows, Linux and macOS builds attach to each
+[release](https://github.com/Dvorinka/cal/releases). The desktop app bundles
+its own server (embedded Postgres under `~/.config/cal`); it can also sign in
+to a server URL to share data with your other devices. Server binaries
+(`cal-server-*`) are the same all-in-one the Docker image runs.
+
+### Android
+
+The release APK is on the releases page (debug-signed when no release keystore
+is configured — sideload freely). It asks for your server URL on first launch.
+
+### Configuration
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PORT` | `8080` | listen port |
+| `DATA_DIR` | `/data` (container) | files, backups, embedded PG data |
+| `DATABASE_URL` | unset → embedded PG | external Postgres DSN |
+| `SESSION_SECURE` | `false` | set `true` behind HTTPS |
+| `WEB_ORIGIN` | unset | extra CORS origin for the web app |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | unset | enable Google Calendar sync |
+| `CAL_ALLOW_PRIVATE_FEEDS` / `CAL_ALLOW_PRIVATE_WEBHOOKS` | unset | allow private/LAN URLs (SSRF guard off) |
 
 ## Development
 
@@ -192,11 +239,19 @@ EMAIL=… -e PASS=…` load-tests the entry pipeline.
 ## Layout
 
 ```
-apps/web          React PWA + Capacitor android/ shell
-apps/api          Go API + migrations + goose entrypoint + MCP endpoint
+apps/web          React PWA + Capacitor android/ + ios/ shells
+apps/api          Go API + migrations + MCP endpoint
+apps/desktop      Wails desktop app; `-tags headless` is the all-in-one server
 packages/api-client   shared typed client (mirrors openapi.yaml)
-infra             docker-compose
 ```
+
+## Releases & CI
+
+Every tag `v*` builds and attaches: the GHCR image
+(`ghcr.io/dvorinka/cal:<version>`, amd64 + arm64), desktop apps for
+Windows/Linux/macOS, headless server binaries, and the Android APK. CI
+typechecks, tests, vets, gofmt-checks, and builds + smoke-tests the Docker
+image on every push and PR.
 
 ## API surface
 
