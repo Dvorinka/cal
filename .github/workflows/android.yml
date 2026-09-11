@@ -52,7 +52,7 @@ jobs:
         run: ./gradlew assembleDebug --no-daemon --max-workers=2
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cal-apk
           path: apps/web/android/app/build/outputs/apk/**/*.apk

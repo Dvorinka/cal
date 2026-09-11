@@ -98,7 +98,7 @@ jobs:
           zip -qr cal-desktop-${{ matrix.label }}.zip cal.app
           zip -q cal-server-${{ matrix.label }}.zip cal-server
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: cal-${{ matrix.label }}
           path: apps/desktop/build/bin/cal-*.${{ matrix.archive }}
