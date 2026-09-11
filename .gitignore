@@ -21,4 +21,3 @@ apps/desktop/build/bin/
 apps/api/data/
 apps/desktop/desktop
 .vercel
-.env*
