@@ -4,4 +4,11 @@
     <string name="title_activity_main">Cal</string>
     <string name="package_name">dev.cal.app</string>
     <string name="custom_url_scheme">dev.cal.app</string>
+    <string name="widget_description">Today\'s agenda at a glance</string>
+    <string name="widget_refresh">Refresh</string>
+    <string name="widget_loading">Loading…</string>
+    <string name="widget_connect_hint">Open Cal once to connect the widget.</string>
+    <string name="widget_empty">Nothing today — a quiet page.</string>
+    <string name="widget_offline">Offline — tap to open Cal.</string>
+    <string name="widget_bad_token">Could not load — check the widget token in Settings.</string>
 </resources>

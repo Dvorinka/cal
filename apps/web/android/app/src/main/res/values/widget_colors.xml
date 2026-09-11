@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Widget palette, light scheme. Night overrides in values-night/. -->
+    <color name="widget_bg">#F4F1EA</color>
+    <color name="widget_text">#26241F</color>
+    <color name="widget_muted">#6B6459</color>
+    <color name="widget_accent">#1F6B4A</color>
+    <color name="widget_done">#8A8474</color>
+</resources>

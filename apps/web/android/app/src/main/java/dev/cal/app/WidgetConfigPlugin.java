@@ -21,6 +21,7 @@ public class WidgetConfigPlugin extends Plugin {
         String token = call.getString("widgetToken", "");
         SharedPreferences prefs = getContext().getSharedPreferences("cal", Context.MODE_PRIVATE);
         prefs.edit().putString("server", server).putString("widgetToken", token).apply();
+        CalWidgetProvider.requestRefresh(getContext());
         call.resolve();
     }
 }
