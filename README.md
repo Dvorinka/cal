@@ -6,6 +6,8 @@ The self-hosted daily toolkit people actually enjoy opening.
 [![Release](https://img.shields.io/github/v/release/Dvorinka/cal)](https://github.com/Dvorinka/cal/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
+**[calhq.vercel.app](https://calhq.vercel.app)** — landing page
+
 Calendar, tasks, notes, links, files, kanban boards, time tracking and a GitHub
 inbox in one quiet place — month, week and day views, recurring tasks, billable
 sessions, link previews, global search, holidays for 40+ regions, dark mode,
@@ -18,8 +20,8 @@ server; one `docker run` and it's yours.
 
 ## Features
 
-- **Eleven pages** — Today, Calendar, Tasks, Notes, Links, Files, Boards, Tags,
-  Time, GitHub, Settings — plus Trash and a public board view
+- **Twelve pages** — Today, Calendar, Tasks, Notes, Links, Files, Boards, Tags,
+  People, Time, GitHub, Settings — plus Trash and a public board view
 - **Kanban boards** — cards are task entries (they land on the calendar too);
   drag between columns, WIP limits, done-column conventions, checklists,
   templates, public read-only sharing
@@ -51,6 +53,9 @@ server; one `docker run` and it's yours.
   sync read-only into a toggleable "Google" feed every 15 minutes
 - **CardDAV birthdays** — connect an addressbook; contacts with birthdays
   become yearly all-day events
+- **People** — a private relationship manager: birthdays, anniversaries,
+  namedays and custom yearly dates surface on the calendar and Today's
+  upcoming strip; notes per person, grouped by relation, workspace-scoped
 - **RSS/Atom feeds** — subscribe to blogs and changelogs; items land on the
   calendar on their publish date (SSRF-guarded like the webhook URLs)
 - **Soft-delete trash** — deletions recover for 30 days; restore or purge
