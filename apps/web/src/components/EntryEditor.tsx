@@ -3,7 +3,7 @@ import { renderMarkdown } from "../lib/markdown";
 import { AnimatePresence, motion } from "framer-motion";
 import { CalendarClock, Check, History, Link2, ListOrdered, Paperclip, Pin, StickyNote, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { usePlanner } from "../stores/planner";
+import { reportErr, usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
 
 const COLORS = ["slate", "mint", "sky", "violet", "amber", "orange", "rose", "red"] as const;
@@ -148,7 +148,10 @@ export function EntryEditor() {
 
   useEffect(() => {
     if (showHistory && editing) {
-      void api.entryRevisions(editing.id).then(setRevisions).catch(() => setRevisions([]));
+      void api.entryRevisions(editing.id).then(setRevisions).catch((e) => {
+        setRevisions([]);
+        reportErr("Could not load history")(e);
+      });
     }
   }, [showHistory, editing, api]);
 
@@ -166,10 +169,10 @@ export function EntryEditor() {
 
   // Boards for the task board picker; columns load with the chosen board.
   useEffect(() => {
-    if (open) void api.boards().then(setBoards).catch(() => {});
+    if (open) void api.boards().then(setBoards).catch(reportErr("Could not load boards"));
   }, [open, api]);
   useEffect(() => {
-    if (boardId) void api.boardView(boardId).then((v) => setBoardCols(v.columns)).catch(() => {});
+    if (boardId) void api.boardView(boardId).then((v) => setBoardCols(v.columns)).catch(reportErr("Could not load columns"));
     else setBoardCols([]);
   }, [boardId, api]);
 
@@ -605,7 +608,7 @@ export function EntryEditor() {
                 onClick={() => {
                   const next = !showActivity;
                   setShowActivity(next);
-                  if (next) void api.entryActivity(editing.id).then(setActivity).catch(() => {});
+                  if (next) void api.entryActivity(editing.id).then(setActivity).catch(reportErr("Could not load activity"));
                 }}
               >
                 <ListOrdered size={13} /> Activity {showActivity ? "▴" : "▾"}
@@ -663,7 +666,7 @@ export function EntryEditor() {
                               await loadEntries({});
                               close();
                               toast("Restored an earlier version");
-                            });
+                            }).catch((e) => toast(e instanceof Error ? e.message : "Restore failed"));
                           }}
                         >
                           Restore

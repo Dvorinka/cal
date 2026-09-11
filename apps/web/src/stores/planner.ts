@@ -539,3 +539,14 @@ export const usePlanner = create<PlannerState>((set, get) => ({
     set({ toasts: get().toasts.filter((toast) => toast.id !== id) });
   },
 }));
+
+// reportErr — catch handler for background reads: surfaces the server's
+// message on real failures, stays quiet when simply offline (the TopBar
+// banner and cached data already tell that story). Mutations should toast
+// unconditionally — a failed click needs an answer even offline.
+export function reportErr(fallback: string) {
+  return (error: unknown) => {
+    if (isOfflineError(error)) return;
+    usePlanner.getState().toast(error instanceof Error ? error.message : fallback);
+  };
+}

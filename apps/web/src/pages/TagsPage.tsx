@@ -4,7 +4,7 @@ import { Hash } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { formatDayShort } from "../lib/date";
-import { usePlanner } from "../stores/planner";
+import { reportErr, usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
 
 export function TagsPage() {
@@ -17,7 +17,7 @@ export function TagsPage() {
 
   useEffect(() => {
     void loadEntries({});
-    void api.tags().then(setCounts).catch(() => {});
+    void api.tags().then(setCounts).catch(reportErr("Could not load tags"));
   }, [api, loadEntries]);
 
   const filtered = useMemo(

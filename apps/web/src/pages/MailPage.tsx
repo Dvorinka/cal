@@ -6,7 +6,7 @@ import type { MailAccount, MailMessage, MailSummary } from "@cal/api-client";
 import { Inbox, Mail, Paperclip, PenSquare, Plus, RefreshCw, Send, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
-import { usePlanner } from "../stores/planner";
+import { reportErr, usePlanner } from "../stores/planner";
 
 export function MailPage() {
   const api = usePlanner((s) => s.api);
@@ -25,7 +25,10 @@ export function MailPage() {
   const [err, setErr] = useState("");
 
   const loadAccounts = useCallback(() => {
-    void api.mailAccounts().then(setAccounts).catch(() => setAccounts([]));
+    void api.mailAccounts().then(setAccounts).catch((e) => {
+      setAccounts([]);
+      reportErr("Could not load mail accounts")(e);
+    });
   }, [api]);
   useEffect(loadAccounts, [loadAccounts]);
 
@@ -35,7 +38,10 @@ export function MailPage() {
       setMailbox("INBOX");
       setReading(null);
       setReadingUid(null);
-      void api.mailMailboxes(a.id).then(setMailboxes).catch(() => setMailboxes([]));
+      void api.mailMailboxes(a.id).then(setMailboxes).catch((e) => {
+        setMailboxes([]);
+        reportErr("Could not load mailboxes")(e);
+      });
     },
     [api],
   );
@@ -68,7 +74,7 @@ export function MailPage() {
       const msg = await api.mailMessage(account.id, uid, mailbox);
       setReading(msg);
       // Mark seen + reflect locally.
-      void api.mailFlag(account.id, uid, true, mailbox).catch(() => {});
+      void api.mailFlag(account.id, uid, true, mailbox).catch((e) => toast(e instanceof Error ? e.message : "Could not mark read"));
       setList((l) => l.map((m) => (m.uid === uid ? { ...m, seen: true } : m)));
     } catch {
       setErr("Could not open message");
@@ -78,7 +84,12 @@ export function MailPage() {
 
   async function removeMessage(uid: number) {
     if (!account) return;
-    await api.mailDelete(account.id, uid, mailbox).catch(() => toast("Delete failed"));
+    try {
+      await api.mailDelete(account.id, uid, mailbox);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Delete failed");
+      return;
+    }
     setList((l) => l.filter((m) => m.uid !== uid));
     if (readingUid === uid) {
       setReading(null);
@@ -201,7 +212,13 @@ export function MailPage() {
                 <button
                   type="button"
                   className="btn btn-secondary btn-xs"
-                  onClick={() => account && void api.mailFlag(account.id, reading.uid, false, mailbox)}
+                  onClick={() =>
+                    account &&
+                    void api
+                      .mailFlag(account.id, reading.uid, false, mailbox)
+                      .then(() => setList((l) => l.map((m) => (m.uid === reading.uid ? { ...m, seen: false } : m))))
+                      .catch((e) => toast(e instanceof Error ? e.message : "Could not flag"))
+                  }
                 >
                   Unread
                 </button>

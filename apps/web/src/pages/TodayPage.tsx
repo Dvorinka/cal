@@ -8,6 +8,7 @@ import {
   Link2,
   NotebookPen,
   Pencil,
+  Play,
   Plus,
   StickyNote,
   Timer,
@@ -18,7 +19,7 @@ import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { addDays, formatTime, iso, timeToMinutes, todayIso } from "../lib/date";
 import { fetchWeather, weatherIcon, type Weather } from "../lib/weather";
-import { usePlanner } from "../stores/planner";
+import { reportErr, usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
 
 const addDaysIso = (date: string, n: number) => iso(addDays(new Date(`${date}T12:00:00`), n));
@@ -61,6 +62,7 @@ export function TodayPage() {
   const updateEntry = usePlanner((state) => state.updateEntry);
   const createEntry = usePlanner((state) => state.createEntry);
   const api = usePlanner((state) => state.api);
+  const toast = usePlanner((state) => state.toast);
   const settings = usePlanner((state) => state.settings);
   const openCreate = useUi((state) => state.openCreate);
   const openEdit = useUi((state) => state.openEdit);
@@ -89,11 +91,11 @@ export function TodayPage() {
   useEffect(() => {
     void loadEntries({ from: addDaysIso(today, -14), to: addDaysIso(today, 14) });
     void loadFeeds();
-    void api.habits().then(setHabits).catch(() => {});
-    void api.activity().then(setActivity).catch(() => {});
-    void api.timeSummary().then(setTime).catch(() => {});
-    void api.dashboard(activeWorkspace ?? "").then(setDash).catch(() => {});
-    void api.storage().then(setStorage).catch(() => {});
+    void api.habits().then(setHabits).catch(reportErr("Could not load habits"));
+    void api.activity().then(setActivity).catch(reportErr("Could not load activity"));
+    void api.timeSummary().then(setTime).catch(reportErr("Could not load time totals"));
+    void api.dashboard(activeWorkspace ?? "").then(setDash).catch(reportErr("Could not load dashboard"));
+    void api.storage().then(setStorage).catch(reportErr("Could not load storage"));
   }, [today, loadEntries, loadFeeds, api, activeWorkspace]);
 
   useEffect(() => {
@@ -149,6 +151,17 @@ export function TodayPage() {
       "3. ",
     ].join("\n");
     await createEntry({ title: `Weekly review ${review.from}`, type: "note", date: today, content: lines });
+  }
+
+  // Track — start a timer linked to a scheduled entry, from the focus pane.
+  function track(entryId: string) {
+    void api
+      .startTimer({ entryId })
+      .then(() => {
+        toast("Timer started");
+        void api.timeSummary().then(setTime).catch(reportErr("Could not load time totals"));
+      })
+      .catch((e) => toast(e instanceof Error ? e.message : "Could not start timer"));
   }
 
   async function openJournal() {
@@ -208,7 +221,7 @@ export function TodayPage() {
                 type="button"
                 className="habit-chip"
                 title="Start a focus timer"
-                onClick={() => void api.startTimer({}).then(() => api.timeSummary().then(setTime)).catch(() => {})}
+                onClick={() => void api.startTimer({}).then(() => api.timeSummary().then(setTime)).catch((e) => toast(e instanceof Error ? e.message : "Could not start timer"))}
               >
                 <Timer size={12} /> Focus
               </button>
@@ -248,12 +261,22 @@ export function TodayPage() {
                   {" · "}
                   {Math.max(0, (timeToMinutes(current.endTime) ?? 0) - nowMinutes)} min left
                 </p>
+                <p className="focus-when">
+                  <button type="button" className="btn btn-secondary btn-xs" onClick={() => track(current.id)}>
+                    <Play size={11} /> Track this
+                  </button>
+                </p>
               </div>
             ) : nextUp ? (
               <div className="focus-now">
                 <span className="focus-label">Next</span>
                 <h2 className="focus-title">{nextUp.title}</h2>
                 <p className="focus-when">starts {formatTime(nextUp.startTime!)}</p>
+                <p className="focus-when">
+                  <button type="button" className="btn btn-secondary btn-xs" onClick={() => track(nextUp.id)}>
+                    <Play size={11} /> Track this
+                  </button>
+                </p>
               </div>
             ) : (
               <div className="focus-now">
@@ -424,13 +447,14 @@ export function TodayPage() {
                   onClick={() => {
                     const next = !showReview;
                     setShowReview(next);
-                    if (next && !review) void api.weeklyReview().then(setReview).catch(() => {});
+                    if (next && !review) void api.weeklyReview().then(setReview).catch(reportErr("Could not load review"));
                   }}
                 >
                   {showReview ? "Hide" : "Review"}
                 </button>
               </h3>
               {!showReview && <p className="panel-empty">Open the weekly review for a digest of the last 7 days.</p>}
+              {showReview && !review && <p className="panel-empty">Loading…</p>}
               {showReview && review && (
                 <div className="review-body">
                   <div className="review-grid">

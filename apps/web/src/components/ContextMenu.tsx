@@ -11,8 +11,17 @@ export function ContextMenu() {
   const updateEntry = usePlanner((state) => state.updateEntry);
   const deleteEntry = usePlanner((state) => state.deleteEntry);
   const api = usePlanner((state) => state.api);
+  const toast = usePlanner((state) => state.toast);
   const settings = usePlanner((state) => state.settings);
   const ref = useRef<HTMLDivElement>(null);
+
+  function startTimer(opts: { entryId: string; planned?: number; billable?: boolean }) {
+    setMenu(undefined);
+    void api
+      .startTimer(opts)
+      .then(() => toast("Timer started"))
+      .catch((e) => toast(e instanceof Error ? e.message : "Could not start timer"));
+  }
 
   useEffect(() => {
     if (!menu) return;
@@ -71,32 +80,17 @@ export function ContextMenu() {
             </button>
           )}
           {entry.type === "task" && (
-            <button
-              type="button"
-              onClick={() => {
-                void api.startTimer({ entryId: entry.id }).then(() => setMenu(undefined)).catch(() => setMenu(undefined));
-              }}
-            >
+            <button type="button" onClick={() => startTimer({ entryId: entry.id })}>
               <Timer size={14} /> Start timer
             </button>
           )}
           {entry.type === "task" && (
-            <button
-              type="button"
-              onClick={() => {
-                void api.startTimer({ entryId: entry.id, planned: 25 }).then(() => setMenu(undefined)).catch(() => setMenu(undefined));
-              }}
-            >
+            <button type="button" onClick={() => startTimer({ entryId: entry.id, planned: 25 })}>
               <Timer size={14} /> Pomodoro (25m)
             </button>
           )}
           {entry.type === "task" && settings.defaultRate != null && (
-            <button
-              type="button"
-              onClick={() => {
-                void api.startTimer({ entryId: entry.id, billable: true }).then(() => setMenu(undefined)).catch(() => setMenu(undefined));
-              }}
-            >
+            <button type="button" onClick={() => startTimer({ entryId: entry.id, billable: true })}>
               <Timer size={14} /> Billable timer (${settings.defaultRate}/h)
             </button>
           )}

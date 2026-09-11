@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { PageHeader } from "../components/PageHeader";
 import { formatDayShort, todayIso } from "../lib/date";
-import { usePlanner } from "../stores/planner";
+import { reportErr, usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
 
 export function BoardsPage() {
@@ -30,14 +30,15 @@ export function BoardsPage() {
   const [dragId, setDragId] = useState<string>();
   const [overCol, setOverCol] = useState<string>();
   const [cardView, setCardView] = useState<"board" | "list">("board");
+  const [viewReady, setViewReady] = useState(false);
 
-  const loadBoards = useCallback(() => void api.boards().then(setBoards).catch(() => {}), [api]);
+  const loadBoards = useCallback(() => void api.boards().then(setBoards).catch(reportErr("Could not load boards")), [api]);
   const loadView = useCallback(
     (id: string) => {
       void api.boardView(id).then((v) => {
         setColumns(v.columns);
         setCards(v.cards);
-      }).catch(() => {});
+      }).catch(reportErr("Could not load board")).finally(() => setViewReady(true));
     },
     [api],
   );
@@ -45,8 +46,9 @@ export function BoardsPage() {
   useEffect(loadBoards, [loadBoards]);
   useEffect(() => {
     if (boardId) {
+      setViewReady(false);
       void loadView(boardId);
-      void api.boards().then((bs) => setBoard(bs.find((b) => b.id === boardId))).catch(() => {});
+      void api.boards().then((bs) => setBoard(bs.find((b) => b.id === boardId))).catch(reportErr("Could not load boards"));
     } else {
       setBoard(undefined);
       setColumns([]);
@@ -71,7 +73,7 @@ export function BoardsPage() {
       setBoards((bs) => [...bs, b]);
       setNewBoard("");
       toast("Board created");
-    }).catch(() => toast("Failed"));
+    }).catch((e) => toast(e instanceof Error ? e.message : "Could not create board"));
   }
 
   async function addColumn() {
@@ -80,7 +82,7 @@ export function BoardsPage() {
     await api.createColumn(boardId, name).then(() => {
       setNewCol("");
       loadView(boardId);
-    }).catch(() => toast("Failed"));
+    }).catch((e) => toast(e instanceof Error ? e.message : "Could not create column"));
   }
 
   async function addCard(columnId: string) {
@@ -100,7 +102,7 @@ export function BoardsPage() {
     const prev = idx > 0 ? list[idx - 1].position : undefined;
     const next = idx < list.length ? list[idx].position : undefined;
     const position = prev !== undefined && next !== undefined ? (prev + next) / 2 : prev !== undefined ? prev + 1024 : next !== undefined ? next - 1024 : 1024;
-    void api.moveCard(cardId, columnId, position).then(() => boardId && loadView(boardId)).catch(() => toast("Move failed"));
+    void api.moveCard(cardId, columnId, position).then(() => boardId && loadView(boardId)).catch((e) => toast(e instanceof Error ? e.message : "Move failed"));
   }
 
   if (!boardId) {
@@ -155,7 +157,7 @@ export function BoardsPage() {
                     aria-label={`Delete ${b.name}`}
                     onClick={(e) => {
                       e.preventDefault();
-                      void api.deleteBoard(b.id).then(loadBoards);
+                      void api.deleteBoard(b.id).then(loadBoards).catch((e) => toast(e instanceof Error ? e.message : "Could not delete board"));
                     }}
                   >
                     <Trash2 size={14} />
@@ -184,7 +186,8 @@ export function BoardsPage() {
             const t = window.prompt("Target date (YYYY-MM-DD, empty clears)", board?.targetDate ?? "");
             if (t === null) return;
             void api.updateBoard(boardId, { description: d, targetDate: t.trim() })
-              .then(() => api.boards().then((bs) => setBoard(bs.find((b) => b.id === boardId))));
+              .then(() => api.boards().then((bs) => setBoard(bs.find((b) => b.id === boardId))))
+              .catch((e) => toast(e instanceof Error ? e.message : "Could not update board"));
           }}
         >
           Edit board
@@ -194,11 +197,19 @@ export function BoardsPage() {
           className="btn btn-secondary btn-xs"
           onClick={() =>
             void (async () => {
-              const edit = window.confirm("Editable link? OK = viewers can move cards, Cancel = view only");
-              const { shareToken } = await api.shareBoard(boardId, true, edit);
-              const url = `${api.remote || window.location.origin}/board/${shareToken}`;
-              void navigator.clipboard.writeText(url);
-              toast(edit ? "Editable link copied — viewers can move cards" : "Public link copied — view only");
+              try {
+                const edit = window.confirm("Editable link? OK = viewers can move cards, Cancel = view only");
+                const { shareToken } = await api.shareBoard(boardId, true, edit);
+                const url = `${api.remote || window.location.origin}/board/${shareToken}`;
+                try {
+                  await navigator.clipboard.writeText(url);
+                  toast(edit ? "Editable link copied — viewers can move cards" : "Public link copied — view only");
+                } catch {
+                  toast(`Share link: ${url}`);
+                }
+              } catch (e) {
+                toast(e instanceof Error ? e.message : "Could not create share link");
+              }
             })()
           }
         >
@@ -254,6 +265,9 @@ export function BoardsPage() {
         </div>
       ) : (
       <div className="kanban">
+        {columns.length === 0 && (
+          <p className="panel-empty" style={{ padding: 12 }}>{viewReady ? "No columns — add one on the right." : "Loading…"}</p>
+        )}
         {columns.map((col) => (
           <section
             key={col.id}
@@ -290,7 +304,7 @@ export function BoardsPage() {
                   if (v === null) return;
                   const n = v.trim() === "" ? 0 : parseInt(v, 10);
                   if (Number.isNaN(n) || n < 0) return;
-                  void api.updateColumn(col.id, { wipLimit: n }).then(() => boardId && loadView(boardId));
+                  void api.updateColumn(col.id, { wipLimit: n }).then(() => boardId && loadView(boardId)).catch((e) => toast(e instanceof Error ? e.message : "Could not set limit"));
                 }}
               >
                 <ListOrdered size={12} />
@@ -299,7 +313,7 @@ export function BoardsPage() {
                 type="button"
                 className="icon-btn"
                 aria-label={`Delete column ${col.name}`}
-                onClick={() => void api.deleteColumn(col.id).then(() => boardId && loadView(boardId))}
+                onClick={() => void api.deleteColumn(col.id).then(() => boardId && loadView(boardId)).catch((e) => toast(e instanceof Error ? e.message : "Could not delete column"))}
               >
                 <Trash2 size={12} />
               </button>

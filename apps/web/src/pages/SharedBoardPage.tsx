@@ -12,6 +12,7 @@ export function SharedBoardPage() {
   const [board, setBoard] = useState<Awaited<ReturnType<typeof api.sharedBoard>>>();
   const [err, setErr] = useState(false);
   const [busy, setBusy] = useState("");
+  const [moveErr, setMoveErr] = useState("");
 
   const load = useCallback(() => {
     if (token) void api.sharedBoard(token).then(setBoard).catch(() => setErr(true));
@@ -22,9 +23,12 @@ export function SharedBoardPage() {
   async function move(cardId: string, columnId: string) {
     if (!token || !columnId) return;
     setBusy(cardId);
+    setMoveErr("");
     try {
       await api.sharedBoardMove(token, cardId, columnId, 1e9);
       load();
+    } catch (e) {
+      setMoveErr(e instanceof Error ? e.message : "Move failed");
     } finally {
       setBusy("");
     }
@@ -46,6 +50,7 @@ export function SharedBoardPage() {
         {board.description && <p className="shared-desc">{board.description}</p>}
         {board.targetDate && <p className="shared-target">Target: {board.targetDate}</p>}
         {board.edit && <p className="shared-desc">You can move cards between columns.</p>}
+        {moveErr && <p className="shared-desc" style={{ color: "var(--c-red)" }}>{moveErr}</p>}
       </header>
       <div className="kanban shared-kanban">
         {board.columns.map((col) => (

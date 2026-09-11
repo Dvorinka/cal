@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Github, GitPullRequest, Import, RefreshCw } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
-import { usePlanner } from "../stores/planner";
+import { reportErr, usePlanner } from "../stores/planner";
 
 interface GHItem {
   number: number;
@@ -31,7 +31,7 @@ export function GitHubPage() {
       .catch(() => setErr(true))
       .finally(() => setLoading(false));
     void api.githubActivity().then(setActivity).catch(() => {});
-    void api.boards().then(setBoards).catch(() => {});
+    void api.boards().then(setBoards).catch(reportErr("Could not load boards"));
   };
   useEffect(load, [api]);
 

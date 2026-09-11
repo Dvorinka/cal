@@ -5,7 +5,7 @@ import { PageHeader } from "../components/PageHeader";
 import { allTags, groupTasks } from "../lib/entries";
 import { parseQuickAdd } from "../lib/quickadd";
 import { formatDayShort, todayIso } from "../lib/date";
-import { usePlanner } from "../stores/planner";
+import { reportErr, usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
 import type { Entry } from "@cal/api-client";
 
@@ -78,7 +78,7 @@ export function TasksPage() {
   // The task list needs every entry, not just the visible calendar range.
   useEffect(() => {
     void loadEntries({});
-    void api.filters().then(setSavedFilters).catch(() => {});
+    void api.filters().then(setSavedFilters).catch(reportErr("Could not load filters"));
   }, [loadEntries, api]);
 
   function applyFilter(f: SavedFilter) {
@@ -190,7 +190,7 @@ export function TasksPage() {
               <button key={f.id} type="button" className="tag-chip" onClick={() => applyFilter(f)}
                 onContextMenu={(e) => {
                   e.preventDefault();
-                  void api.deleteFilter(f.id).then(() => setSavedFilters((l) => l.filter((x) => x.id !== f.id)));
+                  void api.deleteFilter(f.id).then(() => setSavedFilters((l) => l.filter((x) => x.id !== f.id))).catch((e) => toast(e instanceof Error ? e.message : "Could not delete filter"));
                 }}
                 title="Click to apply · right-click to delete"
               >

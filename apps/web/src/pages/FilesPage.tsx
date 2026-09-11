@@ -5,7 +5,7 @@ import type { FileRec } from "@cal/api-client";
 import { File as FileIcon, FileText, FileImage, FileArchive, FileAudio, FileVideo, Link2, Tag, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
-import { usePlanner } from "../stores/planner";
+import { reportErr, usePlanner } from "../stores/planner";
 
 function iconFor(mime: string) {
   if (mime.startsWith("image/")) return FileImage;
@@ -34,7 +34,7 @@ export function FilesPage() {
   const activeWorkspace = usePlanner((s) => s.settings.activeWorkspace);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const load = () => void api.files().then(setFiles).catch(() => {});
+  const load = () => void api.files().then(setFiles).catch(reportErr("Could not load files"));
   useEffect(load, [api]);
 
   const allTags = useMemo(() => {
@@ -88,8 +88,12 @@ export function FilesPage() {
       setFiles((fs) => fs.map((x) => (x.id === f.id ? { ...x, shareToken: shareToken ?? undefined } : x)));
       if (shareToken) {
         const url = `${api.remote || location.origin}/api/shared/files/${shareToken}`;
-        await navigator.clipboard.writeText(url).catch(() => {});
-        toast("Share link copied");
+        try {
+          await navigator.clipboard.writeText(url);
+          toast("Share link copied");
+        } catch {
+          toast(`Share link: ${url}`);
+        }
       } else {
         toast("Sharing off");
       }
@@ -99,9 +103,13 @@ export function FilesPage() {
   }
 
   async function remove(f: FileRec) {
-    await api.deleteFile(f.id).catch(() => {});
-    setFiles((fs) => fs.filter((x) => x.id !== f.id));
-    toast("Deleted");
+    try {
+      await api.deleteFile(f.id);
+      setFiles((fs) => fs.filter((x) => x.id !== f.id));
+      toast("Deleted");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Delete failed");
+    }
   }
 
   return (

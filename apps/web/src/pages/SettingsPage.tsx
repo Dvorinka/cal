@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { MODULES, moduleOn } from "../lib/modules";
 import { disablePush, enablePush, pushEnabled } from "../lib/push";
-import { usePlanner } from "../stores/planner";
+import { reportErr, usePlanner } from "../stores/planner";
 
 const timezones: string[] = (() => {
   const zones: string[] = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
@@ -84,11 +84,11 @@ export function SettingsPage() {
     void loadEntries({});
     void loadFeeds();
     void loadAccounts();
-    void api.sessions().then(setSessions).catch(() => {});
-    void api.webhooks().then(setWebhooks).catch(() => {});
-    void api.googleStatus().then(setGoogle).catch(() => {});
-    void api.storage().then(setStorage).catch(() => {});
-    void api.pushSubscriptions().then(setPushDevices).catch(() => {});
+    void api.sessions().then(setSessions).catch(reportErr("Could not load sessions"));
+    void api.webhooks().then(setWebhooks).catch(reportErr("Could not load webhooks"));
+    void api.googleStatus().then(setGoogle).catch(reportErr("Could not load Google status"));
+    void api.storage().then(setStorage).catch(reportErr("Could not load storage"));
+    void api.pushSubscriptions().then(setPushDevices).catch(reportErr("Could not load push devices"));
   }, [loadEntries, loadFeeds, loadAccounts, api]);
 
   const stats = useMemo(() => {
@@ -112,7 +112,7 @@ export function SettingsPage() {
       await api.changePassword(pwCurrent, pwNext);
       setPwCurrent("");
       setPwNext("");
-      void api.sessions().then(setSessions);
+      void api.sessions().then(setSessions).catch(reportErr("Could not load sessions"));
       toast("Password changed");
     } catch (error) {
       toast(error instanceof Error ? error.message : "Failed");
@@ -189,14 +189,23 @@ export function SettingsPage() {
   }
 
   async function removePushDevice(id: string) {
-    await api.deletePushSubscription(id).catch(() => {});
-    setPushDevices((d) => d.filter((x) => x.id !== id));
-    toast("Device removed");
+    try {
+      await api.deletePushSubscription(id);
+      setPushDevices((d) => d.filter((x) => x.id !== id));
+      toast("Device removed");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not remove device");
+    }
   }
 
   async function removeWebhook(id: string) {
-    await api.deleteWebhook(id).catch(() => {});
-    setWebhooks((w) => w.filter((x) => x.id !== id));
+    try {
+      await api.deleteWebhook(id);
+      setWebhooks((w) => w.filter((x) => x.id !== id));
+      toast("Webhook removed");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not remove webhook");
+    }
   }
 
   async function submitFeed() {
@@ -220,7 +229,10 @@ export function SettingsPage() {
   );
 
   function copy(text: string, what: string) {
-    void navigator.clipboard.writeText(text).then(() => toast(`${what} copied`));
+    void navigator.clipboard
+      .writeText(text)
+      .then(() => toast(`${what} copied`))
+      .catch(() => toast("Copy failed — clipboard unavailable"));
   }
 
   return (
@@ -534,13 +546,27 @@ export function SettingsPage() {
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <span className="feed-name">Connected — events sync every 15 min as the "Google" feed.</span>
               <span className="spacer" style={{ flex: 1 }} />
-              <button type="button" className="btn btn-secondary" onClick={() => void api.googleSync().then(() => toast("Synced"))}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() =>
+                  void api
+                    .googleSync()
+                    .then(() => toast("Synced"))
+                    .catch((e) => toast(e instanceof Error ? e.message : "Sync failed"))
+                }
+              >
                 Sync now
               </button>
               <button
                 type="button"
                 className="btn btn-secondary"
-                onClick={() => void api.googleDisconnect().then(() => { setGoogle({ connected: false }); void loadFeeds(); })}
+                onClick={() =>
+                  void api
+                    .googleDisconnect()
+                    .then(() => { setGoogle({ connected: false }); void loadFeeds(); })
+                    .catch((e) => toast(e instanceof Error ? e.message : "Disconnect failed"))
+                }
               >
                 Disconnect
               </button>
@@ -661,7 +687,9 @@ export function SettingsPage() {
             className="btn btn-secondary"
             onClick={() => {
               if (pushOn) {
-                void disablePush(usePlanner.getState().api).then(() => setPushOn(false));
+                void disablePush(usePlanner.getState().api)
+                  .then(() => setPushOn(false))
+                  .catch(() => toast("Could not disable push"));
               } else {
                 void enablePush(usePlanner.getState().api)
                   .then((ok) => {

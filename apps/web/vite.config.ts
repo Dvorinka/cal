@@ -47,7 +47,7 @@ export default defineConfig(({ mode }) => {
     ],
     server: {
       proxy: {
-        "/api": env.VITE_API_ORIGIN ?? "http://localhost:8080"
+        "/api": env.VITE_API_ORIGIN ?? "http://localhost:8082"
       }
     }
   };

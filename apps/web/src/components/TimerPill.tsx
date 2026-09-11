@@ -21,6 +21,7 @@ function fmtElapsed(since: string, planned?: number): string {
 
 export function TimerPill() {
   const api = usePlanner((s) => s.api);
+  const toast = usePlanner((s) => s.toast);
   const [timer, setTimer] = useState<{ title: string; startAt: string; planned?: number } | null>(null);
   const [, tick] = useState(0);
   const fired = useRef(false);
@@ -59,7 +60,12 @@ export function TimerPill() {
         type="button"
         className="timer-stop"
         aria-label="Stop timer"
-        onClick={() => void api.stopTimer().then(() => setTimer(null))}
+        onClick={() =>
+          void api
+            .stopTimer()
+            .then(() => setTimer(null))
+            .catch((e) => toast(e instanceof Error ? e.message : "Could not stop timer"))
+        }
       >
         <Pause size={11} />
       </button>

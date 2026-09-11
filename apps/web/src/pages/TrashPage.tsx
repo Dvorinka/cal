@@ -5,7 +5,7 @@ import { RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { formatDayShort } from "../lib/date";
-import { usePlanner } from "../stores/planner";
+import { reportErr, usePlanner } from "../stores/planner";
 
 const TYPE_LABEL: Record<string, string> = { task: "Task", event: "Event", note: "Note", link: "Link" };
 
@@ -14,15 +14,18 @@ export function TrashPage() {
   const loadEntries = usePlanner((s) => s.loadEntries);
   const toast = usePlanner((s) => s.toast);
   const [items, setItems] = useState<Entry[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
-  const load = () => void api.trash().then(setItems).catch(() => {});
+  const load = () => void api.trash().then(setItems).catch(reportErr("Could not load trash")).finally(() => setLoaded(true));
   useEffect(load, [api]);
 
   return (
     <>
       <PageHeader title="Trash" sub={`${items.length} deleted item${items.length === 1 ? "" : "s"}`} />
       <div className="page-scroll">
-        {items.length === 0 ? (
+        {!loaded ? (
+          <p className="panel-empty">Loading…</p>
+        ) : items.length === 0 ? (
           <div className="empty-hint">
             <strong>Nothing in trash</strong>
             <span>Deleted entries land here — restore or purge them for good.</span>
@@ -43,7 +46,7 @@ export function TrashPage() {
                       setItems((xs) => xs.filter((x) => x.id !== e.id));
                       void loadEntries({});
                       toast("Restored");
-                    })
+                    }).catch((e) => toast(e instanceof Error ? e.message : "Restore failed"))
                   }
                 >
                   <RotateCcw size={14} />
@@ -54,7 +57,7 @@ export function TrashPage() {
                   aria-label={`Permanently delete ${e.title}`}
                   onClick={() => {
                     if (!window.confirm(`Delete "${e.title}" permanently? This can't be undone.`)) return;
-                    void api.purgeEntry(e.id).then(() => setItems((xs) => xs.filter((x) => x.id !== e.id)));
+                    void api.purgeEntry(e.id).then(() => setItems((xs) => xs.filter((x) => x.id !== e.id))).catch((e) => toast(e instanceof Error ? e.message : "Delete failed"));
                   }}
                 >
                   <Trash2 size={14} />

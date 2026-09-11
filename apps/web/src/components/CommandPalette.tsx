@@ -25,6 +25,7 @@ export function CommandPalette() {
   const setView = useUi((state) => state.setView);
   const goToday = useUi((state) => state.goToday);
   const api = usePlanner((state) => state.api);
+  const toast = usePlanner((state) => state.toast);
   const settings = usePlanner((state) => state.settings);
   const updateSettings = usePlanner((state) => state.updateSettings);
   const selectedDate = useUi((state) => state.selectedDate);
@@ -175,7 +176,10 @@ export function CommandPalette() {
         module: "time",
         run: () => {
           close();
-          void api.startTimer().catch(() => {});
+          void api
+            .startTimer()
+            .then(() => toast("Timer started"))
+            .catch((e) => toast(e instanceof Error ? e.message : "Could not start timer"));
         },
       },
       {
@@ -184,7 +188,11 @@ export function CommandPalette() {
         icon: <ArrowRight size={15} />,
         run: () => {
           close();
-          void api.agenda(7).then((md) => navigator.clipboard.writeText(md));
+          void api
+            .agenda(7)
+            .then((md) => navigator.clipboard.writeText(md))
+            .then(() => toast("Agenda copied"))
+            .catch((e) => toast(e instanceof Error ? e.message : "Could not copy agenda"));
         },
       },
       {
@@ -197,7 +205,7 @@ export function CommandPalette() {
         },
       },
     ],
-    [close, goToday, openCreate, selectedDate, setView, settings, updateSettings, navigate],
+    [close, goToday, openCreate, selectedDate, setView, settings, updateSettings, navigate, api, toast],
   );
 
   useEffect(() => {

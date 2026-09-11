@@ -7,7 +7,7 @@ import { Download, Pencil, Play, Plus, Square, Tag, Timer, Trash2 } from "lucide
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { formatDayShort, todayIso } from "../lib/date";
-import { usePlanner } from "../stores/planner";
+import { reportErr, usePlanner } from "../stores/planner";
 
 function fmtMins(m: number): string {
   if (m < 1) return "<1m";
@@ -36,6 +36,7 @@ function toLocalInput(iso?: string): string {
 
 export function TimePage() {
   const api = usePlanner((s) => s.api);
+  const toast = usePlanner((s) => s.toast);
   const settings = usePlanner((s) => s.settings);
   const entries = usePlanner((s) => s.entries);
   const [log, setLog] = useState<TimeEntry[]>([]);
@@ -46,10 +47,11 @@ export function TimePage() {
   const [adding, setAdding] = useState(false);
   const [running, setRunning] = useState<TimeEntry | null>(null);
   const [tick, setTick] = useState(0);
+  const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(() => {
-    void api.timeLog().then(setLog).catch(() => {});
-    void api.timeSummary().then(setSum).catch(() => {});
+    void api.timeLog().then(setLog).catch(reportErr("Could not load sessions")).finally(() => setLoaded(true));
+    void api.timeSummary().then(setSum).catch(reportErr("Could not load totals"));
     void api.currentTimer().then(setRunning).catch(() => setRunning(null));
   }, [api]);
   useEffect(load, [load]);
@@ -76,15 +78,18 @@ export function TimePage() {
   async function startOn(entryId?: string) {
     try {
       await api.startTimer(entryId ? { entryId } : {});
-      load();
-    } catch {
-      // already running — the hero row reflects it after reload
-      load();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not start timer");
     }
+    load();
   }
 
   async function stop() {
-    await api.stopTimer().catch(() => {});
+    try {
+      await api.stopTimer();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not stop timer");
+    }
     load();
   }
 
@@ -213,7 +218,9 @@ export function TimePage() {
             {settings.defaultRate ? ` · default rate $${settings.defaultRate}/h` : ""}
           </p>
         )}
-        {days.length === 0 ? (
+        {!loaded ? (
+          <p className="panel-empty">Loading…</p>
+        ) : days.length === 0 ? (
           <div className="empty-hint">
             <strong>No sessions yet</strong>
             <span>Start the timer or log time manually. Right-click any task for its own timer.</span>
@@ -259,7 +266,7 @@ export function TimePage() {
                         type="button"
                         className="icon-btn danger"
                         aria-label="Delete session"
-                        onClick={() => void api.deleteTimeEntry(t.id).then(load)}
+                        onClick={() => void api.deleteTimeEntry(t.id).then(load).catch((e) => toast(e instanceof Error ? e.message : "Delete failed"))}
                       >
                         <Trash2 size={13} />
                       </button>
@@ -279,8 +286,13 @@ export function TimePage() {
           tasks={entries.filter((e) => e.type === "task" && !e.completed)}
           onClose={() => setAdding(false)}
           onSave={async (f) => {
-            await api.createTimeEntry(f).then(load).catch(() => {});
-            setAdding(false);
+            try {
+              await api.createTimeEntry(f);
+              load();
+              setAdding(false);
+            } catch (e) {
+              toast(e instanceof Error ? e.message : "Could not save session");
+            }
           }}
         />
       )}
@@ -301,8 +313,13 @@ export function TimePage() {
               projectId: f.projectId || null,
               entryId: f.entryId || null,
             };
-            await api.updateTimeEntry(editing.id, patch).then(load).catch(() => {});
-            setEditing(null);
+            try {
+              await api.updateTimeEntry(editing.id, patch);
+              load();
+              setEditing(null);
+            } catch (e) {
+              toast(e instanceof Error ? e.message : "Could not save session");
+            }
           }}
         />
       )}
