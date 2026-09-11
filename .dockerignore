@@ -1,6 +1,10 @@
 node_modules/
-dist/
-build/
+**/node_modules/
+apps/web/dist/
+apps/desktop/frontend/dist/
+apps/web/android/
+apps/web/ios/
+apps/desktop/build/bin/
 .vite/
 .cache/
 coverage/
@@ -10,5 +14,10 @@ coverage/
 tmp/
 *.log
 apps/api/cal-api
+apps/api/data/
 ref/
 .git/
+.playwright-mcp/
+apps/web/test-results/
+docs/
+perf/

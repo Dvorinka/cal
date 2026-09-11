@@ -1,0 +1,46 @@
+# Cal — one container, batteries included.
+#
+#   docker compose up -d --build
+#
+# App serves http://localhost:8080 (UI + API). Data lives in the cal-data
+# volume; the embedded Postgres needs nothing else. To use an external
+# Postgres instead, set DATABASE_URL on the cal service and skip `db`.
+
+services:
+  cal:
+    build: .
+    image: cal:latest
+    environment:
+      # Uncomment to use the bundled db service below (or any external PG):
+      # DATABASE_URL: postgres://cal:cal@db:5432/cal?sslmode=disable
+      SESSION_SECURE: "false" # set true when serving over https
+      PORT: "8080"
+      GIN_MODE: release
+      # TZ: Europe/Prague
+    ports:
+      - "${PORT:-8080}:8080"
+    volumes:
+      - cal-data:/data
+    restart: unless-stopped
+    # depends_on:
+    #   db:
+    #     condition: service_healthy
+
+  # Optional external Postgres — uncomment together with DATABASE_URL above.
+  # db:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_DB: cal
+  #     POSTGRES_USER: cal
+  #     POSTGRES_PASSWORD: cal
+  #   volumes:
+  #     - cal-pg:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U cal -d cal"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 10
+
+volumes:
+  cal-data:
+  # cal-pg:
