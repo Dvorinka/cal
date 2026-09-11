@@ -38,7 +38,7 @@ let toastSeq = 0;
 function pushWidgetConfig(settings: Settings) {
   try {
     const cap = (window as unknown as { Capacitor?: { Plugins?: Record<string, { set?: (v: unknown) => Promise<void> }> } }).Capacitor;
-    void cap?.Plugins?.WidgetConfig?.set?.({ server: location.origin, widgetToken: settings.widgetToken });
+    void cap?.Plugins?.WidgetConfig?.set?.({ server: usePlanner.getState().api.remote || location.origin, widgetToken: settings.widgetToken });
   } catch {
     /* not in the app */
   }
@@ -60,8 +60,8 @@ interface PlannerState {
   error?: string;
   toasts: Toast[];
   bootstrap: () => Promise<void>;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, server?: string) => Promise<void>;
+  register: (email: string, password: string, server?: string) => Promise<void>;
   logout: () => Promise<void>;
   loadEntries: (params: { from?: string; to?: string; q?: string; workspace?: string }) => Promise<void>;
   workspaces: Workspace[];
@@ -132,8 +132,9 @@ export const usePlanner = create<PlannerState>((set, get) => ({
     }
   },
 
-  async login(email, password) {
-    const user = await get().api.login({ email, password });
+  async login(email, password, server) {
+    if (server !== undefined) get().api.setServer(server);
+    const { user } = await get().api.login({ email, password });
     const settings = await get().api.settings();
     cacheSettings(settings);
     cacheUser(user);
@@ -142,8 +143,9 @@ export const usePlanner = create<PlannerState>((set, get) => ({
     void get().loadCountries();
   },
 
-  async register(email, password) {
-    const user = await get().api.register({ email, password });
+  async register(email, password, server) {
+    if (server !== undefined) get().api.setServer(server);
+    const { user } = await get().api.register({ email, password });
     const settings = await get().api.settings();
     cacheSettings(settings);
     cacheUser(user);
@@ -156,6 +158,7 @@ export const usePlanner = create<PlannerState>((set, get) => ({
     try {
       await get().api.logout();
     } finally {
+      get().api.setSession("");
       clearCachedUser();
       set({ user: undefined, entries: [], holidays: [] });
     }

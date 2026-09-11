@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"time"
 
@@ -12,11 +13,18 @@ import (
 	"cal/apps/api/internal/calendar"
 	"cal/apps/api/internal/httpapi"
 	"cal/apps/api/internal/store"
+	"cal/apps/api/migrations"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
 )
 
-// New connects to Postgres, starts the background loops, and returns the API
-// handler. Call the returned close func on shutdown.
+// New connects to Postgres, applies pending migrations, starts the background
+// loops, and returns the API handler. Call the returned close func on shutdown.
 func New(ctx context.Context, databaseURL, dataDir string) (http.Handler, func(), error) {
+	if err := migrate(databaseURL); err != nil {
+		return nil, nil, err
+	}
 	db, err := store.Connect(ctx, databaseURL)
 	if err != nil {
 		return nil, nil, err
@@ -31,6 +39,21 @@ func New(ctx context.Context, databaseURL, dataDir string) (http.Handler, func()
 
 	router := httpapi.New(s, calendar.NewHolidayCache())
 	return router, db.Close, nil
+}
+
+// migrate applies pending migrations via the embedded FS — idempotent, so the
+// Docker entrypoint's goose call stays harmless.
+func migrate(databaseURL string) error {
+	db, err := sql.Open("pgx", databaseURL)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close() }()
+	goose.SetBaseFS(migrations.FS)
+	if err := goose.SetDialect("postgres"); err != nil {
+		return err
+	}
+	return goose.Up(db, ".")
 }
 
 // caldavLoop syncs every connected account every 15 minutes.

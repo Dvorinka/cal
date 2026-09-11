@@ -218,12 +218,14 @@ solidtime-style timesheet depth and a mail module.
 - [x] **Board list view** — boards toggle kanban ↔ column-grouped list.
 - [x] **Board time sums** — `minutes` on board tiles.
 - [x] **Desktop app** — `apps/desktop`: Wails 2 shell, API in-process,
-      SPA embedded; `-tags headless` variant for servers/CI.
+      SPA embedded; embedded Postgres when `DATABASE_URL` unset (turnkey);
+      `-tags headless` variant for servers/CI; app icon in build/.
 - [x] **Channel feeds → link cards** — a feed kind "links" turns RSS/Atom
   items (e.g. `youtube.com/feeds/videos.xml?channel_id=…`) into real link
   entries with `media:thumbnail` cards; dedupes by URL, runs in the sync
   loop. Calendar feeds keep landing as dated events.
-- [ ] **Editable shared boards** — write-token tier.
+- [x] **Editable shared boards** — `share_edit` write tier: the public
+  link gets a per-card "Move to" picker; view-only default unchanged.
 - [x] **Mobile nav audit** — bottom nav now shows the first four enabled
   module tabs + a More tab that opens the full sidebar drawer (Files,
   Boards, Time, Mail, settings, trash all reachable on phones).

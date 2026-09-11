@@ -213,14 +213,61 @@ export class ApiError extends Error {
 }
 
 export class CalApi {
-  constructor(private readonly baseUrl = "/api") {}
+  // Native apps (Capacitor) can't use cookie auth cross-origin — they store
+  // a server URL + Bearer session. Same-origin web uses neither.
+  private server = "";
+  private session = "";
 
-  async register(input: AuthRequest): Promise<User> {
-    return this.request<User>("/auth/register", { method: "POST", body: input });
+  constructor(private readonly baseUrl = "/api") {
+    try {
+      this.server = localStorage.getItem("cal:server") ?? "";
+      this.session = localStorage.getItem("cal:session") ?? "";
+    } catch {
+      // storage unavailable
+    }
   }
 
-  async login(input: AuthRequest): Promise<User> {
-    return this.request<User>("/auth/login", { method: "POST", body: input });
+  get remote(): string {
+    return this.server;
+  }
+
+  setServer(url: string) {
+    this.server = url.replace(/\/+$/, "");
+    try {
+      if (this.server) localStorage.setItem("cal:server", this.server);
+      else localStorage.removeItem("cal:server");
+    } catch { /* ignore */ }
+  }
+
+  setSession(token: string) {
+    this.session = token;
+    try {
+      if (token) localStorage.setItem("cal:session", token);
+      else localStorage.removeItem("cal:session");
+    } catch { /* ignore */ }
+  }
+
+  // assetUrl resolves a /api/… path for <img src> and friends — absolute on
+  // native, with the session as a query param since media tags send no headers.
+  assetUrl(path: string): string {
+    const base = this.server ? `${this.server}${path}` : path;
+    return this.session ? `${base}${path.includes("?") ? "&" : "?"}session=${encodeURIComponent(this.session)}` : base;
+  }
+
+  private get root(): string {
+    return this.server ? `${this.server}${this.baseUrl}` : this.baseUrl;
+  }
+
+  async register(input: AuthRequest): Promise<{ user: User; session: string }> {
+    const out = await this.request<{ user: User; session: string }>("/auth/register", { method: "POST", body: input });
+    if (out.session) this.setSession(out.session);
+    return out;
+  }
+
+  async login(input: AuthRequest): Promise<{ user: User; session: string }> {
+    const out = await this.request<{ user: User; session: string }>("/auth/login", { method: "POST", body: input });
+    if (out.session) this.setSession(out.session);
+    return out;
   }
 
   async logout(): Promise<void> {
@@ -397,7 +444,7 @@ export class CalApi {
     return this.request("/timer/stop", { method: "POST", body: "{}" });
   }
   async currentTimer(): Promise<TimeEntry | null> {
-    const r = await fetch(`${this.baseUrl}/timer/current`, { credentials: "include" });
+    const r = await fetch(`${this.root}/timer/current`, { credentials: "include", headers: this.headers(false) });
     return r.status === 204 ? null : r.json();
   }
   async timeSummary(): Promise<TimeSummary> {
@@ -418,13 +465,21 @@ export class CalApi {
   async updateBoard(id: string, patch: { description?: string; targetDate?: string }): Promise<void> {
     return this.request(`/boards/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
   }
-  async shareBoard(id: string, on: boolean): Promise<{ shareToken: string }> {
-    return this.request(`/boards/${id}/share`, { method: "POST", body: JSON.stringify({ on }) });
+  async shareBoard(id: string, on: boolean, edit = false): Promise<{ shareToken: string; edit: boolean }> {
+    return this.request(`/boards/${id}/share`, { method: "POST", body: JSON.stringify({ on, edit }) });
   }
-  async sharedBoard(token: string): Promise<{ name: string; description: string; targetDate?: string; columns: { id: string; name: string }[]; cards: { columnId?: string; title: string; completed: boolean; date: string; tags: string[] }[] }> {
-    const r = await fetch(`${this.baseUrl}/shared/boards/${token}`);
+  async sharedBoard(token: string): Promise<{ name: string; description: string; targetDate?: string; edit: boolean; columns: { id: string; name: string }[]; cards: { id: string; columnId?: string; title: string; completed: boolean; date: string; tags: string[] }[] }> {
+    const r = await fetch(`${this.root}/shared/boards/${token}`, { headers: this.headers(false) });
     if (!r.ok) throw new Error("not found");
     return r.json();
+  }
+  async sharedBoardMove(token: string, cardId: string, columnId: string, position: number): Promise<void> {
+    const r = await fetch(`${this.root}/shared/boards/${token}/cards/${cardId}/move`, {
+      method: "POST",
+      headers: this.headers(true),
+      body: JSON.stringify({ columnId, position }),
+    });
+    if (!r.ok) throw new Error(await r.text());
   }
   async tags(): Promise<Record<string, number>> {
     return this.request("/tags");
@@ -507,7 +562,7 @@ export class CalApi {
   async mailDelete(id: string, uid: number, mailbox = "INBOX"): Promise<void> {
     return this.request(`/mail/${id}/message/${uid}?mailbox=${encodeURIComponent(mailbox)}`, { method: "DELETE" });
   }
-  async mailSend(id: string, input: { to: string; cc?: string; subject: string; text: string }): Promise<void> {
+  async mailSend(id: string, input: { to: string; cc?: string; subject: string; text: string; attachments?: string[] }): Promise<void> {
     return this.request(`/mail/${id}/send`, { method: "POST", body: input });
   }
 
@@ -525,7 +580,7 @@ export class CalApi {
     return this.request(`/search?q=${encodeURIComponent(q)}`);
   }
   async agenda(days = 7): Promise<string> {
-    const r = await fetch(`${this.baseUrl}/agenda?days=${days}`, { credentials: "include" });
+    const r = await fetch(`${this.root}/agenda?days=${days}`, { credentials: "include", headers: this.headers(false) });
     return r.text();
   }
 
@@ -546,9 +601,10 @@ export class CalApi {
     form.append("file", file);
     if (opts.tags?.length) form.append("tags", opts.tags.join(","));
     if (opts.workspaceId) form.append("workspaceId", opts.workspaceId);
-    const response = await fetch(`${this.baseUrl}/files`, {
+    const response = await fetch(`${this.root}/files`, {
       method: "POST",
       credentials: "include",
+      headers: this.headers(false),
       body: form,
     });
     if (!response.ok) throw new Error(`Upload failed: ${response.status}`);
@@ -592,10 +648,10 @@ export class CalApi {
   }
 
   async restore(file: File): Promise<{ restored: number }> {
-    const response = await fetch(`${this.baseUrl}/restore`, {
+    const response = await fetch(`${this.root}/restore`, {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
+      headers: this.headers(true),
       body: file,
     });
     if (!response.ok) {
@@ -606,10 +662,10 @@ export class CalApi {
   }
 
   async importIcs(file: File): Promise<{ imported: number }> {
-    const response = await fetch(`${this.baseUrl}/import`, {
+    const response = await fetch(`${this.root}/import`, {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "text/calendar" },
+      headers: { "Content-Type": "text/calendar", ...(this.session ? { Authorization: `Bearer ${this.session}` } : {}) },
       body: file,
     });
     if (!response.ok) {
@@ -642,11 +698,18 @@ export class CalApi {
     return out.apiToken;
   }
 
+  private headers(withJson: boolean): Record<string, string> {
+    const h: Record<string, string> = {};
+    if (withJson) h["Content-Type"] = "application/json";
+    if (this.session) h["Authorization"] = `Bearer ${this.session}`;
+    return h;
+  }
+
   private async request<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${path}`, {
+    const response = await fetch(`${this.root}${path}`, {
       method: init.method ?? "GET",
       credentials: "include",
-      headers: init.body ? { "Content-Type": "application/json" } : undefined,
+      headers: this.headers(!!init.body),
       body: init.body ? JSON.stringify(init.body) : undefined,
     });
 

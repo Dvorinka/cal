@@ -46,7 +46,7 @@ function inline(text: string, onWiki?: (title: string) => void): ReactNode[] {
       const src = tok.slice(end + 2, -1);
       // Only render same-origin uploads or http(s) — nothing else loads.
       if (src.startsWith("/") || /^https?:\/\//i.test(src)) {
-        out.push(<img key={k()} src={src} alt={alt} className="md-img" />);
+        out.push(<img key={k()} src={resolveAsset(src)} alt={alt} className="md-img" />);
       } else {
         out.push(alt);
       }
@@ -66,6 +66,19 @@ function inline(text: string, onWiki?: (title: string) => void): ReactNode[] {
   }
   if (last < text.length) out.push(text.slice(last));
   return out;
+}
+
+// /api/… paths resolve to the stored remote server + session on native builds.
+function resolveAsset(src: string): string {
+  if (!src.startsWith("/api/")) return src;
+  try {
+    const server = localStorage.getItem("cal:server");
+    const session = localStorage.getItem("cal:session");
+    const base = server ? server + src : src;
+    return session ? `${base}${src.includes("?") ? "&" : "?"}session=${encodeURIComponent(session)}` : base;
+  } catch {
+    return src;
+  }
 }
 
 export function renderMarkdown(src: string, onWiki?: (title: string) => void): ReactNode[] {

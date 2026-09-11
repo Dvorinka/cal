@@ -2809,3 +2809,5 @@ button {
 .feed-kind { margin-left: 6px; font-size: 10px; font-weight: 700; letter-spacing: .04em; color: var(--text-3); text-transform: uppercase; }
 .feed-kind-select { flex: 0 0 auto; width: auto; }
 .agenda-thumb { width: 44px; aspect-ratio: 16/9; object-fit: cover; border-radius: 4px; flex: 0 0 auto; }
+.mail-attachments { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; }
+.chip-x { background: none; border: 0; color: inherit; cursor: pointer; padding: 0 0 0 4px; font-size: 13px; line-height: 1; }

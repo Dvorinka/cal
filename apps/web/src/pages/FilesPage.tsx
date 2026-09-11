@@ -87,7 +87,7 @@ export function FilesPage() {
       const { shareToken } = await api.shareFile(f.id, on);
       setFiles((fs) => fs.map((x) => (x.id === f.id ? { ...x, shareToken: shareToken ?? undefined } : x)));
       if (shareToken) {
-        const url = `${location.origin}/api/shared/files/${shareToken}`;
+        const url = `${api.remote || location.origin}/api/shared/files/${shareToken}`;
         await navigator.clipboard.writeText(url).catch(() => {});
         toast("Share link copied");
       } else {
@@ -178,7 +178,7 @@ export function FilesPage() {
                     <button
                       type="button"
                       className="files-main"
-                      onClick={() => (f.mime.startsWith("image/") ? setPreview(f) : window.open(`/api/files/${f.name}`, "_blank"))}
+                      onClick={() => (f.mime.startsWith("image/") ? setPreview(f) : window.open(api.assetUrl(`/api/files/${f.name}`), "_blank"))}
                       aria-label={`Open ${f.origName}`}
                     >
                       <Icon size={18} strokeWidth={1.8} />
@@ -240,7 +240,7 @@ export function FilesPage() {
           <button type="button" className="files-preview-close" aria-label="Close preview">
             <X size={20} />
           </button>
-          <img src={`/api/files/${preview.name}`} alt={preview.origName} onClick={(e) => e.stopPropagation()} />
+          <img src={api.assetUrl(`/api/files/${preview.name}`)} alt={preview.origName} onClick={(e) => e.stopPropagation()} />
         </div>
       )}
     </>

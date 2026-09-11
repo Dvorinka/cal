@@ -230,13 +230,14 @@ func (s *Server) updateBoard(c *gin.Context) {
 
 func (s *Server) shareBoard(c *gin.Context) {
 	var body struct {
-		On bool `json:"on"`
+		On   bool `json:"on"`
+		Edit bool `json:"edit"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.String(http.StatusBadRequest, "invalid")
 		return
 	}
-	token, err := s.store.SetBoardShare(c.Request.Context(), currentUser(c).ID, c.Param("id"), body.On)
+	token, err := s.store.SetBoardShare(c.Request.Context(), currentUser(c).ID, c.Param("id"), body.On, body.Edit)
 	if errors.Is(err, store.ErrNotFound) {
 		c.String(http.StatusNotFound, "not found")
 		return
@@ -244,7 +245,62 @@ func (s *Server) shareBoard(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "failed")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"shareToken": token})
+	c.JSON(http.StatusOK, gin.H{"shareToken": token, "edit": body.Edit && body.On})
+}
+
+// sharedBoardMove lets a write-tier share link move a card between columns.
+// No session — the token is the capability.
+func (s *Server) sharedBoardMove(c *gin.Context) {
+	userID, board, err := s.store.SharedBoardOwner(c.Request.Context(), c.Param("token"))
+	if errors.Is(err, store.ErrNotFound) {
+		c.String(http.StatusNotFound, "not found")
+		return
+	} else if err != nil {
+		c.String(http.StatusInternalServerError, "failed")
+		return
+	}
+	if !board.Editable {
+		c.String(http.StatusForbidden, "view only")
+		return
+	}
+	var body struct {
+		ColumnID *string `json:"columnId"`
+		Position float64 `json:"position"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.ColumnID == nil {
+		c.String(http.StatusBadRequest, "invalid")
+		return
+	}
+	entryID := c.Param("id")
+	entry, err := s.store.Entry(c.Request.Context(), userID, entryID)
+	if err != nil || entry.BoardID == nil || *entry.BoardID != board.ID {
+		c.String(http.StatusNotFound, "card not found")
+		return
+	}
+	if !s.store.ColumnInBoard(c.Request.Context(), userID, board.ID, *body.ColumnID) {
+		c.String(http.StatusBadRequest, "column not on this board")
+		return
+	}
+	if err := s.store.MoveCard(c.Request.Context(), userID, entryID, board.ID, body.ColumnID, body.Position); err != nil {
+		c.String(http.StatusInternalServerError, "failed")
+		return
+	}
+	// Mirror the authed move: done-ish columns complete, others reopen.
+	cols, _ := s.store.BoardColumns(c.Request.Context(), userID, board.ID)
+	targetDone, sourceDone := false, false
+	for _, col := range cols {
+		if col.ID == *body.ColumnID {
+			targetDone = doneishColumn(col.Name)
+		}
+		if entry.ColumnID != nil && col.ID == *entry.ColumnID {
+			sourceDone = doneishColumn(col.Name)
+		}
+	}
+	if targetDone != sourceDone {
+		done := targetDone
+		_, _ = s.store.UpdateEntry(c.Request.Context(), userID, entryID, store.EntryPatch{Completed: &done})
+	}
+	c.Status(http.StatusNoContent)
 }
 
 func (s *Server) serveSharedBoard(c *gin.Context) {

@@ -268,7 +268,7 @@ export function CommandPalette() {
       item.action.run();
     } else if (item.kind === "file") {
       close();
-      window.open(`/api/files/${item.file.name}`, "_blank");
+      window.open(api.assetUrl(`/api/files/${item.file.name}`), "_blank");
     } else if (item.kind === "board") {
       close();
       navigate(`/boards/${item.board.id}`);

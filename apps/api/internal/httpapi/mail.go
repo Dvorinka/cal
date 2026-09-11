@@ -7,11 +7,14 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -372,13 +375,15 @@ func (s *Server) mailDelete(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// mailSend composes a plain-text RFC822 message and submits it over SMTP.
+// mailSend composes an RFC822 message (plain text, or multipart/mixed when
+// attachments name stored files) and submits it over SMTP.
 func (s *Server) mailSend(c *gin.Context) {
 	var body struct {
-		To      string `json:"to"`
-		Cc      string `json:"cc"`
-		Subject string `json:"subject"`
-		Text    string `json:"text"`
+		To          string   `json:"to"`
+		Cc          string   `json:"cc"`
+		Subject     string   `json:"subject"`
+		Text        string   `json:"text"`
+		Attachments []string `json:"attachments"` // stored file names from /files
 	}
 	if !bind(c, &body) || !strings.Contains(body.To, "@") {
 		c.String(http.StatusBadRequest, "recipient required")
@@ -389,13 +394,57 @@ func (s *Server) mailSend(c *gin.Context) {
 		c.String(http.StatusNotFound, "unknown account")
 		return
 	}
+	userID := currentUser(c).ID
+
+	type attachment struct {
+		name string
+		mime string
+		data []byte
+	}
+	var atts []attachment
+	for _, name := range body.Attachments {
+		if !reSafeName.MatchString(name) || len(atts) >= 10 {
+			continue
+		}
+		f, ferr := s.store.FileByName(c.Request.Context(), userID, name)
+		data, rerr := os.ReadFile(filepath.Join(s.dataDir, "uploads", userID, name))
+		if ferr != nil || rerr != nil {
+			c.String(http.StatusBadRequest, "attachment not found: "+name)
+			return
+		}
+		atts = append(atts, attachment{name: f.OrigName, mime: f.Mime, data: data})
+	}
+
 	var msg bytes.Buffer
 	fmt.Fprintf(&msg, "From: %s\r\nTo: %s\r\n", acct.Email, body.To)
 	if body.Cc != "" {
 		fmt.Fprintf(&msg, "Cc: %s\r\n", body.Cc)
 	}
-	fmt.Fprintf(&msg, "Subject: %s\r\nDate: %s\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n%s",
-		sanitizeHeader(body.Subject), time.Now().Format(time.RFC1123Z), body.Text)
+	fmt.Fprintf(&msg, "Subject: %s\r\nDate: %s\r\n", sanitizeHeader(body.Subject), time.Now().Format(time.RFC1123Z))
+	if len(atts) == 0 {
+		fmt.Fprintf(&msg, "Content-Type: text/plain; charset=utf-8\r\n\r\n%s", body.Text)
+	} else {
+		boundary := fmt.Sprintf("cal-%d", time.Now().UnixNano())
+		fmt.Fprintf(&msg, "MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=%q\r\n\r\n", boundary)
+		fmt.Fprintf(&msg, "--%s\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n%s\r\n", boundary, body.Text)
+		for _, a := range atts {
+			mime := a.mime
+			if mime == "" {
+				mime = "application/octet-stream"
+			}
+			fmt.Fprintf(&msg, "--%s\r\nContent-Type: %s; name=%q\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename=%q\r\n\r\n",
+				boundary, mime, sanitizeHeader(a.name), sanitizeHeader(a.name))
+			encoded := base64.StdEncoding.EncodeToString(a.data)
+			for i := 0; i < len(encoded); i += 76 {
+				end := i + 76
+				if end > len(encoded) {
+					end = len(encoded)
+				}
+				msg.WriteString(encoded[i:end] + "\r\n")
+			}
+		}
+		fmt.Fprintf(&msg, "--%s--\r\n", boundary)
+	}
 
 	addr := fmt.Sprintf("%s:%d", acct.SMTPHost, acct.SMTPPort)
 	var client *smtp.Client

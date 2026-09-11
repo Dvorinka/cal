@@ -2,22 +2,37 @@ import { CalendarDays } from "lucide-react";
 import { useState } from "react";
 import { usePlanner } from "../stores/planner";
 
+// Capacitor webviews run on capacitor://localhost (iOS) or http://localhost
+// (Android) — the API lives elsewhere, so native builds must ask for a server.
+const isNative = typeof window !== "undefined" &&
+  (window.location.protocol === "capacitor:" ||
+    window.location.protocol === "ionic:" ||
+    (window as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.() === true);
+
 export function AuthPanel() {
   const login = usePlanner((state) => state.login);
   const register = usePlanner((state) => state.register);
+  const api = usePlanner((state) => state.api);
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [server, setServer] = useState(api.remote || "");
+  const [showServer, setShowServer] = useState(isNative || !!api.remote);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setError("");
+    if (isNative && !server.trim()) {
+      setError("Enter your Cal server address (e.g. https://cal.example.com)");
+      return;
+    }
     setBusy(true);
     try {
-      if (mode === "login") await login(email, password);
-      else await register(email, password);
+      const target = server.trim().replace(/\/+$/, "");
+      if (mode === "login") await login(email, password, target);
+      else await register(email, password, target);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");
     } finally {
@@ -36,6 +51,22 @@ export function AuthPanel() {
           <p>Your self-hosted planner. Tasks, notes, links and holidays in one quiet calendar.</p>
         </div>
         <form onSubmit={submit} className="auth-form">
+          {showServer && (
+            <label className="field">
+              <span>Server</span>
+              <input
+                className="input"
+                type="url"
+                inputMode="url"
+                autoCapitalize="none"
+                autoCorrect="off"
+                placeholder="https://cal.example.com"
+                value={server}
+                onChange={(event) => setServer(event.target.value)}
+                required={isNative}
+              />
+            </label>
+          )}
           <label className="field">
             <span>Email</span>
             <input
@@ -69,6 +100,12 @@ export function AuthPanel() {
           <button type="button" onClick={() => setMode(mode === "login" ? "register" : "login")}>
             {mode === "login" ? "Create an account" : "Sign in"}
           </button>
+          {!isNative && !showServer && (
+            <>
+              {" · "}
+              <button type="button" onClick={() => setShowServer(true)}>other server</button>
+            </>
+          )}
         </p>
       </section>
     </main>

@@ -3,8 +3,8 @@
 // read, reply, flag, bin — without the bloat.
 
 import type { MailAccount, MailMessage, MailSummary } from "@cal/api-client";
-import { Inbox, Mail, PenSquare, Plus, RefreshCw, Send, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Inbox, Mail, Paperclip, PenSquare, Plus, RefreshCw, Send, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { usePlanner } from "../stores/planner";
 
@@ -310,14 +310,34 @@ function ComposeDialog({ account, replyTo, onClose, onSent }: { account: MailAcc
   const [to, setTo] = useState(replyTo?.from ?? "");
   const [subject, setSubject] = useState(replyTo ? `Re: ${replyTo.subject}` : "");
   const [text, setText] = useState("");
+  const [files, setFiles] = useState<{ name: string; orig: string }[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+
+  async function attach(list: FileList | null) {
+    if (!list?.length) return;
+    setUploading(true);
+    setErr("");
+    try {
+      for (const f of Array.from(list)) {
+        const out = await api.upload(f);
+        setFiles((cur) => [...cur, { name: out.name, orig: f.name }]);
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
 
   async function send() {
     setBusy(true);
     setErr("");
     try {
-      await api.mailSend(account.id, { to, subject, text });
+      await api.mailSend(account.id, { to, subject, text, attachments: files.map((f) => f.name) });
       onSent();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Send failed");
@@ -333,10 +353,25 @@ function ComposeDialog({ account, replyTo, onClose, onSent }: { account: MailAcc
         <label className="field"><span>To</span><input value={to} onChange={(e) => setTo(e.target.value)} required /></label>
         <label className="field"><span>Subject</span><input value={subject} onChange={(e) => setSubject(e.target.value)} /></label>
         <textarea className="mail-compose" rows={10} value={text} onChange={(e) => setText(e.target.value)} placeholder="Write…" />
+        {files.length > 0 && (
+          <div className="mail-attachments">
+            {files.map((f) => (
+              <span key={f.name} className="chip">
+                <Paperclip size={11} /> {f.orig}
+                <button type="button" className="chip-x" aria-label={`Remove ${f.orig}`} onClick={() => setFiles((cur) => cur.filter((x) => x.name !== f.name))}>×</button>
+              </span>
+            ))}
+          </div>
+        )}
+        <input ref={fileRef} type="file" multiple hidden onChange={(e) => void attach(e.target.files)} />
         {err && <p className="panel-note" style={{ color: "var(--c-red)" }}>{err}</p>}
         <div className="mail-dialog-actions">
+          <button type="button" className="btn btn-secondary" onClick={() => fileRef.current?.click()} disabled={uploading}>
+            <Paperclip size={13} /> {uploading ? "Uploading…" : "Attach"}
+          </button>
+          <span style={{ flex: 1 }} />
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-          <button type="button" className="btn btn-primary" disabled={busy || !to} onClick={() => void send()}>
+          <button type="button" className="btn btn-primary" disabled={busy || !to || uploading} onClick={() => void send()}>
             <Send size={13} /> {busy ? "Sending…" : "Send"}
           </button>
         </div>

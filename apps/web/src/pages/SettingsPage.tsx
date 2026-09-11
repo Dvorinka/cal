@@ -210,10 +210,11 @@ export function SettingsPage() {
     }
   }
 
-  const widgetUrl = `${location.origin}/widget/today?token=${settings.widgetToken}`;
-  const icsUrl = `${location.origin}/api/feed.ics?token=${settings.widgetToken}`;
+  const origin = api.remote || location.origin;
+  const widgetUrl = `${origin}/widget/today?token=${settings.widgetToken}`;
+  const icsUrl = `${origin}/api/feed.ics?token=${settings.widgetToken}`;
   const mcpConfig = JSON.stringify(
-    { mcpServers: { cal: { url: `${location.origin}/api/mcp`, headers: { Authorization: `Bearer ${settings.apiToken}` } } } },
+    { mcpServers: { cal: { url: `${origin}/api/mcp`, headers: { Authorization: `Bearer ${settings.apiToken}` } } } },
     null,
     2,
   );

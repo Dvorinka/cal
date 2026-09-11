@@ -1,6 +1,7 @@
-// SharedBoardPage — public read-only board at /board/:token. No auth.
+// SharedBoardPage — public board at /board/:token. No auth. When the link was
+// created with edit rights, cards get a column picker; otherwise view-only.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { CalApi } from "@cal/api-client";
 
@@ -10,10 +11,24 @@ export function SharedBoardPage() {
   const { token } = useParams();
   const [board, setBoard] = useState<Awaited<ReturnType<typeof api.sharedBoard>>>();
   const [err, setErr] = useState(false);
+  const [busy, setBusy] = useState("");
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (token) void api.sharedBoard(token).then(setBoard).catch(() => setErr(true));
   }, [token]);
+
+  useEffect(load, [load]);
+
+  async function move(cardId: string, columnId: string) {
+    if (!token || !columnId) return;
+    setBusy(cardId);
+    try {
+      await api.sharedBoardMove(token, cardId, columnId, 1e9);
+      load();
+    } finally {
+      setBusy("");
+    }
+  }
 
   if (err) return <div className="shared-board"><h1>Not found</h1><p>This board link is revoked or wrong.</p></div>;
   if (!board) return <div className="shared-board"><p>Loading…</p></div>;
@@ -30,6 +45,7 @@ export function SharedBoardPage() {
         <h1>{board.name}</h1>
         {board.description && <p className="shared-desc">{board.description}</p>}
         {board.targetDate && <p className="shared-target">Target: {board.targetDate}</p>}
+        {board.edit && <p className="shared-desc">You can move cards between columns.</p>}
       </header>
       <div className="kanban shared-kanban">
         {board.columns.map((col) => (
@@ -39,13 +55,27 @@ export function SharedBoardPage() {
               <span className="kanban-count">{(byCol.get(col.id) ?? []).length}</span>
             </header>
             <div className="kanban-cards">
-              {(byCol.get(col.id) ?? []).map((card, i) => (
-                <div key={i} className={`kanban-card ${card.completed ? "done" : ""}`}>
+              {(byCol.get(col.id) ?? []).map((card) => (
+                <div key={card.id} className={`kanban-card ${card.completed ? "done" : ""}`}>
                   <span className="kanban-card-title">{card.title}</span>
                   <div className="kanban-card-meta">
                     {card.tags.slice(0, 3).map((t) => (
                       <span key={t} className="stream-tag">#{t}</span>
                     ))}
+                    {board.edit && (
+                      <select
+                        className="shared-move"
+                        value={card.columnId ?? ""}
+                        disabled={busy === card.id}
+                        aria-label={`Move ${card.title}`}
+                        onChange={(e) => void move(card.id, e.target.value)}
+                      >
+                        <option value="" disabled>Move to…</option>
+                        {board.columns.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                 </div>
               ))}

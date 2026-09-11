@@ -1807,25 +1807,45 @@ func (s *Store) SetBoardMeta(ctx context.Context, userID, id string, desc *strin
 	return err
 }
 
-func (s *Store) SetBoardShare(ctx context.Context, userID, id string, on bool) (string, error) {
+func (s *Store) SetBoardShare(ctx context.Context, userID, id string, on, edit bool) (string, error) {
 	var token string
 	if on {
 		token = newToken(20)
 	}
-	tag, err := s.db.Exec(ctx, `UPDATE boards SET share_token = $3 WHERE id = $1 AND user_id = $2`, id, userID, nilIfEmpty(token))
+	tag, err := s.db.Exec(ctx, `UPDATE boards SET share_token = $3, share_edit = $4 WHERE id = $1 AND user_id = $2`, id, userID, nilIfEmpty(token), edit && on)
 	if tag.RowsAffected() == 0 {
 		return "", ErrNotFound
 	}
 	return token, err
 }
 
+// SharedBoardOwner resolves a share token → owner + board for write-tier ops.
+func (s *Store) SharedBoardOwner(ctx context.Context, token string) (string, struct {
+	ID       string
+	Editable bool
+}, error) {
+	var out struct {
+		ID       string
+		Editable bool
+	}
+	var userID string
+	err := s.db.QueryRow(ctx,
+		`SELECT user_id::text, id::text, share_edit FROM boards WHERE share_token = $1`, token).
+		Scan(&userID, &out.ID, &out.Editable)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", out, ErrNotFound
+	}
+	return userID, out, err
+}
+
 // SharedBoard resolves a public board token → name + columns + cards.
 func (s *Store) SharedBoard(ctx context.Context, token string) (map[string]any, error) {
 	var boardID, name, desc string
 	var target *string
+	var edit bool
 	err := s.db.QueryRow(ctx, `
-		SELECT id::text, name, description, target_date::text FROM boards WHERE share_token = $1`, token).
-		Scan(&boardID, &name, &desc, &target)
+		SELECT id::text, name, description, target_date::text, share_edit FROM boards WHERE share_token = $1`, token).
+		Scan(&boardID, &name, &desc, &target, &edit)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -1848,25 +1868,26 @@ func (s *Store) SharedBoard(ctx context.Context, token string) (map[string]any, 
 	}
 	colRows.Close()
 	cardRows, err := s.db.Query(ctx, `
-		SELECT column_id::text, title, completed, date::text, tags FROM entries
+		SELECT id::text, column_id::text, title, completed, date::text, tags FROM entries
 		WHERE board_id = $1 AND deleted_at IS NULL ORDER BY position NULLS LAST`, boardID)
 	if err != nil {
 		return nil, err
 	}
 	cards := []map[string]any{}
 	for cardRows.Next() {
+		var id string
 		var colID *string
 		var title, date string
 		var done bool
 		var tags []string
-		if err := cardRows.Scan(&colID, &title, &done, &date, &tags); err != nil {
+		if err := cardRows.Scan(&id, &colID, &title, &done, &date, &tags); err != nil {
 			cardRows.Close()
 			return nil, err
 		}
-		cards = append(cards, map[string]any{"columnId": colID, "title": title, "completed": done, "date": date, "tags": tags})
+		cards = append(cards, map[string]any{"id": id, "columnId": colID, "title": title, "completed": done, "date": date, "tags": tags})
 	}
 	cardRows.Close()
-	return map[string]any{"name": name, "description": desc, "targetDate": target, "columns": cols, "cards": cards}, nil
+	return map[string]any{"name": name, "description": desc, "targetDate": target, "edit": edit, "columns": cols, "cards": cards}, nil
 }
 
 // TagCounts — all tags with entry counts for the /tags page.

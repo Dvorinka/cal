@@ -193,11 +193,13 @@ export function BoardsPage() {
           type="button"
           className="btn btn-secondary btn-xs"
           onClick={() =>
-            void api.shareBoard(boardId, true).then(({ shareToken }) => {
-              const url = `${window.location.origin}/board/${shareToken}`;
+            void (async () => {
+              const edit = window.confirm("Editable link? OK = viewers can move cards, Cancel = view only");
+              const { shareToken } = await api.shareBoard(boardId, true, edit);
+              const url = `${api.remote || window.location.origin}/board/${shareToken}`;
               void navigator.clipboard.writeText(url);
-              toast("Public link copied — anyone with it can view the board");
-            })
+              toast(edit ? "Editable link copied — viewers can move cards" : "Public link copied — view only");
+            })()
           }
         >
           <Link2 size={12} /> Share

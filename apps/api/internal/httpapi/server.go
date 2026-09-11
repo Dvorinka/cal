@@ -39,9 +39,19 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	router.Use(gin.Recovery())
 	router.Use(securityHeaders())
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{env("WEB_ORIGIN", "http://localhost:5173")},
-		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Content-Type"},
+		AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders: []string{"Content-Type", "Authorization"},
+		AllowOriginFunc: func(origin string) bool {
+			// Web origin stays explicit; Capacitor/Ionic webview schemes are
+			// app-only — browsers can't send them as Origin.
+			if origin == env("WEB_ORIGIN", "http://localhost:5173") {
+				return true
+			}
+			if strings.HasPrefix(origin, "capacitor://") || strings.HasPrefix(origin, "ionic://") {
+				return true
+			}
+			return strings.HasPrefix(origin, "http://localhost") || strings.HasPrefix(origin, "https://localhost")
+		},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
@@ -163,6 +173,7 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	router.GET("/api/widget/today", server.widgetToday)
 	router.GET("/api/shared/files/:token", server.serveSharedFile)
 	router.GET("/api/shared/boards/:token", server.serveSharedBoard)
+	router.POST("/api/shared/boards/:token/cards/:id/move", server.sharedBoardMove)
 	router.GET("/api/feed.ics", server.exportICS)
 	router.POST("/api/mcp", newRateLimiter(60, time.Minute), server.mcp)
 	router.POST("/api/intake", newRateLimiter(10, time.Minute), server.intake)
@@ -187,10 +198,11 @@ func (s *Server) register(c *gin.Context) {
 		c.String(http.StatusConflict, "account already exists")
 		return
 	}
-	if !s.setSession(c, user.ID) {
+	session, ok := s.setSession(c, user.ID)
+	if !ok {
 		return
 	}
-	c.JSON(http.StatusOK, user)
+	c.JSON(http.StatusOK, gin.H{"user": user, "session": session})
 }
 
 func (s *Server) login(c *gin.Context) {
@@ -204,10 +216,11 @@ func (s *Server) login(c *gin.Context) {
 		c.String(http.StatusUnauthorized, "invalid credentials")
 		return
 	}
-	if !s.setSession(c, user.ID) {
+	session, ok := s.setSession(c, user.ID)
+	if !ok {
 		return
 	}
-	c.JSON(http.StatusOK, user)
+	c.JSON(http.StatusOK, gin.H{"user": user, "session": session})
 }
 
 func (s *Server) logout(c *gin.Context) {
@@ -476,8 +489,14 @@ func (s *Server) holidayCountries(c *gin.Context) {
 }
 
 func (s *Server) requireUser(c *gin.Context) {
+	// Cookie first (web), then Bearer header (native apps — WebView cookies
+	// are cross-origin SameSite=Lax and never arrive), then ?session= for
+	// <img src> / file URLs that can't carry headers.
 	sessionID, err := c.Cookie("cal_session")
 	if err != nil || sessionID == "" {
+		sessionID = bearerOrQuery(c)
+	}
+	if sessionID == "" {
 		c.String(http.StatusUnauthorized, "authentication required")
 		c.Abort()
 		return
@@ -494,15 +513,15 @@ func (s *Server) requireUser(c *gin.Context) {
 	c.Next()
 }
 
-func (s *Server) setSession(c *gin.Context, userID string) bool {
+func (s *Server) setSession(c *gin.Context, userID string) (string, bool) {
 	sessionID, err := s.store.CreateSession(c.Request.Context(), userID, c.Request.UserAgent())
 	if err != nil {
 		c.String(http.StatusInternalServerError, "failed to create session")
 		c.Abort()
-		return false
+		return "", false
 	}
 	s.writeSessionCookie(c, sessionID, int((30 * 24 * time.Hour).Seconds()))
-	return true
+	return sessionID, true
 }
 
 func (s *Server) writeSessionCookie(c *gin.Context, value string, maxAge int) {
@@ -515,6 +534,14 @@ func (s *Server) writeSessionCookie(c *gin.Context, value string, maxAge int) {
 		Secure:   s.secure,
 		SameSite: http.SameSiteLaxMode,
 	})
+}
+
+func bearerOrQuery(c *gin.Context) string {
+	h := c.GetHeader("Authorization")
+	if strings.HasPrefix(h, "Bearer ") {
+		return strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
+	}
+	return strings.TrimSpace(c.Query("session"))
 }
 
 func currentUser(c *gin.Context) store.User {
