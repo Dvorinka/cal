@@ -8,8 +8,10 @@
 
 services:
   cal:
+    # `docker compose up -d` pulls the release image; `--build` builds locally.
     build: .
-    image: cal:latest
+    image: ghcr.io/dvorinka/cal:latest
+    pull_policy: missing
     environment:
       # Uncomment to use the bundled db service below (or any external PG):
       # DATABASE_URL: postgres://cal:cal@db:5432/cal?sslmode=disable
