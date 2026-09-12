@@ -1,6 +1,5 @@
 import type { DashboardStats, Habit, TimeSummary, WeekReview } from "@cal/api-client";
 import {
-  AlarmClock,
   Cake,
   Check,
   Crosshair,
@@ -444,10 +443,7 @@ export function TodayPage() {
 
             {dash && dash.deadlines.length > 0 && (
               <section className="panel">
-                <h3>
-                  <AlarmClock size={13} style={{ verticalAlign: "-2px", marginRight: 5 }} />
-                  Upcoming deadlines
-                </h3>
+                <h3>Upcoming deadlines</h3>
                 <ul className="check-list">
                   {dash.deadlines.map((e) => {
                     const daysLeft = Math.round((new Date(`${e.date}T12:00:00`).getTime() - new Date(`${today}T12:00:00`).getTime()) / 86400000);

@@ -76,12 +76,21 @@ export function LinksPage() {
                   <a href={link.linkUrl} target="_blank" rel="noopener noreferrer" className="link-thumb">
                     {/* Fallback sits under the image — a broken og:image hides, the mark shows through. */}
                     <span className="link-thumb-plain">
-                      {link.linkFavicon ? (
-                        <img src={link.linkFavicon} alt="" className="link-favicon link-favicon-lg" />
-                      ) : domain ? (
+                      {/* Letter/icon is the base layer; the favicon sits on top
+                          and hides on error, so a dead favicon URL degrades to
+                          the letter instead of a broken-image glyph. */}
+                      {domain ? (
                         <span className="link-thumb-letter">{domain.replace(/^www\./, "")[0].toUpperCase()}</span>
                       ) : (
                         <Link2 size={24} />
+                      )}
+                      {link.linkFavicon && (
+                        <img
+                          src={link.linkFavicon}
+                          alt=""
+                          className="link-favicon link-favicon-lg"
+                          onError={(e) => { e.currentTarget.style.display = "none"; }}
+                        />
                       )}
                     </span>
                     {link.linkImage && (
@@ -142,11 +151,19 @@ export function LinksPage() {
               const domain = linkDomain(link.linkUrl);
               return (
                 <li key={link.id} className={`link-row color-${link.color} ${link.watched ? "watched" : ""}`}>
-                  {link.linkFavicon ? (
-                    <img src={link.linkFavicon} alt="" className="link-favicon" />
-                  ) : (
-                    <span className="link-mark">{domain ? domain[0].toUpperCase() : <Link2 size={14} />}</span>
-                  )}
+                  {/* Mark under the favicon, same overlay trick as the cards —
+                      a 404 favicon falls back to the domain letter. */}
+                  <span className="link-mark">
+                    {domain ? domain[0].toUpperCase() : <Link2 size={14} />}
+                    {link.linkFavicon && (
+                      <img
+                        src={link.linkFavicon}
+                        alt=""
+                        className="link-favicon"
+                        onError={(e) => { e.currentTarget.style.display = "none"; }}
+                      />
+                    )}
+                  </span>
                   <button type="button" className="row-title" onClick={() => openEdit(link)}>
                     {link.title}
                     {domain && <span className="link-domain">{domain}</span>}

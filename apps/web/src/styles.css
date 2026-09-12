@@ -465,6 +465,10 @@ button {
   padding: 1px 5px;
   background: var(--bg-overlay);
 }
+@media (pointer: coarse) {
+  .search-box kbd { display: none; }
+  .editor .hint { display: none; }
+}
 
 .side-label {
   display: flex;
@@ -1135,10 +1139,12 @@ button {
 
 .palette {
   width: min(560px, 100%);
+  max-height: calc(100dvh - 12vh - 32px);
   background: var(--bg-overlay);
   border-radius: var(--r-xl);
   box-shadow: var(--shadow-3);
   overflow: hidden;
+  overflow-y: auto;
 }
 .palette-input {
   display: flex;
@@ -1179,6 +1185,9 @@ button {
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 .palette-item.active {
   background: var(--hover);
@@ -1603,6 +1612,7 @@ button {
 .task-list {
   list-style: none;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 2px;
 }
 .check-list li,
@@ -2632,7 +2642,13 @@ button {
 .link-yt { color: #e02f2f; vertical-align: -2px; margin-right: 4px; flex: none; }
 .link-card { transition: border-color .12s, transform .12s, box-shadow .12s; }
 .link-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.18); }
-.link-thumb-plain { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: var(--text-3); }
+.link-thumb-plain { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: var(--text-3); position: relative; }
+/* Favicon overlays the letter fallback — absolute so a dead URL can hide and
+   let the letter show through. The doubled class beats .link-thumb img's
+   width:100% stretch. */
+.link-thumb-plain img.link-favicon-lg { position: absolute; width: 40px; height: 40px; }
+.link-mark { position: relative; }
+.link-mark img.link-favicon { position: absolute; inset: 0; margin: auto; }
 .link-row.watched { opacity: .62; }
 .link-favicon { width: 22px; height: 22px; }
 .link-card-body { padding: 10px 12px; }

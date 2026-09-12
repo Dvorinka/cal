@@ -17,6 +17,7 @@ interface GHItem {
 
 export function GitHubPage() {
   const api = usePlanner((s) => s.api);
+  const settings = usePlanner((s) => s.settings);
   const [boards, setBoards] = useState<{ id: string; name: string }[]>([]);
   const toast = usePlanner((s) => s.toast);
   const [items, setItems] = useState<GHItem[]>([]);
@@ -25,13 +26,14 @@ export function GitHubPage() {
   const [loading, setLoading] = useState(false);
 
   const load = () => {
+    void api.boards().then(setBoards).catch(reportErr("Could not load boards"));
+    if (!settings.githubToken) { setErr(true); return; }
     setLoading(true);
     void api.githubInbox()
       .then((x) => { setItems(x); setErr(false); })
       .catch(() => setErr(true))
       .finally(() => setLoading(false));
     void api.githubActivity().then(setActivity).catch(() => {});
-    void api.boards().then(setBoards).catch(reportErr("Could not load boards"));
   };
   useEffect(load, [api]);
 
