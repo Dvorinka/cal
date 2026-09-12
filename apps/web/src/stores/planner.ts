@@ -212,10 +212,10 @@ export const usePlanner = create<PlannerState>((set, get) => ({
   async importLocalAccounts() {
     try {
       const [local, remote] = await Promise.all([nativeMail.exportAccounts(), get().api.mailAccounts()]);
-      const seen = new Set(remote.map((a) => `${a.email}|${a.imapHost}`));
-      let imported = 0;
+      const seen = new Set(remote.map((a) => `${a.email}|${a.imapHost}|${a.imapPort}`));
+      let imported = 0, failed = 0;
       for (const a of local) {
-        if (seen.has(`${a.email}|${a.imapHost}`)) continue;
+        if (seen.has(`${a.email}|${a.imapHost}|${a.imapPort}`)) continue;
         try {
           await get().api.createMailAccount({
             name: a.name, email: a.email, imapHost: a.imapHost, imapPort: a.imapPort,
@@ -224,11 +224,15 @@ export const usePlanner = create<PlannerState>((set, get) => ({
           });
           imported++;
         } catch {
-          // One bad account shouldn't sink the rest.
+          failed++; // one bad account shouldn't sink the rest — or the flag
         }
       }
-      clearImport();
-      get().toast(imported > 0 ? `Imported ${imported} mail account${imported === 1 ? "" : "s"}` : "No new mail accounts to import");
+      if (failed === 0) clearImport(); // keep offering when something failed
+      get().toast(
+        imported > 0 || failed > 0
+          ? `Imported ${imported} mail account${imported === 1 ? "" : "s"}${failed ? `, ${failed} failed` : ""}`
+          : "No new mail accounts to import",
+      );
     } catch (error) {
       get().toast(error instanceof Error ? error.message : "Import failed");
     }

@@ -617,7 +617,7 @@ paths:
       summary: Remove a mail account
   /mail/accounts/{id}/test:
     post:
-      summary: Verify IMAP login
+      summary: Verify IMAP login + SMTP auth
   /mail/{id}/mailboxes:
     get:
       summary: IMAP mailboxes for an account

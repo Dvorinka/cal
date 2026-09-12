@@ -293,6 +293,7 @@ function AccountDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
   async function save() {
     setBusy(true);
     setErr("");
+    let savedErr = "";
     try {
       const acct = await mail.addAccount({
         name: f.name, email: f.email,
@@ -301,13 +302,14 @@ function AccountDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
         username: f.username, password: f.password, insecure: f.insecure,
       });
       // Verify the credentials actually log in before declaring victory.
+      // The check covers IMAP and SMTP — keep the message generic.
       await mail.testAccount(acct.id).catch((e: Error) => {
-        setErr(`Saved, but IMAP login failed: ${e.message}`);
+        savedErr = `Saved, but the login check failed: ${e.message}`;
         throw e;
       });
       onSaved();
     } catch (e) {
-      if (!err) setErr(e instanceof Error ? e.message : "Failed");
+      setErr(savedErr || (e instanceof Error ? e.message : "Failed"));
     } finally {
       setBusy(false);
     }
@@ -329,9 +331,9 @@ function AccountDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
         </div>
         <label className="field"><span>Username (blank = email)</span><input value={f.username} onChange={set("username")} /></label>
         <label className="field"><span>Password / app token</span><input type="password" value={f.password} onChange={set("password")} required /></label>
-        <label className="field" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <input type="checkbox" checked={f.insecure} onChange={(e) => setF({ ...f, insecure: e.target.checked })} style={{ width: "auto" }} />
-          <span>Allow self-signed certificates (self-hosted mail)</span>
+        <label className="field field-check">
+          <input type="checkbox" checked={f.insecure} onChange={(e) => setF({ ...f, insecure: e.target.checked })} />
+          <span>Allow self-signed certificates (unsafe — for self-hosted mail)</span>
         </label>
         {err && <p className="panel-note" style={{ color: "var(--c-red)" }}>{err}</p>}
         <div className="mail-dialog-actions">
@@ -345,10 +347,18 @@ function AccountDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
   );
 }
 
+// bareAddr pulls the addr-spec out of a display-name header value —
+// "Jane <jane@x>" → "jane@x". The server's RCPT list takes the raw To field,
+// so a display name there would send a malformed envelope.
+function bareAddr(from?: string): string {
+  if (!from) return "";
+  return from.match(/<([^>]+)>/)?.[1] ?? from;
+}
+
 function ComposeDialog({ account, replyTo, onClose, onSent }: { account: MailAccount; replyTo: MailMessage | null; onClose: () => void; onSent: () => void }) {
   const api = usePlanner((s) => s.api);
   const mail = mailBackend(api);
-  const [to, setTo] = useState(replyTo?.from ?? "");
+  const [to, setTo] = useState(bareAddr(replyTo?.from));
   const [subject, setSubject] = useState(replyTo ? `Re: ${replyTo.subject}` : "");
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
