@@ -26,7 +26,12 @@ import {
 } from "../lib/offline";
 import { ApiError } from "@cal/api-client";
 import { enqueue, isOfflineError, newTempId, readQueue, writeQueue } from "../lib/opqueue";
+import { clearImport, isLocalMode, markLocalMode, wantsImport } from "../lib/local";
+import { nativeMail } from "../lib/mail";
 import { useUi } from "./ui";
+
+// Synthetic identity for local mode — there is no account, just this device.
+const LOCAL_USER: User = { id: "local", email: "local device" };
 
 export interface Toast {
   id: number;
@@ -50,6 +55,7 @@ function pushWidgetConfig(settings: Settings) {
 interface PlannerState {
   api: CalApi;
   user?: User;
+  mode: "server" | "local";
   booted: boolean;
   entries: Entry[];
   feedEvents: FeedEvent[];
@@ -67,6 +73,10 @@ interface PlannerState {
   login: (email: string, password: string, server?: string) => Promise<void>;
   register: (email: string, password: string, server?: string) => Promise<void>;
   logout: () => Promise<void>;
+  enterLocal: () => void;
+  exitLocal: () => void;
+  /** Push on-device mail accounts up to the server just logged into. */
+  importLocalAccounts: () => Promise<void>;
   loadEntries: (params: { from?: string; to?: string; q?: string; workspace?: string }) => Promise<void>;
   workspaces: Workspace[];
   loadWorkspaces: () => Promise<void>;
@@ -104,6 +114,7 @@ interface PlannerState {
 
 export const usePlanner = create<PlannerState>((set, get) => ({
   api: new CalApi(),
+  mode: isLocalMode() ? "local" : "server",
   entries: readCachedEntries(),
   feedEvents: [],
   feeds: [],
@@ -120,6 +131,11 @@ export const usePlanner = create<PlannerState>((set, get) => ({
   toasts: [],
 
   async bootstrap() {
+    if (isLocalMode()) {
+      // No server, no session — mail talks to the provider via the plugin.
+      set({ user: LOCAL_USER, mode: "local", booted: true });
+      return;
+    }
     try {
       const user = await get().api.me();
       const settings = await get().api.settings();
@@ -131,6 +147,7 @@ export const usePlanner = create<PlannerState>((set, get) => ({
       void get().loadCountries();
       void get().loadWorkspaces();
       void get().flushQueue();
+      void offerImport();
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         set({ user: undefined, booted: true });
@@ -152,6 +169,7 @@ export const usePlanner = create<PlannerState>((set, get) => ({
     set({ user, settings, error: undefined, offline: false });
     useUi.getState().applyDefaultView(settings.defaultView);
     void get().loadCountries();
+    void offerImport();
   },
 
   async register(email, password, server) {
@@ -164,15 +182,55 @@ export const usePlanner = create<PlannerState>((set, get) => ({
     set({ user, settings, error: undefined, offline: false });
     useUi.getState().applyDefaultView(settings.defaultView);
     void get().loadCountries();
+    void offerImport();
   },
 
   async logout() {
+    if (get().mode === "local") {
+      get().exitLocal();
+      return;
+    }
     try {
       await get().api.logout();
     } finally {
       get().api.setSession("");
       clearCachedUser();
       set({ user: undefined, entries: [], holidays: [] });
+    }
+  },
+
+  enterLocal() {
+    markLocalMode(true);
+    set({ user: LOCAL_USER, mode: "local", entries: [], error: undefined });
+  },
+
+  exitLocal() {
+    markLocalMode(false);
+    set({ user: undefined, mode: "server" });
+  },
+
+  async importLocalAccounts() {
+    try {
+      const [local, remote] = await Promise.all([nativeMail.exportAccounts(), get().api.mailAccounts()]);
+      const seen = new Set(remote.map((a) => `${a.email}|${a.imapHost}`));
+      let imported = 0;
+      for (const a of local) {
+        if (seen.has(`${a.email}|${a.imapHost}`)) continue;
+        try {
+          await get().api.createMailAccount({
+            name: a.name, email: a.email, imapHost: a.imapHost, imapPort: a.imapPort,
+            smtpHost: a.smtpHost, smtpPort: a.smtpPort, username: a.username, password: a.password,
+            insecure: a.insecure,
+          });
+          imported++;
+        } catch {
+          // One bad account shouldn't sink the rest.
+        }
+      }
+      clearImport();
+      get().toast(imported > 0 ? `Imported ${imported} mail account${imported === 1 ? "" : "s"}` : "No new mail accounts to import");
+    } catch (error) {
+      get().toast(error instanceof Error ? error.message : "Import failed");
     }
   },
 
@@ -599,6 +657,26 @@ export const usePlanner = create<PlannerState>((set, get) => ({
     set({ toasts: get().toasts.filter((toast) => toast.id !== id) });
   },
 }));
+
+// offerImport runs after a successful server login: if the app was used in
+// local mode, suggest pushing the on-device mail accounts up to the server.
+// Sending credentials needs an explicit tap — a toast action, never automatic.
+async function offerImport() {
+  if (!wantsImport()) return;
+  try {
+    const local = await nativeMail.accounts();
+    if (local.length === 0) {
+      clearImport();
+      return;
+    }
+    usePlanner.getState().toast(`Import ${local.length} local mail account${local.length === 1 ? "" : "s"} to this server?`, {
+      label: "Import",
+      run: () => void usePlanner.getState().importLocalAccounts(),
+    });
+  } catch {
+    // Plugin unavailable — nothing to offer.
+  }
+}
 
 // byName keeps the people list alphabetical regardless of insert order.
 function byName(a: Person, b: Person): number {

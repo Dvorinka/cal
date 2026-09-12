@@ -7,6 +7,7 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -36,6 +37,9 @@ func (s *Server) imapDial(ctx context.Context, userID, accountID string) (*imapc
 	}
 	addr := fmt.Sprintf("%s:%d", acct.IMAPHost, acct.IMAPPort)
 	opts := &imapclient.Options{Dialer: &net.Dialer{Timeout: 12 * time.Second}}
+	if acct.Insecure {
+		opts.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+	}
 	var client *imapclient.Client
 	if acct.IMAPPort == 143 {
 		client, err = imapclient.DialStartTLS(addr, opts)
@@ -73,12 +77,15 @@ func (s *Server) createMailAccount(c *gin.Context) {
 		SMTPPort int    `json:"smtpPort"`
 		Username string `json:"username"`
 		Password string `json:"password"`
+		Insecure bool   `json:"insecure"`
 	}
 	if !bind(c, &body) {
 		c.String(http.StatusBadRequest, "invalid")
 		return
 	}
 	body.Email = strings.TrimSpace(body.Email)
+	body.IMAPHost = strings.TrimSpace(body.IMAPHost)
+	body.SMTPHost = strings.TrimSpace(body.SMTPHost)
 	if body.Username == "" {
 		body.Username = body.Email
 	}
@@ -88,15 +95,24 @@ func (s *Server) createMailAccount(c *gin.Context) {
 	if body.SMTPPort == 0 {
 		body.SMTPPort = 465
 	}
+	if body.IMAPPort < 1 || body.IMAPPort > 65535 || body.SMTPPort < 1 || body.SMTPPort > 65535 {
+		c.String(http.StatusBadRequest, "port out of range")
+		return
+	}
 	if !strings.Contains(body.Email, "@") || body.IMAPHost == "" || body.SMTPHost == "" || body.Password == "" {
 		c.String(http.StatusBadRequest, "email, hosts and password required")
+		return
+	}
+	// These values land in RFC822 headers later — refuse CRLF up front.
+	if strings.ContainsAny(body.Email+body.Name+body.IMAPHost+body.SMTPHost+body.Username, "\r\n") {
+		c.String(http.StatusBadRequest, "invalid characters")
 		return
 	}
 	acct, err := s.store.CreateMailAccount(c.Request.Context(), currentUser(c).ID, store.MailAccount{
 		Name: body.Name, Email: body.Email,
 		IMAPHost: body.IMAPHost, IMAPPort: body.IMAPPort,
 		SMTPHost: body.SMTPHost, SMTPPort: body.SMTPPort,
-		Username: body.Username,
+		Username: body.Username, Insecure: body.Insecure,
 	}, body.Password)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "failed")
@@ -117,14 +133,31 @@ func (s *Server) deleteMailAccount(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// testMailAccount verifies IMAP credentials by dialing + logging in.
+// testMailAccount verifies credentials both ways: IMAP login and SMTP auth.
+// A send-only failure shouldn't pass as "ok".
 func (s *Server) testMailAccount(c *gin.Context) {
-	client, _, err := s.imapDial(c.Request.Context(), currentUser(c).ID, c.Param("id"))
+	userID := currentUser(c).ID
+	client, acct, err := s.imapDial(c.Request.Context(), userID, c.Param("id"))
 	if err != nil {
 		c.String(http.StatusBadGateway, err.Error())
 		return
 	}
-	defer client.Close()
+	client.Close()
+	_, password, err := s.store.MailCredentials(c.Request.Context(), userID, c.Param("id"))
+	if err != nil {
+		c.String(http.StatusBadGateway, "smtp lookup failed")
+		return
+	}
+	smtpClient, err := smtpDial(acct)
+	if err != nil {
+		c.String(http.StatusBadGateway, "smtp dial failed")
+		return
+	}
+	defer smtpClient.Close()
+	if err := smtpClient.Auth(sasl.NewPlainClient("", acct.Username, password)); err != nil {
+		c.String(http.StatusBadGateway, "smtp auth failed")
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -416,9 +449,9 @@ func (s *Server) mailSend(c *gin.Context) {
 	}
 
 	var msg bytes.Buffer
-	fmt.Fprintf(&msg, "From: %s\r\nTo: %s\r\n", acct.Email, body.To)
+	fmt.Fprintf(&msg, "From: %s\r\nTo: %s\r\n", sanitizeHeader(acct.Email), sanitizeHeader(body.To))
 	if body.Cc != "" {
-		fmt.Fprintf(&msg, "Cc: %s\r\n", body.Cc)
+		fmt.Fprintf(&msg, "Cc: %s\r\n", sanitizeHeader(body.Cc))
 	}
 	fmt.Fprintf(&msg, "Subject: %s\r\nDate: %s\r\n", sanitizeHeader(body.Subject), time.Now().Format(time.RFC1123Z))
 	if len(atts) == 0 {
@@ -446,13 +479,7 @@ func (s *Server) mailSend(c *gin.Context) {
 		fmt.Fprintf(&msg, "--%s--\r\n", boundary)
 	}
 
-	addr := fmt.Sprintf("%s:%d", acct.SMTPHost, acct.SMTPPort)
-	var client *smtp.Client
-	if acct.SMTPPort == 465 {
-		client, err = smtp.DialTLS(addr, nil)
-	} else {
-		client, err = smtp.DialStartTLS(addr, nil)
-	}
+	client, err := smtpDial(acct)
 	if err != nil {
 		c.String(http.StatusBadGateway, "smtp dial failed")
 		return
@@ -468,6 +495,20 @@ func (s *Server) mailSend(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusAccepted)
+}
+
+// smtpDial connects with the port-driven rule: 465 → implicit TLS, anything
+// else → STARTTLS. acct.Insecure skips chain verification (self-hosted mail).
+func smtpDial(acct store.MailAccount) (*smtp.Client, error) {
+	addr := fmt.Sprintf("%s:%d", acct.SMTPHost, acct.SMTPPort)
+	var tlsConf *tls.Config
+	if acct.Insecure {
+		tlsConf = &tls.Config{InsecureSkipVerify: true}
+	}
+	if acct.SMTPPort == 465 {
+		return smtp.DialTLS(addr, tlsConf)
+	}
+	return smtp.DialStartTLS(addr, tlsConf)
 }
 
 func sanitizeHeader(s string) string {

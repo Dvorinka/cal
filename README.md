@@ -50,7 +50,10 @@ own server, or can sign in to a server URL to share data between devices.
   and a token-gated MCP endpoint so AI assistants can drive your planner
 - **Everywhere** — offline-first PWA with a write queue, Android shell with a
   home-screen widget, Wails desktop app, share-target integration, global
-  `⌘K` palette, keyboard-first navigation
+  `⌘K` palette, keyboard-first navigation. The Android app can also run
+  **serverless**: local mode keeps only Mail and dials your IMAP/SMTP
+  provider directly from the device — accounts stay encrypted on-device and
+  can be imported to a server if you set one up later
 - **Contained** — cookie sessions, bcrypt passwords, login rate limiting,
   AES-256-GCM for stored credentials, SSRF-guarded outbound URLs, zero
   external services required

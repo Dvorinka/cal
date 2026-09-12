@@ -49,6 +49,10 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
+    // Jakarta Mail for Android — the CalMail plugin's IMAP/SMTP transport for
+    // local mode (device dials the provider directly; WebView has no TCP).
+    implementation "com.sun.mail:android-mail:1.6.7"
+    implementation "com.sun.mail:android-activation:1.6.7"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"

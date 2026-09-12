@@ -300,12 +300,13 @@ type MailAccount struct {
 	SMTPHost  string    `json:"smtpHost"`
 	SMTPPort  int       `json:"smtpPort"`
 	Username  string    `json:"username"`
+	Insecure  bool      `json:"insecure"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 
 func (s *Store) ListMailAccounts(ctx context.Context, userID string) ([]MailAccount, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT id::text, name, email, imap_host, imap_port, smtp_host, smtp_port, username, created_at
+		SELECT id::text, name, email, imap_host, imap_port, smtp_host, smtp_port, username, insecure_tls, created_at
 		FROM mail_accounts WHERE user_id = $1 ORDER BY created_at`, userID)
 	if err != nil {
 		return nil, err
@@ -314,7 +315,7 @@ func (s *Store) ListMailAccounts(ctx context.Context, userID string) ([]MailAcco
 	out := []MailAccount{}
 	for rows.Next() {
 		var a MailAccount
-		if err := rows.Scan(&a.ID, &a.Name, &a.Email, &a.IMAPHost, &a.IMAPPort, &a.SMTPHost, &a.SMTPPort, &a.Username, &a.CreatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.Email, &a.IMAPHost, &a.IMAPPort, &a.SMTPHost, &a.SMTPPort, &a.Username, &a.Insecure, &a.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, a)
@@ -328,10 +329,10 @@ func (s *Store) CreateMailAccount(ctx context.Context, userID string, a MailAcco
 		return a, err
 	}
 	err = s.db.QueryRow(ctx, `
-		INSERT INTO mail_accounts (user_id, name, email, imap_host, imap_port, smtp_host, smtp_port, username, password_enc)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		INSERT INTO mail_accounts (user_id, name, email, imap_host, imap_port, smtp_host, smtp_port, username, password_enc, insecure_tls)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING id::text, created_at`,
-		userID, a.Name, a.Email, a.IMAPHost, a.IMAPPort, a.SMTPHost, a.SMTPPort, a.Username, enc).
+		userID, a.Name, a.Email, a.IMAPHost, a.IMAPPort, a.SMTPHost, a.SMTPPort, a.Username, enc, a.Insecure).
 		Scan(&a.ID, &a.CreatedAt)
 	return a, err
 }
@@ -349,9 +350,9 @@ func (s *Store) MailCredentials(ctx context.Context, userID, id string) (MailAcc
 	var a MailAccount
 	var enc string
 	err := s.db.QueryRow(ctx, `
-		SELECT id::text, name, email, imap_host, imap_port, smtp_host, smtp_port, username, password_enc
+		SELECT id::text, name, email, imap_host, imap_port, smtp_host, smtp_port, username, password_enc, insecure_tls
 		FROM mail_accounts WHERE id = $1 AND user_id = $2`, id, userID).
-		Scan(&a.ID, &a.Name, &a.Email, &a.IMAPHost, &a.IMAPPort, &a.SMTPHost, &a.SMTPPort, &a.Username, &enc)
+		Scan(&a.ID, &a.Name, &a.Email, &a.IMAPHost, &a.IMAPPort, &a.SMTPHost, &a.SMTPPort, &a.Username, &enc, &a.Insecure)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return a, "", ErrNotFound
 	}

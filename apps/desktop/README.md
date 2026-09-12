@@ -55,7 +55,11 @@ DATABASE_URL='postgres://cal:cal@localhost:5433/cal?sslmode=disable' /tmp/cal
 
 The same web app ships via Capacitor — see `apps/web/android/` and
 `apps/web/ios/`. Native builds ask for a server URL on first login (the API
-is not embedded on mobile) and authenticate with a Bearer session.
+is not embedded on mobile) and authenticate with a Bearer session. On
+Android, the login screen also offers **local mode** — no server at all:
+the `CalMail` plugin (`dev.cal.app.CalMailPlugin`) does IMAP/SMTP on-device
+with Jakarta Mail, and accounts live in Keystore-encrypted SharedPreferences.
+Connecting a server later offers to import the local accounts.
 Debug and signed-release builds:
 
 ```bash

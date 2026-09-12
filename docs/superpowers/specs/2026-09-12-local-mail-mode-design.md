@@ -40,6 +40,11 @@ existing `/api/mail/*` contract so the UI is backend-agnostic:
 | `deleteMessage` | `DELETE .../message/:uid` | copy→Trash + expunge fallback |
 | `send` | `POST /mail/:id/send` | attachments arrive as base64 `{name,mime,data}` |
 
+Accounts also carry `insecure` (skip TLS verification — self-hosted mail with
+self-signed certs) and custom `imapPort`/`smtpPort`. Both were added to the
+server schema (`mail_accounts.insecure_tls`, migration 00014) so the option
+round-trips through the import path.
+
 Accounts persist as a single JSON blob in SharedPreferences, encrypted with an
 AES-256-GCM key from AndroidKeyStore (`iv‖ciphertext`, base64). Matches the
 server story ("AES-256-GCM for stored credentials") without pulling in the

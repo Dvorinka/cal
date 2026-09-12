@@ -608,7 +608,10 @@ paths:
     get:
       summary: Mail accounts (no passwords)
     post:
-      summary: Connect an IMAP/SMTP account — password stored AES-256-GCM
+      summary: >-
+        Connect an IMAP/SMTP account — {name?, email, imapHost, imapPort?,
+        smtpHost, smtpPort?, username?, password, insecure?}. Password stored
+        AES-256-GCM; `insecure` skips TLS verification (self-hosted mail).
   /mail/accounts/{id}:
     delete:
       summary: Remove a mail account

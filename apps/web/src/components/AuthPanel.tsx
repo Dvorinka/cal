@@ -1,5 +1,6 @@
 import { CalendarDays } from "lucide-react";
 import { useState } from "react";
+import { canUseLocal } from "../lib/local";
 import { usePlanner } from "../stores/planner";
 
 // Capacitor webviews run on capacitor://localhost (iOS) or http://localhost
@@ -12,6 +13,7 @@ const isNative = typeof window !== "undefined" &&
 export function AuthPanel() {
   const login = usePlanner((state) => state.login);
   const register = usePlanner((state) => state.register);
+  const enterLocal = usePlanner((state) => state.enterLocal);
   const api = usePlanner((state) => state.api);
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
@@ -107,6 +109,14 @@ export function AuthPanel() {
             </>
           )}
         </p>
+        {canUseLocal() && (
+          <p className="auth-swap">
+            No server?{" "}
+            <button type="button" onClick={enterLocal}>
+              Use on this device — mail only
+            </button>
+          </p>
+        )}
       </section>
     </main>
   );

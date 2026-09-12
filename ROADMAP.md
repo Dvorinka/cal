@@ -229,6 +229,12 @@ solidtime-style timesheet depth and a mail module.
 - [x] **Mobile nav audit** — bottom nav now shows the first four enabled
   module tabs + a More tab that opens the full sidebar drawer (Files,
   Boards, Time, Mail, settings, trash all reachable on phones).
+- [x] **Local mode (Android)** — "Use on this device — mail only" on the
+  login screen runs the app with no Cal server at all: Mail talks IMAP/SMTP
+  straight to the provider via the `CalMail` Capacitor plugin, accounts are
+  AES-256-GCM'd in Keystore-backed prefs, and a later server login offers to
+  import the on-device accounts. MailPage runs through a `MailBackend`
+  interface so server and native transports are interchangeable.
 
 ### Still excluded (per spec)
 

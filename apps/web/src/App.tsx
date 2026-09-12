@@ -7,6 +7,7 @@ import { BottomNav } from "./components/BottomNav";
 import { CommandPalette } from "./components/CommandPalette";
 import { ContextMenu } from "./components/ContextMenu";
 import { EntryEditor } from "./components/EntryEditor";
+import { LocalShell } from "./components/LocalShell";
 import { Sidebar } from "./components/Sidebar";
 import { Toasts } from "./components/Toasts";
 import { CalendarPage } from "./pages/CalendarPage";
@@ -29,7 +30,7 @@ import { usePlanner } from "./stores/planner";
 import { useUi } from "./stores/ui";
 
 function Shell() {
-  const { user } = usePlanner();
+  const { user, mode } = usePlanner();
   const { paletteOpen, editor, contextMenu, selectedDate } = useUi();
   const { setView, shift, goToday, openPalette, closePalette, openCreate, setContextMenu, closeSidebar } = useUi();
   const location = useLocation();
@@ -38,7 +39,7 @@ function Shell() {
 
   // Global keyboard shortcuts. View-specific ones apply on the calendar only.
   useEffect(() => {
-    if (!user) return;
+    if (!user || mode === "local") return;
     const onKey = (event: KeyboardEvent) => {
       const tag = (event.target as HTMLElement).tagName;
       const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
@@ -78,12 +79,12 @@ function Shell() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [user, paletteOpen, editor.mode, contextMenu, selectedDate, onCalendar, navigate, setView, shift, goToday, openPalette, closePalette, openCreate, setContextMenu, closeSidebar]);
+  }, [user, mode, paletteOpen, editor.mode, contextMenu, selectedDate, onCalendar, navigate, setView, shift, goToday, openPalette, closePalette, openCreate, setContextMenu, closeSidebar]);
 
   // Notification reminder loop — checks every 30s for entries whose
   // start time minus `remind` minutes has arrived. Fires once per entry.
   useEffect(() => {
-    if (!user) return;
+    if (!user || mode === "local") return;
     if (typeof Notification === "undefined") return;
     if (Notification.permission === "default") void Notification.requestPermission();
     const fired = new Set<string>();
@@ -110,7 +111,7 @@ function Shell() {
     check();
     const timer = window.setInterval(check, 30_000);
     return () => window.clearInterval(timer);
-  }, [user]);
+  }, [user, mode]);
 
   // Public shared boards render without auth.
   if (window.location.pathname.startsWith("/board/")) {
@@ -122,6 +123,8 @@ function Shell() {
   }
 
   if (!user) return <AuthPanel />;
+  // Local mode (Android, serverless): mail only, straight to the provider.
+  if (mode === "local") return <LocalShell />;
 
   return (
     <main className="app-shell">

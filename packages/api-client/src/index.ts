@@ -584,6 +584,7 @@ export class CalApi {
   async createMailAccount(input: {
     name?: string; email: string; imapHost: string; imapPort?: number;
     smtpHost: string; smtpPort?: number; username?: string; password: string;
+    insecure?: boolean;
   }): Promise<MailAccount> {
     return this.request("/mail/accounts", { method: "POST", body: input });
   }
@@ -850,6 +851,8 @@ export interface MailAccount {
   smtpHost: string;
   smtpPort: number;
   username: string;
+  /** Skip TLS verification — for self-hosted mail with self-signed certs. */
+  insecure?: boolean;
   createdAt: string;
 }
 

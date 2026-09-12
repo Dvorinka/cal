@@ -1,15 +1,20 @@
 // Mail — IMAP/SMTP client. Left rail: accounts + mailboxes. Middle:
 // envelope list. Right: reader/compose. Briefkescht-shaped triage —
 // read, reply, flag, bin — without the bloat.
+// Transport is pluggable: server-proxied over /api/mail in server mode,
+// straight to the provider via the CalMail plugin in local (Android) mode.
 
 import type { MailAccount, MailMessage, MailSummary } from "@cal/api-client";
 import { Inbox, Mail, Paperclip, PenSquare, Plus, RefreshCw, Send, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
+import { mailBackend, type MailBackend } from "../lib/mail";
 import { reportErr, usePlanner } from "../stores/planner";
 
 export function MailPage() {
   const api = usePlanner((s) => s.api);
+  const mode = usePlanner((s) => s.mode);
+  const mail = useMemo<MailBackend>(() => mailBackend(api), [api, mode]);
   const toast = usePlanner((s) => s.toast);
   const [accounts, setAccounts] = useState<MailAccount[]>([]);
   const [account, setAccount] = useState<MailAccount | null>(null);
@@ -25,11 +30,11 @@ export function MailPage() {
   const [err, setErr] = useState("");
 
   const loadAccounts = useCallback(() => {
-    void api.mailAccounts().then(setAccounts).catch((e) => {
+    void mail.accounts().then(setAccounts).catch((e) => {
       setAccounts([]);
       reportErr("Could not load mail accounts")(e);
     });
-  }, [api]);
+  }, [mail]);
   useEffect(loadAccounts, [loadAccounts]);
 
   const pickAccount = useCallback(
@@ -38,20 +43,20 @@ export function MailPage() {
       setMailbox("INBOX");
       setReading(null);
       setReadingUid(null);
-      void api.mailMailboxes(a.id).then(setMailboxes).catch((e) => {
+      void mail.mailboxes(a.id).then(setMailboxes).catch((e) => {
         setMailboxes([]);
         reportErr("Could not load mailboxes")(e);
       });
     },
-    [api],
+    [mail],
   );
 
   const loadMessages = useCallback(
     (acct: MailAccount, box: string) => {
       setBusy(true);
       setErr("");
-      void api
-        .mailMessages(acct.id, box)
+      void mail
+        .messages(acct.id, box)
         .then((r) => {
           setList(r.messages);
           setTotal(r.total);
@@ -59,7 +64,7 @@ export function MailPage() {
         .catch((e: Error) => setErr(e.message))
         .finally(() => setBusy(false));
     },
-    [api],
+    [mail],
   );
 
   useEffect(() => {
@@ -71,10 +76,10 @@ export function MailPage() {
     setReadingUid(uid);
     setReading(null);
     try {
-      const msg = await api.mailMessage(account.id, uid, mailbox);
+      const msg = await mail.message(account.id, uid, mailbox);
       setReading(msg);
       // Mark seen + reflect locally.
-      void api.mailFlag(account.id, uid, true, mailbox).catch((e) => toast(e instanceof Error ? e.message : "Could not mark read"));
+      void mail.setSeen(account.id, uid, true, mailbox).catch((e) => toast(e instanceof Error ? e.message : "Could not mark read"));
       setList((l) => l.map((m) => (m.uid === uid ? { ...m, seen: true } : m)));
     } catch {
       setErr("Could not open message");
@@ -85,7 +90,7 @@ export function MailPage() {
   async function removeMessage(uid: number) {
     if (!account) return;
     try {
-      await api.mailDelete(account.id, uid, mailbox);
+      await mail.remove(account.id, uid, mailbox);
     } catch (e) {
       toast(e instanceof Error ? e.message : "Delete failed");
       return;
@@ -214,8 +219,8 @@ export function MailPage() {
                   className="btn btn-secondary btn-xs"
                   onClick={() =>
                     account &&
-                    void api
-                      .mailFlag(account.id, reading.uid, false, mailbox)
+                    void mail
+                      .setSeen(account.id, reading.uid, false, mailbox)
                       .then(() => setList((l) => l.map((m) => (m.uid === reading.uid ? { ...m, seen: false } : m))))
                       .catch((e) => toast(e instanceof Error ? e.message : "Could not flag"))
                   }
@@ -275,18 +280,28 @@ function sanitizeMailHtml(html: string): string {
 
 function AccountDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const api = usePlanner((s) => s.api);
-  const [f, setF] = useState({ name: "", email: "", imapHost: "", smtpHost: "", username: "", password: "" });
+  const mail = mailBackend(api);
+  const [f, setF] = useState({ name: "", email: "", imapHost: "", imapPort: "", smtpHost: "", smtpPort: "", username: "", password: "", insecure: false });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
+  const port = (v: string) => {
+    const n = parseInt(v, 10);
+    return n > 0 && n < 65536 ? n : undefined;
+  };
 
   async function save() {
     setBusy(true);
     setErr("");
     try {
-      const acct = await api.createMailAccount(f);
+      const acct = await mail.addAccount({
+        name: f.name, email: f.email,
+        imapHost: f.imapHost, imapPort: port(f.imapPort),
+        smtpHost: f.smtpHost, smtpPort: port(f.smtpPort),
+        username: f.username, password: f.password, insecure: f.insecure,
+      });
       // Verify the credentials actually log in before declaring victory.
-      await api.testMailAccount(acct.id).catch((e: Error) => {
+      await mail.testAccount(acct.id).catch((e: Error) => {
         setErr(`Saved, but IMAP login failed: ${e.message}`);
         throw e;
       });
@@ -306,10 +321,18 @@ function AccountDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
         <label className="field"><span>Email</span><input type="email" value={f.email} onChange={set("email")} placeholder="you@example.com" required /></label>
         <div className="field-row">
           <label className="field"><span>IMAP host</span><input value={f.imapHost} onChange={set("imapHost")} placeholder="imap.example.com" required /></label>
+          <label className="field"><span>Port</span><input type="number" inputMode="numeric" min={1} max={65535} value={f.imapPort} onChange={set("imapPort")} placeholder="993" /></label>
+        </div>
+        <div className="field-row">
           <label className="field"><span>SMTP host</span><input value={f.smtpHost} onChange={set("smtpHost")} placeholder="smtp.example.com" required /></label>
+          <label className="field"><span>Port</span><input type="number" inputMode="numeric" min={1} max={65535} value={f.smtpPort} onChange={set("smtpPort")} placeholder="465" /></label>
         </div>
         <label className="field"><span>Username (blank = email)</span><input value={f.username} onChange={set("username")} /></label>
         <label className="field"><span>Password / app token</span><input type="password" value={f.password} onChange={set("password")} required /></label>
+        <label className="field" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <input type="checkbox" checked={f.insecure} onChange={(e) => setF({ ...f, insecure: e.target.checked })} style={{ width: "auto" }} />
+          <span>Allow self-signed certificates (self-hosted mail)</span>
+        </label>
         {err && <p className="panel-note" style={{ color: "var(--c-red)" }}>{err}</p>}
         <div className="mail-dialog-actions">
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
@@ -324,37 +347,28 @@ function AccountDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
 
 function ComposeDialog({ account, replyTo, onClose, onSent }: { account: MailAccount; replyTo: MailMessage | null; onClose: () => void; onSent: () => void }) {
   const api = usePlanner((s) => s.api);
+  const mail = mailBackend(api);
   const [to, setTo] = useState(replyTo?.from ?? "");
   const [subject, setSubject] = useState(replyTo ? `Re: ${replyTo.subject}` : "");
   const [text, setText] = useState("");
-  const [files, setFiles] = useState<{ name: string; orig: string }[]>([]);
-  const [uploading, setUploading] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  async function attach(list: FileList | null) {
+  // Picked files stay File objects; the backend decides transport — upload to
+  // /files in server mode, base64 straight into the plugin in local mode.
+  function attach(list: FileList | null) {
     if (!list?.length) return;
-    setUploading(true);
-    setErr("");
-    try {
-      for (const f of Array.from(list)) {
-        const out = await api.upload(f);
-        setFiles((cur) => [...cur, { name: out.name, orig: f.name }]);
-      }
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Upload failed");
-    } finally {
-      setUploading(false);
-      if (fileRef.current) fileRef.current.value = "";
-    }
+    setFiles((cur) => [...cur, ...Array.from(list)].slice(0, 10));
+    if (fileRef.current) fileRef.current.value = "";
   }
 
   async function send() {
     setBusy(true);
     setErr("");
     try {
-      await api.mailSend(account.id, { to, subject, text, attachments: files.map((f) => f.name) });
+      await mail.send(account.id, { to, subject, text, files });
       onSent();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Send failed");
@@ -372,23 +386,23 @@ function ComposeDialog({ account, replyTo, onClose, onSent }: { account: MailAcc
         <textarea className="mail-compose" rows={10} value={text} onChange={(e) => setText(e.target.value)} placeholder="Write…" />
         {files.length > 0 && (
           <div className="mail-attachments">
-            {files.map((f) => (
-              <span key={f.name} className="chip">
-                <Paperclip size={11} /> {f.orig}
-                <button type="button" className="chip-x" aria-label={`Remove ${f.orig}`} onClick={() => setFiles((cur) => cur.filter((x) => x.name !== f.name))}>×</button>
+            {files.map((f, i) => (
+              <span key={`${f.name}-${i}`} className="chip">
+                <Paperclip size={11} /> {f.name}
+                <button type="button" className="chip-x" aria-label={`Remove ${f.name}`} onClick={() => setFiles((cur) => cur.filter((x) => x !== f))}>×</button>
               </span>
             ))}
           </div>
         )}
-        <input ref={fileRef} type="file" multiple hidden onChange={(e) => void attach(e.target.files)} />
+        <input ref={fileRef} type="file" multiple hidden onChange={(e) => attach(e.target.files)} />
         {err && <p className="panel-note" style={{ color: "var(--c-red)" }}>{err}</p>}
         <div className="mail-dialog-actions">
-          <button type="button" className="btn btn-secondary" onClick={() => fileRef.current?.click()} disabled={uploading}>
-            <Paperclip size={13} /> {uploading ? "Uploading…" : "Attach"}
+          <button type="button" className="btn btn-secondary" onClick={() => fileRef.current?.click()}>
+            <Paperclip size={13} /> Attach
           </button>
           <span style={{ flex: 1 }} />
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-          <button type="button" className="btn btn-primary" disabled={busy || !to || uploading} onClick={() => void send()}>
+          <button type="button" className="btn btn-primary" disabled={busy || !to} onClick={() => void send()}>
             <Send size={13} /> {busy ? "Sending…" : "Send"}
           </button>
         </div>
