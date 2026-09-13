@@ -35,6 +35,12 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
+    packaging {
+        // android-mail and android-activation ship identical META-INF legalese
+        resources {
+            excludes += ['META-INF/NOTICE.md', 'META-INF/LICENSE.md', 'META-INF/COPYRIGHT']
+        }
+    }
 }
 
 repositories {
