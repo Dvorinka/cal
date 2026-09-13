@@ -116,6 +116,7 @@ jobs:
           dotnet tool install --global wix --version 6.0.2
           Copy-Item build/bin/cal.exe "build/bin/cal-desktop-${{ matrix.label }}.exe"
           wix build build/windows/cal.wxs -arch x64 -d "BinDir=$PWD/build/bin" -d "ProductVersion=$env:VERSION" -o "build/bin/cal-desktop-${{ matrix.label }}.msi"
+          Remove-Item build/bin/*.wixpdb
           if ($env:WINDOWS_CERT_PFX_BASE64) {
             signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f cert.pfx /p $env:WINDOWS_CERT_PASSWORD "build/bin/cal-desktop-${{ matrix.label }}.msi"
             Remove-Item cert.pfx
