@@ -1,0 +1,17 @@
+name: cal
+arch: amd64
+platform: linux
+version: ${VERSION}
+section: utils
+priority: optional
+maintainer: TDvorak <info@tdvorak.dev>
+description: Self-hosted calendar, planner and productivity hub
+homepage: https://github.com/Dvorinka/cal
+license: MIT
+contents:
+  - src: build/bin/cal
+    dst: /usr/bin/cal
+  - src: build/linux/cal.desktop
+    dst: /usr/share/applications/cal.desktop
+  - src: build/linux/cal.png
+    dst: /usr/share/icons/hicolor/512x512/apps/cal.png

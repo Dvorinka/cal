@@ -12,10 +12,12 @@ git push --tags
 | Artifact | Contents |
 |---|---|
 | `ghcr.io/dvorinka/cal:{version,latest}` | All-in-one image (SPA + API + embedded Postgres), linux/amd64 + arm64 |
-| `cal-desktop-linux-amd64.tar.gz` | `cal` GUI binary + `cal.desktop` + `cal.png` icon + `install.sh` |
-| `cal-desktop-windows-amd64.zip` | `cal.exe` |
-| `cal-desktop-macos-arm64.zip` | `cal.app` |
-| `cal-server-*.tar.gz/.zip` | Headless server binary per OS |
+| `cal-desktop-windows-amd64.exe` | `cal.exe` GUI binary, signed when secrets set |
+| `cal-desktop-windows-amd64.msi` | WiX installer (Program Files + Start Menu shortcut), signed when secrets set |
+| `cal-desktop-linux-amd64.AppImage` | Portable AppImage, no install needed |
+| `cal-desktop-linux-amd64.deb` / `.rpm` | `nfpm` packages — `/usr/bin/cal` + desktop entry + icon |
+| `cal-desktop-macos-arm64.dmg` | `cal.app` inside a DMG |
+| `cal-server-<os>-<arch>[.exe]` | Bare headless server binaries |
 | `cal-android-debug.apk` / signed AAB-capable APK | via android.yml |
 
 Everything attaches to a GitHub Release on the tag. `workflow_dispatch` builds
@@ -35,8 +37,9 @@ moment the secrets exist, no workflow edit needed.
 
 ## Windows signing
 
-The workflow uses `signtool.exe` (ships in the windows-latest SDK image).
-Needs a code-signing certificate exported as PFX:
+The workflow uses `signtool.exe` (ships in the windows-latest SDK image) to
+sign `cal.exe`, then wraps it in the MSI and signs that too. Needs a
+code-signing certificate exported as PFX:
 
 - `WINDOWS_CERT_PFX_BASE64` — `base64 -w0 cert.pfx`
 - `WINDOWS_CERT_PASSWORD` — the PFX export password
@@ -77,18 +80,13 @@ matrix row) — left out until there's demand.
 
 ## Linux
 
-No signing needed — unsigned binaries are the norm. What the tarball adds
-instead: `cal.desktop` + `cal.png` + `install.sh`, so the app gets a real
-launcher entry and icon:
+No signing needed — unsigned binaries are the norm. Three formats ship:
 
-```bash
-tar xzf cal-desktop-linux-amd64.tar.gz
-./install.sh          # user install under ~/.local
-./install.sh --system # or system-wide
-```
+- `.deb` / `.rpm` — built by `nfpm` from `apps/desktop/build/linux/nfpm.yaml`;
+  installs `cal` to `/usr/bin` with the desktop entry and icon
+- `.AppImage` — portable single file built with `appimagetool`
 
-If proper packages become desirable later, `nfpm` can turn the same binary
-into `.deb`/`.rpm`/`AppImage` inputs without a build matrix change.
+`install.sh` remains in `apps/desktop/build/linux/` for manual source builds.
 
 ## Verifying a signed build
 

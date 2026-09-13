@@ -46,9 +46,9 @@ jobs:
     strategy:
       matrix:
         include:
-          - { os: ubuntu-latest, archive: tar.gz, ext: "", label: linux-amd64 }
-          - { os: windows-latest, archive: zip, ext: ".exe", label: windows-amd64 }
-          - { os: macos-latest, archive: zip, ext: "", label: macos-arm64 }
+          - { os: ubuntu-latest, ext: "", label: linux-amd64 }
+          - { os: windows-latest, ext: ".exe", label: windows-amd64 }
+          - { os: macos-latest, ext: "", label: macos-arm64 }
     runs-on: ${{ matrix.os }}
     env:
       # Signing is opt-in: the steps below run only when the secrets exist.
@@ -71,6 +71,16 @@ jobs:
           go-version: "1.26"
       - run: npm ci
 
+      - name: Resolve version
+        working-directory: apps/desktop
+        shell: bash
+        # Tag pushes give "v1.2.3" → "1.2.3"; workflow_dispatch on a branch
+        # falls back to wails.json productVersion.
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]] || V=$(node -p "require('./wails.json').info.productVersion")
+          echo "VERSION=$V" >> "$GITHUB_ENV"
+
       - name: Webkit deps (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev
@@ -87,15 +97,29 @@ jobs:
         working-directory: apps/desktop
         run: go build -tags headless -o build/bin/cal-server${{ matrix.ext }} .
 
-      # windows-latest ships signtool via the bundled Windows SDK.
-      - name: Sign (Windows)
-        if: runner.os == 'Windows' && env.WINDOWS_CERT_PFX_BASE64 != ''
-        working-directory: apps/desktop/build/bin
+      - name: Install nfpm (Linux)
+        if: runner.os == 'Linux'
+        run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.46.3
+
+      # windows-latest ships signtool via the bundled Windows SDK. The exe is
+      # signed before the MSI wraps it, then the MSI itself is signed.
+      - name: Sign & package (Windows)
+        if: runner.os == 'Windows'
+        working-directory: apps/desktop
         shell: pwsh
         run: |
-          [IO.File]::WriteAllBytes("$PWD/cert.pfx", [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_BASE64))
-          signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f cert.pfx /p $env:WINDOWS_CERT_PASSWORD cal.exe
-          Remove-Item cert.pfx
+          if ($env:WINDOWS_CERT_PFX_BASE64) {
+            [IO.File]::WriteAllBytes("$PWD/cert.pfx", [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_BASE64))
+            signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f cert.pfx /p $env:WINDOWS_CERT_PASSWORD build/bin/cal.exe
+          }
+          dotnet tool install --global wix
+          Copy-Item build/bin/cal.exe "build/bin/cal-desktop-${{ matrix.label }}.exe"
+          wix build build/windows/cal.wxs -arch x64 -d "BinDir=$PWD/build/bin" -d "ProductVersion=$env:VERSION" -o "build/bin/cal-desktop-${{ matrix.label }}.msi"
+          if ($env:WINDOWS_CERT_PFX_BASE64) {
+            signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f cert.pfx /p $env:WINDOWS_CERT_PASSWORD "build/bin/cal-desktop-${{ matrix.label }}.msi"
+            Remove-Item cert.pfx
+          }
+          Move-Item build/bin/cal-server.exe "build/bin/cal-server-${{ matrix.label }}.exe"
 
       # Developer ID Application cert → codesign, then notarize + staple so
       # Gatekeeper opens the app without the right-click dance.
@@ -122,35 +146,37 @@ jobs:
 
       - name: Package (Linux)
         if: runner.os == 'Linux'
-        working-directory: apps/desktop/build/bin
+        working-directory: apps/desktop
         run: |
-          cp ../linux/cal.desktop ../linux/cal.png ../linux/install.sh .
-          chmod +x install.sh
-          tar czf cal-desktop-${{ matrix.label }}.tar.gz cal${{ matrix.ext }} cal.desktop cal.png install.sh
-          tar czf cal-server-${{ matrix.label }}.tar.gz cal-server${{ matrix.ext }}
-
-      - name: Package (Windows)
-        if: runner.os == 'Windows'
-        working-directory: apps/desktop/build/bin
-        shell: pwsh
-        run: |
-          Compress-Archive cal${{ matrix.ext }} cal-desktop-${{ matrix.label }}.zip
-          Compress-Archive cal-server${{ matrix.ext }} cal-server-${{ matrix.label }}.zip
+          set -euo pipefail
+          nfpm package -f build/linux/nfpm.yaml -p deb -t "build/bin/cal-desktop-${{ matrix.label }}.deb"
+          nfpm package -f build/linux/nfpm.yaml -p rpm -t "build/bin/cal-desktop-${{ matrix.label }}.rpm"
+          # AppImage: appimagetool is itself an AppImage; --appimage-extract
+          # sidesteps the missing FUSE on GH runners.
+          wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O /tmp/appimagetool
+          chmod +x /tmp/appimagetool
+          (cd /tmp && /tmp/appimagetool --appimage-extract >/dev/null)
+          mkdir build/bin/AppDir
+          install -m755 build/bin/cal build/bin/AppDir/AppRun
+          install -m644 build/linux/cal.desktop build/linux/cal.png build/bin/AppDir/
+          (cd build/bin && ARCH=x86_64 /tmp/squashfs-root/AppRun AppDir "cal-desktop-${{ matrix.label }}.AppImage")
+          # headless server ships as a bare binary
+          mv "build/bin/cal-server${{ matrix.ext }}" "build/bin/cal-server-${{ matrix.label }}"
 
       - name: Package (macOS)
         if: runner.os == 'macOS'
         working-directory: apps/desktop/build/bin
         run: |
-          zip -qr cal-desktop-${{ matrix.label }}.zip cal.app
-          zip -q cal-server-${{ matrix.label }}.zip cal-server
+          hdiutil create -volname Cal -srcfolder cal.app -ov -format UDZO "cal-desktop-${{ matrix.label }}.dmg"
+          mv cal-server "cal-server-${{ matrix.label }}"
 
       - uses: actions/upload-artifact@v7
         with:
           name: cal-${{ matrix.label }}
-          path: apps/desktop/build/bin/cal-*.${{ matrix.archive }}
+          path: apps/desktop/build/bin/cal-*
 
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v3
         with:
-          files: apps/desktop/build/bin/cal-*.${{ matrix.archive }}
+          files: apps/desktop/build/bin/cal-*

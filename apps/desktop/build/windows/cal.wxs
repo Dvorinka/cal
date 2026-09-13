@@ -1,0 +1,32 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Cal"
+           Manufacturer="TDvorak"
+           Version="$(var.ProductVersion)"
+           UpgradeCode="6F3D9A2B-1C4E-4B7A-9E2D-8C5F0A1B3D4E"
+           Scope="perMachine">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Cal is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Feature Id="Main" Title="Cal" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Cal" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Component>
+        <File Source="$(var.BinDir)\cal.exe" />
+        <Shortcut Name="Cal"
+                  Directory="ProgramMenuFolder"
+                  Target="[INSTALLFOLDER]cal.exe"
+                  WorkingDirectory="INSTALLFOLDER" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>
