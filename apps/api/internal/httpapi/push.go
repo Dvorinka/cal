@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -217,6 +218,40 @@ func pushTick(ctx context.Context, s pushStore, pub, priv string, send pushSend)
 				}
 			}
 			st.MarkDigestSent(ctx, d.UserID)
+		}
+
+		// Person date reminders: "Mum's birthday in 7 days" — one push per
+		// occurrence year, deduplicated via person_reminder_log.
+		duePeople, err := st.PersonRemindersDue(ctx)
+		if err == nil {
+			for _, r := range duePeople {
+				subs, err := st.PushSubs(ctx, r.UserID)
+				if err != nil || len(subs) == 0 {
+					st.MarkPersonReminderSent(ctx, r.PersonID, r.DateKey, r.Year)
+					continue
+				}
+				when := "today"
+				if r.DaysUntil == 1 {
+					when = "tomorrow"
+				} else if r.DaysUntil > 1 {
+					when = "in " + strconv.Itoa(r.DaysUntil) + " days"
+				}
+				payload, _ := json.Marshal(gin.H{
+					"title": r.Name + "'s " + r.Label,
+					"body":  r.Label + " " + when,
+					"tag":   "person-" + r.PersonID + "-" + r.DateKey,
+				})
+				for _, sub := range subs {
+					status, err := send(payload, sub, pub, priv)
+					if err != nil {
+						continue
+					}
+					if status == http.StatusGone || status == http.StatusNotFound {
+						_ = st.DeletePushSub(ctx, sub.Endpoint)
+					}
+				}
+				st.MarkPersonReminderSent(ctx, r.PersonID, r.DateKey, r.Year)
+			}
 		}
 	}
 }

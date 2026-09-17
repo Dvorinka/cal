@@ -1,5 +1,31 @@
-import type { Person } from "@cal/api-client";
+import type { Person, PersonInput } from "@cal/api-client";
 import { addDays, fromIso, iso, todayIso } from "./date";
+
+/** personToInput copies a stored person into the dialog/save input shape —
+ *  the API replaces the whole record, so partial edits send everything. */
+export function personToInput(p: Person): PersonInput {
+  return {
+    name: p.name,
+    nickname: p.nickname ?? "",
+    relation: p.relation,
+    birthday: p.birthday ?? "",
+    birthdayRemind: p.birthdayRemind ?? null,
+    dates: p.dates ?? [],
+    notes: p.notes,
+    color: p.color,
+    workspaceId: p.workspaceId ?? "",
+    avatar: p.avatar ?? "",
+    phone: p.phone ?? "",
+    email: p.email ?? "",
+    address: p.address ?? "",
+    giftIdeas: p.giftIdeas ?? "",
+    interests: p.interests ?? "",
+    isFavorite: p.isFavorite,
+    fields: p.fields ?? [],
+    links: p.links ?? [],
+    tags: p.tags ?? [],
+  };
+}
 
 /** A person date rendered on a calendar day — a birthday or a named yearly
  *  date (anniversary, nameday…), expanded into a concrete occurrence. */

@@ -406,7 +406,7 @@ func (s *Server) enrichLink(userID, entryID, raw string) {
 	s.store.SetLinkMeta(ctx, userID, entryID, p.Description, p.Image, p.Favicon, "", p.Title)
 }
 
-// globalSearch — one endpoint across entries, files, and boards.
+// globalSearch — one endpoint across entries, files, boards, and people.
 func (s *Server) globalSearch(c *gin.Context) {
 	q := strings.TrimSpace(c.Query("q"))
 	if q == "" {
@@ -422,5 +422,6 @@ func (s *Server) globalSearch(c *gin.Context) {
 	}
 	files, _ := s.store.SearchFiles(ctx, uid, q)
 	boards, _ := s.store.SearchBoards(ctx, uid, q)
-	c.JSON(http.StatusOK, gin.H{"entries": entries, "files": files, "boards": boards})
+	people, _ := s.store.SearchPeople(ctx, uid, q)
+	c.JSON(http.StatusOK, gin.H{"entries": entries, "files": files, "boards": boards, "people": people})
 }

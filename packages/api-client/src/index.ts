@@ -98,6 +98,8 @@ export interface Settings {
   defaultView?: "month" | "week" | "day";
   /** Active workspace id; undefined/"none"/"" semantics handled client-side. */
   activeWorkspace?: string;
+  /** Default two-letter country for nameday lookups in the person editor. */
+  namedayCountry?: string;
 }
 
 export interface WeekReview {
@@ -150,6 +152,15 @@ export interface CaldavAccount {
   lastSynced?: string;
 }
 
+/** A saved CardDAV addressbook (contact birthdays / people import). */
+export interface CarddavAccount {
+  id: string;
+  name: string;
+  url: string;
+  username: string;
+  lastSynced?: string;
+}
+
 export interface FileRec {
   id: string;
   name: string;
@@ -162,6 +173,8 @@ export interface FileRec {
   createdAt: string;
   tags: string[];
   workspaceId?: string;
+  /** Set when the file is attached to a person profile. */
+  personId?: string;
 }
 
 export interface Feed {
@@ -200,6 +213,20 @@ export interface Holiday {
 export interface PersonDate {
   label: string;
   date: string; // YYYY-MM-DD
+  /** Days ahead to push a reminder; absent = no reminder. */
+  remindDays?: number;
+}
+
+/** One custom key/value pair on a person profile. */
+export interface PersonField {
+  key: string;
+  value: string;
+}
+
+/** One social/web link on a person profile. */
+export interface PersonLink {
+  platform: string;
+  url: string;
 }
 
 export interface Person {
@@ -213,6 +240,20 @@ export interface Person {
   color: string;
   workspaceId?: string;
   createdAt: string;
+  nickname?: string;
+  /** files.name of the avatar image. */
+  avatar?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  giftIdeas?: string;
+  interests?: string;
+  isFavorite: boolean;
+  fields: PersonField[];
+  links: PersonLink[];
+  tags: string[];
+  /** Days ahead to remind about the birthday; absent = off. */
+  birthdayRemind?: number;
 }
 
 export interface PersonInput {
@@ -224,6 +265,55 @@ export interface PersonInput {
   notes?: string;
   color?: string;
   workspaceId?: string;
+  nickname?: string;
+  avatar?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  giftIdeas?: string;
+  interests?: string;
+  isFavorite?: boolean;
+  fields?: PersonField[];
+  links?: PersonLink[];
+  tags?: string[];
+  birthdayRemind?: number | null;
+}
+
+/** Directed person→person edge, resolved for display around personId. */
+export interface PersonRelation {
+  id: string;
+  kind: string; // parent|child|sibling|partner|friend|coworker|mentor
+  personId: string;
+  otherId: string;
+  otherName?: string;
+  outgoing: boolean;
+  createdAt: string;
+}
+
+export interface TimelineItem {
+  id: string;
+  personId: string;
+  type: string; // met|gift|trip|achievement|memory|note
+  title: string;
+  body?: string;
+  occurredOn?: string;
+  createdAt: string;
+}
+
+/** One matching (country, dates) nameday search result. */
+export interface NamedayResult {
+  country: string;
+  dates: { day: number; month: number; name: string }[];
+}
+
+/** Public holiday as returned by the date.nager.at browse endpoint. */
+export interface NagerHoliday {
+  date: string;
+  name: string;
+  countryCode: string;
+  nationalHoliday: boolean;
+  subdivisionCodes?: string[];
+  holidayTypes?: string[];
 }
 
 export interface Country {
@@ -558,6 +648,9 @@ export class CalApi {
   async people(): Promise<Person[]> {
     return this.request("/people");
   }
+  async person(id: string): Promise<Person> {
+    return this.request(`/people/${id}`);
+  }
   async createPerson(input: PersonInput): Promise<Person> {
     return this.request("/people", { method: "POST", body: input });
   }
@@ -566,6 +659,79 @@ export class CalApi {
   }
   async deletePerson(id: string): Promise<void> {
     await this.request(`/people/${id}`, { method: "DELETE" });
+  }
+
+  async personRelations(id: string): Promise<PersonRelation[]> {
+    return this.request(`/people/${id}/relations`);
+  }
+  /** Every link in the account — the family-tree graph. */
+  async allPersonRelations(): Promise<PersonRelation[]> {
+    return this.request("/people/relations");
+  }
+  async linkPersons(personId: string, toId: string, kind: string): Promise<PersonRelation> {
+    return this.request(`/people/${personId}/relations`, { method: "POST", body: { toId, kind } });
+  }
+  async unlinkPersons(linkId: string): Promise<void> {
+    await this.request(`/people/relations/${linkId}`, { method: "DELETE" });
+  }
+
+  async personTimeline(id: string): Promise<TimelineItem[]> {
+    return this.request(`/people/${id}/timeline`);
+  }
+  async createTimelineItem(personId: string, input: { type: string; title: string; body?: string; occurredOn?: string }): Promise<TimelineItem> {
+    return this.request(`/people/${personId}/timeline`, { method: "POST", body: input });
+  }
+  async updateTimelineItem(personId: string, itemId: string, input: { type: string; title: string; body?: string; occurredOn?: string }): Promise<TimelineItem> {
+    return this.request(`/people/${personId}/timeline/${itemId}`, { method: "PATCH", body: input });
+  }
+  async deleteTimelineItem(personId: string, itemId: string): Promise<void> {
+    await this.request(`/people/${personId}/timeline/${itemId}`, { method: "DELETE" });
+  }
+
+  async personFiles(id: string): Promise<FileRec[]> {
+    return this.request(`/people/${id}/files`);
+  }
+
+  async searchNamedays(name: string, country?: string): Promise<NamedayResult[]> {
+    const q = new URLSearchParams({ name });
+    if (country) q.set("country", country);
+    return this.request(`/namedays/search?${q.toString()}`);
+  }
+  async namedayDate(month: number, day: number): Promise<Record<string, string>> {
+    return this.request(`/namedays/date?month=${month}&day=${day}`);
+  }
+  async namedayCountries(): Promise<string[]> {
+    return this.request("/namedays/countries");
+  }
+
+  async browseHolidays(country: string, year: number): Promise<NagerHoliday[]> {
+    return this.request(`/holidays/browse?country=${encodeURIComponent(country)}&year=${year}`);
+  }
+  async browseHolidayCountries(): Promise<Country[]> {
+    return this.request("/holidays/browse/countries");
+  }
+  async importHolidays(country: string, year: number): Promise<{ imported: number; found: number }> {
+    return this.request("/holidays/import", { method: "POST", body: { country, year } });
+  }
+
+  async carddavAccounts(): Promise<CarddavAccount[]> {
+    return this.request("/carddav");
+  }
+  async syncCarddav(id: string): Promise<{ imported: number; found: number }> {
+    return this.request(`/carddav/${id}/sync`, { method: "POST", body: "{}" });
+  }
+  async deleteCarddav(id: string): Promise<void> {
+    await this.request(`/carddav/${id}`, { method: "DELETE" });
+  }
+  async carddavImportPeople(id: string): Promise<{ imported: number; found: number }> {
+    return this.request(`/carddav/${id}/import-people`, { method: "POST", body: "{}" });
+  }
+
+  async forgotPassword(email: string): Promise<void> {
+    await this.request("/auth/forgot", { method: "POST", body: { email } });
+  }
+  async resetPassword(token: string, password: string): Promise<void> {
+    await this.request("/auth/reset", { method: "POST", body: { token, password } });
   }
 
   async filters(): Promise<SavedFilter[]> {
@@ -623,7 +789,7 @@ export class CalApi {
     return this.request("/github/import", { method: "POST", body: { url, boardId, columnId } });
   }
 
-  async search(q: string): Promise<{ entries: Entry[]; files: { id: string; name: string; origName: string }[]; boards: Board[] }> {
+  async search(q: string): Promise<{ entries: Entry[]; files: { id: string; name: string; origName: string }[]; boards: Board[]; people: Person[] }> {
     return this.request(`/search?q=${encodeURIComponent(q)}`);
   }
   async agenda(days = 7): Promise<string> {
@@ -643,11 +809,12 @@ export class CalApi {
     return this.request(`/push/subscriptions/${id}`, { method: "DELETE" });
   }
 
-  async upload(file: File, opts: { tags?: string[]; workspaceId?: string } = {}): Promise<{ url: string; name: string; markdown: string }> {
+  async upload(file: File, opts: { tags?: string[]; workspaceId?: string; personId?: string } = {}): Promise<{ url: string; name: string; markdown: string }> {
     const form = new FormData();
     form.append("file", file);
     if (opts.tags?.length) form.append("tags", opts.tags.join(","));
     if (opts.workspaceId) form.append("workspaceId", opts.workspaceId);
+    if (opts.personId) form.append("personId", opts.personId);
     const response = await fetch(`${this.root}/files`, {
       method: "POST",
       credentials: "include",

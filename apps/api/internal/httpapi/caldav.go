@@ -143,6 +143,16 @@ func (s *Server) connectCarddav(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"imported": imported, "found": len(contacts)})
 }
 
+// listCarddav returns the user's saved addressbooks (no secrets).
+func (s *Server) listCarddav(c *gin.Context) {
+	accounts, err := s.store.CarddavAccounts(c.Request.Context(), currentUser(c).ID)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "failed")
+		return
+	}
+	c.JSON(http.StatusOK, accounts)
+}
+
 // syncCarddav re-pulls birthdays for a saved account.
 func (s *Server) syncCarddav(c *gin.Context) {
 	account, userID, err := s.store.CarddavAccountWithSecret(c.Request.Context(), c.Param("id"))

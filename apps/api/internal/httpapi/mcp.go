@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -240,6 +241,81 @@ var mcpTools = []gin.H{
 				"position": gin.H{"type": "number"},
 			},
 			"required": []string{"id", "columnId"},
+		},
+	},
+	{
+		"name":        "list_people",
+		"description": "List people (contacts with birthdays, namedays, notes). Optional q filters by name/nickname/relation/notes/tags.",
+		"inputSchema": gin.H{
+			"type": "object",
+			"properties": gin.H{
+				"q": gin.H{"type": "string", "description": "Search query (optional)"},
+			},
+		},
+	},
+	{
+		"name":        "create_person",
+		"description": "Create a person. dates[] are named yearly dates (birthdays, namedays); remindDays on a date pushes a reminder that many days ahead. birthdayRemind does the same for the main birthday.",
+		"inputSchema": gin.H{
+			"type": "object",
+			"properties": gin.H{
+				"name":           gin.H{"type": "string"},
+				"relation":       gin.H{"type": "string", "description": "family|friend|partner|colleague|acquaintance or free text"},
+				"birthday":       gin.H{"type": "string", "description": "YYYY-MM-DD"},
+				"birthdayRemind": gin.H{"type": "integer", "description": "days ahead to remind (0 = off)"},
+				"nickname":       gin.H{"type": "string"},
+				"phone":          gin.H{"type": "string"},
+				"email":          gin.H{"type": "string"},
+				"notes":          gin.H{"type": "string"},
+				"tags":           gin.H{"type": "array", "items": gin.H{"type": "string"}},
+				"dates": gin.H{"type": "array", "items": gin.H{
+					"type": "object",
+					"properties": gin.H{
+						"label":      gin.H{"type": "string"},
+						"date":       gin.H{"type": "string", "description": "YYYY-MM-DD"},
+						"remindDays": gin.H{"type": "integer"},
+					},
+					"required": []string{"label", "date"},
+				}},
+			},
+			"required": []string{"name"},
+		},
+	},
+	{
+		"name":        "update_person",
+		"description": "Patch a person. Only provided fields change; arrays (dates, tags, fields, links) replace wholesale when given.",
+		"inputSchema": gin.H{
+			"type": "object",
+			"properties": gin.H{
+				"id":             gin.H{"type": "string"},
+				"name":           gin.H{"type": "string"},
+				"relation":       gin.H{"type": "string"},
+				"birthday":       gin.H{"type": "string"},
+				"birthdayRemind": gin.H{"type": "integer"},
+				"nickname":       gin.H{"type": "string"},
+				"phone":          gin.H{"type": "string"},
+				"email":          gin.H{"type": "string"},
+				"address":        gin.H{"type": "string"},
+				"notes":          gin.H{"type": "string"},
+				"giftIdeas":      gin.H{"type": "string"},
+				"interests":      gin.H{"type": "string"},
+				"isFavorite":     gin.H{"type": "boolean"},
+				"tags":           gin.H{"type": "array", "items": gin.H{"type": "string"}},
+				"dates":          gin.H{"type": "array", "items": gin.H{"type": "object"}},
+				"fields":         gin.H{"type": "array", "items": gin.H{"type": "object"}},
+				"links":          gin.H{"type": "array", "items": gin.H{"type": "object"}},
+			},
+			"required": []string{"id"},
+		},
+	},
+	{
+		"name":        "person_upcoming",
+		"description": "Upcoming birthdays and named dates across all people within `days` (default 60), sorted soonest first.",
+		"inputSchema": gin.H{
+			"type": "object",
+			"properties": gin.H{
+				"days": gin.H{"type": "integer", "description": "lookahead window, default 60"},
+			},
 		},
 	},
 }
@@ -720,9 +796,193 @@ func (s *Server) mcpCall(c *gin.Context, user store.User, req rpcRequest) {
 		}
 		respond(toolText("moved", false))
 
+	case "list_people":
+		var args struct {
+			Q string `json:"q"`
+		}
+		_ = json.Unmarshal(params.Arguments, &args)
+		var people []store.Person
+		var err error
+		if strings.TrimSpace(args.Q) != "" {
+			people, err = s.store.SearchPeople(ctx, user.ID, args.Q)
+		} else {
+			people, err = s.store.ListPeople(ctx, user.ID)
+		}
+		if err != nil {
+			fail("query failed")
+			return
+		}
+		data, _ := json.Marshal(people)
+		respond(toolText(string(data), false))
+
+	case "create_person":
+		var input store.PersonInput
+		if err := json.Unmarshal(params.Arguments, &input); err != nil {
+			fail("invalid arguments")
+			return
+		}
+		input.Name = strings.TrimSpace(input.Name)
+		if !validPerson(input) {
+			fail("invalid person")
+			return
+		}
+		person, err := s.store.CreatePerson(ctx, user.ID, input)
+		if err != nil {
+			fail("create failed")
+			return
+		}
+		data, _ := json.Marshal(person)
+		respond(toolText(string(data), false))
+
+	case "update_person":
+		// Patch semantics: provided fields overwrite, the rest keep their
+		// stored values (the store update replaces the whole row).
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(params.Arguments, &raw); err != nil {
+			fail("invalid arguments")
+			return
+		}
+		var id string
+		if v, ok := raw["id"]; ok {
+			_ = json.Unmarshal(v, &id)
+			delete(raw, "id")
+		}
+		if id == "" {
+			fail("id is required")
+			return
+		}
+		person, err := s.store.GetPerson(ctx, user.ID, id)
+		if err != nil {
+			fail("person not found")
+			return
+		}
+		in := personToInput(person)
+		apply := func(key string, dst any) {
+			if v, ok := raw[key]; ok {
+				_ = json.Unmarshal(v, dst)
+			}
+		}
+		apply("name", &in.Name)
+		apply("relation", &in.Relation)
+		apply("birthday", &in.Birthday)
+		apply("birthdayRemind", &in.BirthdayRemind)
+		apply("nickname", &in.Nickname)
+		apply("phone", &in.Phone)
+		apply("email", &in.Email)
+		apply("address", &in.Address)
+		apply("notes", &in.Notes)
+		apply("giftIdeas", &in.GiftIdeas)
+		apply("interests", &in.Interests)
+		apply("isFavorite", &in.IsFavorite)
+		apply("tags", &in.Tags)
+		apply("dates", &in.Dates)
+		apply("fields", &in.Fields)
+		apply("links", &in.Links)
+		if !validPerson(in) {
+			fail("invalid person")
+			return
+		}
+		updated, err := s.store.UpdatePerson(ctx, user.ID, id, in)
+		if err != nil {
+			fail("update failed")
+			return
+		}
+		data, _ := json.Marshal(updated)
+		respond(toolText(string(data), false))
+
+	case "person_upcoming":
+		var args struct {
+			Days int `json:"days"`
+		}
+		_ = json.Unmarshal(params.Arguments, &args)
+		if args.Days <= 0 || args.Days > 366 {
+			args.Days = 60
+		}
+		people, err := s.store.ListPeople(ctx, user.ID)
+		if err != nil {
+			fail("query failed")
+			return
+		}
+		respond(toolText(string(mustJSON(upcomingPersonDates(people, args.Days, time.Now()))), false))
+
 	default:
 		c.JSON(http.StatusOK, rpcError(req.ID, -32602, "unknown tool"))
 	}
+}
+
+// personToInput copies a stored person into the editable input shape.
+func personToInput(p store.Person) store.PersonInput {
+	in := store.PersonInput{
+		Name: p.Name, Relation: p.Relation, Notes: p.Notes, Color: p.Color,
+		WorkspaceID: p.WorkspaceID, Nickname: p.Nickname, Avatar: p.Avatar,
+		Phone: p.Phone, Email: p.Email, Address: p.Address,
+		GiftIdeas: p.GiftIdeas, Interests: p.Interests, IsFavorite: p.IsFavorite,
+		Fields: p.Fields, Links: p.Links, Tags: p.Tags, Dates: p.Dates,
+		BirthdayRemind: p.BirthdayRemind,
+	}
+	if p.Birthday != nil {
+		in.Birthday = *p.Birthday
+	}
+	return in
+}
+
+// upcomingOccurrence is one person date resolved to its next occurrence.
+type upcomingOccurrence struct {
+	PersonID  string `json:"personId"`
+	Name      string `json:"name"`
+	Label     string `json:"label"`
+	Date      string `json:"date"` // this year's occurrence
+	DaysUntil int    `json:"daysUntil"`
+	Turns     *int   `json:"turns,omitempty"` // age when the date has a year
+}
+
+// upcomingPersonDates expands every person's birthday + named dates to
+// their next occurrence (month/day recurrence, Feb 29 → Feb 28 off-leap)
+// and returns the ones within `days`, sorted soonest first.
+func upcomingPersonDates(people []store.Person, days int, now time.Time) []upcomingOccurrence {
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	var out []upcomingOccurrence
+	add := func(p store.Person, label, date string) {
+		t, err := time.Parse(time.DateOnly, date)
+		if err != nil {
+			return
+		}
+		occ := time.Date(today.Year(), t.Month(), t.Day(), 0, 0, 0, 0, today.Location())
+		if occ.Month() != t.Month() { // Feb 29 → Feb 28 off-leap
+			occ = time.Date(today.Year(), t.Month(), t.Day()-1, 0, 0, 0, 0, today.Location())
+		}
+		if occ.Before(today) {
+			occ = occ.AddDate(1, 0, 0)
+		}
+		daysUntil := int(occ.Sub(today).Hours() / 24)
+		if daysUntil > days {
+			return
+		}
+		u := upcomingOccurrence{
+			PersonID: p.ID, Name: p.Name, Label: label,
+			Date: occ.Format(time.DateOnly), DaysUntil: daysUntil,
+		}
+		if t.Year() > 1900 {
+			turns := occ.Year() - t.Year()
+			u.Turns = &turns
+		}
+		out = append(out, u)
+	}
+	for _, p := range people {
+		if p.Birthday != nil {
+			add(p, "birthday", *p.Birthday)
+		}
+		for _, d := range p.Dates {
+			add(p, d.Label, d.Date)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].DaysUntil < out[j].DaysUntil })
+	return out
+}
+
+func mustJSON(v any) []byte {
+	data, _ := json.Marshal(v)
+	return data
 }
 
 // validateEntryInput mirrors the create handler's validation for tool calls.

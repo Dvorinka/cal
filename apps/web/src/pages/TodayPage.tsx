@@ -11,8 +11,10 @@ import {
   Pencil,
   Play,
   Plus,
+  Sparkles,
   StickyNote,
   Timer,
+  UserRound,
   type LucideIcon,
 } from "lucide-react";
 import { Cloud, CloudDrizzle, CloudFog, CloudLightning, CloudRain, CloudSun, Snowflake, Sun } from "lucide-react";
@@ -27,6 +29,9 @@ import { reportErr, usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
 
 const addDaysIso = (date: string, n: number) => iso(addDays(new Date(`${date}T12:00:00`), n));
+
+// Round-number ages that get milestone treatment on the upcoming strip.
+const MILESTONES = new Set([1, 16, 18, 21, 25, 30, 40, 50, 60, 70, 80, 90, 100]);
 
 const WEATHER_ICONS: Record<string, LucideIcon> = {
   sun: Sun,
@@ -151,6 +156,15 @@ export function TodayPage() {
     return upcomingDates(scoped, 14);
   }, [people, peopleOn, activeWorkspace]);
 
+  // Recently added — newest profiles first, capped at a strip's worth.
+  const recentPeople = useMemo(() => {
+    if (!peopleOn) return [];
+    const ws = activeWorkspace ?? "";
+    const scoped =
+      ws === "none" ? people.filter((p) => !p.workspaceId) : ws ? people.filter((p) => p.workspaceId === ws) : people;
+    return [...scoped].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 6);
+  }, [people, peopleOn, activeWorkspace]);
+
   const WeatherIcon = weather ? WEATHER_ICONS[weatherIcon(weather.code).icon] : null;
 
   async function saveReviewAsNote() {
@@ -268,15 +282,35 @@ export function TodayPage() {
             )}
             {upcomingPeople.length > 0 && (
               <div className="habit-row">
-                {upcomingPeople.map((o) => (
+                {upcomingPeople.map((o) => {
+                  const milestone = o.label === "birthday" && o.turning !== undefined && MILESTONES.has(o.turning);
+                  return (
+                    <button
+                      key={o.id}
+                      type="button"
+                      className={`habit-chip ${o.daysUntil <= 1 || milestone ? "on" : ""}`}
+                      title={`${o.name} · ${o.label}${o.turning ? ` — turns ${o.turning}` : ""}`}
+                      onClick={() => navigate(`/people/${o.personId}`)}
+                    >
+                      {milestone ? <Sparkles size={12} /> : o.label === "birthday" ? <Cake size={12} /> : <Heart size={12} />}
+                      {o.name} <b>{milestone ? `turns ${o.turning} ${daysLabel(o.daysUntil)}` : daysLabel(o.daysUntil)}</b>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {recentPeople.length > 0 && (
+              <div className="habit-row today-recent">
+                <span className="today-recent-label">New</span>
+                {recentPeople.map((p) => (
                   <button
-                    key={o.id}
+                    key={p.id}
                     type="button"
-                    className={`habit-chip ${o.daysUntil <= 1 ? "on" : ""}`}
-                    title={`${o.name} · ${o.label}${o.turning ? ` — turns ${o.turning}` : ""}`}
-                    onClick={() => navigate(`/people?edit=${o.personId}`)}
+                    className="habit-chip person-chip-mini"
+                    title={`${p.name} — added ${new Date(p.createdAt).toLocaleDateString()}`}
+                    onClick={() => navigate(`/people/${p.id}`)}
                   >
-                    {o.label === "birthday" ? <Cake size={12} /> : <Heart size={12} />} {o.name} <b>{daysLabel(o.daysUntil)}</b>
+                    <UserRound size={12} /> {p.name}
                   </button>
                 ))}
               </div>
