@@ -420,15 +420,26 @@ paths:
           application/json:
             schema:
               type: object
-              required: [entries]
               properties:
                 entries:
                   type: array
                   items:
                     $ref: "#/components/schemas/Entry"
+                people:
+                  type: array
+                  items:
+                    type: object
+                personLinks:
+                  type: array
+                  items:
+                    type: object
+                personTimeline:
+                  type: array
+                  items:
+                    type: object
       responses:
         "200":
-          description: Number of restored entries
+          description: Counts of restored entries, people, links, timeline items
   /sessions:
     get:
       summary: List active sessions
@@ -499,7 +510,7 @@ paths:
     get:
       summary: List uploaded files
     post:
-      summary: Upload a file (multipart, 20 MB, quota-enforced)
+      summary: Upload a file (multipart, 20 MB, quota-enforced; optional personId attaches to a person)
   /files/{id}:
     delete:
       summary: Delete a file
@@ -573,13 +584,30 @@ paths:
       summary: Delete workspace — contents fall back to Personal
   /people:
     get:
-      summary: Personal relationship records (names, relations, birthdays, named dates)
+      summary: >-
+        Personal relationship records — names, relations, birthdays, named
+        dates, contact fields, tags, custom fields, links, favorites
     post:
-      summary: Create person {name, relation?, birthday?, dates? [{label,date}], notes?, color?, workspaceId?}
+      summary: >-
+        Create person {name, relation?, nickname?, birthday?, birthdayRemind?,
+        dates? [{label,date,remindDays?}], notes?, color?, workspaceId?,
+        phone?, email?, address?, giftIdeas?, interests?, isFavorite?,
+        fields? [{key,value}], links? [{platform,url}], tags?}
       responses:
         "400":
           description: Invalid person (missing name, bad date, unknown workspace)
+  /people/relations:
+    get:
+      summary: Every person→person link in the account (family-tree view)
+  /people/relations/{linkId}:
+    delete:
+      summary: Remove a person link by id
   /people/{id}:
+    get:
+      summary: One person by id
+      responses:
+        "404":
+          description: Not found
     patch:
       summary: Update person — full replace of the editable record
       responses:
@@ -590,6 +618,59 @@ paths:
       responses:
         "404":
           description: Not found
+  /people/{id}/relations:
+    get:
+      summary: Links touching this person (both directions, names resolved)
+    post:
+      summary: >-
+        Link to another person {toId, kind} — kind in
+        parent|child|sibling|partner|friend|coworker|mentor; edge reads
+        "to is from's kind"
+      responses:
+        "409":
+          description: Link already exists
+  /people/{id}/timeline:
+    get:
+      summary: Chronological history (met, gift, trip, achievement, memory, note)
+    post:
+      summary: Add timeline item {type, title, body?, occurredOn?}
+  /people/{id}/timeline/{itemId}:
+    patch:
+      summary: Update a timeline item {type, title, body?, occurredOn?}
+    delete:
+      summary: Delete a timeline item
+  /people/{id}/files:
+    get:
+      summary: Attachments uploaded with personId — photos, documents
+  /namedays/search:
+    get:
+      summary: Nameday lookup — ?name=ada&country=cz (abalin V2 + CSV fallback)
+  /namedays/date:
+    get:
+      summary: Names celebrated on ?month=&day= per country
+  /namedays/countries:
+    get:
+      summary: Country codes with nameday data
+  /holidays/browse:
+    get:
+      summary: date.nager.at public holidays — ?country=US&year=2026
+  /holidays/browse/countries:
+    get:
+      summary: ~150 country codes supported by the holiday browse
+  /holidays/import:
+    post:
+      summary: Import a country's year of public holidays as yearly entries {country, year}
+  /carddav/{id}/import-people:
+    post:
+      summary: Create people from a saved addressbook's contacts (skips existing names)
+  /auth/forgot:
+    post:
+      summary: >-
+        Password reset request {email} — always 204; mails a one-hour
+        single-use link via the user's configured SMTP account
+  /auth/reset:
+    post:
+      summary: Consume a reset token {token, password} — revokes all sessions
   /files/{id}:
     patch:
       summary: Update file tags/workspace {tags?, workspaceId?}
@@ -670,7 +751,7 @@ paths:
       summary: solidtime-shaped CSV or JSON (?format=) of sessions
   /search:
     get:
-      summary: Global search — entries + files
+      summary: Global search — entries + files + boards + people
   /github/inbox:
     get:
       summary: Open issues+PRs involving the user (needs settings.githubToken)
@@ -722,6 +803,8 @@ paths:
         "200":
           description: "[{href, name}]"
   /carddav:
+    get:
+      summary: Saved CardDAV addressbooks (no secrets)
     post:
       summary: Connect an addressbook and import BDAY contacts as yearly events
       responses:
@@ -806,7 +889,7 @@ paths:
       summary: Download all user data as JSON
       responses:
         "200":
-          description: Full export (user, settings, entries)
+          description: Full export (user, settings, entries, people + personLinks + personTimeline)
           content:
             application/json:
               schema:
@@ -823,6 +906,18 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Entry"
+                  people:
+                    type: array
+                    items:
+                      type: object
+                  personLinks:
+                    type: array
+                    items:
+                      type: object
+                  personTimeline:
+                    type: array
+                    items:
+                      type: object
   /holidays:
     get:
       parameters:

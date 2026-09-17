@@ -53,8 +53,12 @@ func writeBackups(ctx context.Context, s *store.Store, dataDir string) error {
 		if err != nil {
 			continue
 		}
+		people, _ := s.ListPeople(ctx, userID)
+		links, _ := s.AllPersonRelations(ctx, userID)
+		timeline, _ := s.AllTimeline(ctx, userID)
 		payload, _ := json.MarshalIndent(map[string]any{
 			"userId": userID, "settings": settings, "entries": entries, "exportedAt": time.Now(),
+			"people": people, "personLinks": links, "personTimeline": timeline,
 		}, "", "  ")
 		path := filepath.Join(dir, "cal-"+userID+"-"+day+".json")
 		if err := os.WriteFile(path, payload, 0o600); err != nil {

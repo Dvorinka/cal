@@ -13,6 +13,8 @@ import (
 
 	"cal/apps/api/internal/auth"
 	"cal/apps/api/internal/calendar"
+	"cal/apps/api/internal/holiday"
+	"cal/apps/api/internal/nameday"
 	"cal/apps/api/internal/store"
 
 	"github.com/gin-contrib/cors"
@@ -22,6 +24,8 @@ import (
 type Server struct {
 	store   *store.Store
 	holiday *calendar.HolidayCache
+	nameday *nameday.Service
+	nager   *holiday.Client
 	secure  bool
 	dataDir string
 }
@@ -33,7 +37,15 @@ type authRequest struct {
 
 func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	secure := os.Getenv("SESSION_SECURE") == "true"
-	server := &Server{store: st, holiday: holidays, secure: secure, dataDir: env("DATA_DIR", "./data")}
+	ndLoader, _ := nameday.NewLoader() // embedded; an error means a corrupt build
+	server := &Server{
+		store:   st,
+		holiday: holidays,
+		nameday: nameday.NewService(nameday.NewAbalinClient(env("NAMEDAY_API_URL", "")), ndLoader),
+		nager:   holiday.NewClient(env("NAGER_API_URL", "")),
+		secure:  secure,
+		dataDir: env("DATA_DIR", "./data"),
+	}
 
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -61,6 +73,8 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authLimited := api.Group("/auth", newRateLimiter(8, time.Minute))
 	authLimited.POST("/register", server.register)
 	authLimited.POST("/login", server.login)
+	authLimited.POST("/forgot", server.forgotPassword)
+	authLimited.POST("/reset", server.resetPassword)
 	api.POST("/auth/logout", server.logout)
 	api.GET("/holidays", server.holidays)
 	api.GET("/holidays/countries", server.holidayCountries)
@@ -160,6 +174,7 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authed.POST("/caldav", server.createCaldav)
 	authed.POST("/caldav/test", server.testCaldav)
 	authed.POST("/caldav/discover", server.discoverCaldav)
+	authed.GET("/carddav", server.listCarddav)
 	authed.POST("/carddav", server.connectCarddav)
 	authed.POST("/carddav/:id/sync", server.syncCarddav)
 	authed.DELETE("/carddav/:id", server.deleteCarddav)
@@ -171,8 +186,25 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authed.POST("/caldav/:id/sync", server.syncCaldav)
 	authed.GET("/people", server.listPeople)
 	authed.POST("/people", server.createPerson)
+	authed.GET("/people/relations", server.allPersonRelations)
+	authed.DELETE("/people/relations/:linkId", server.unlinkPersons)
+	authed.GET("/people/:id", server.getPerson)
 	authed.PATCH("/people/:id", server.updatePerson)
 	authed.DELETE("/people/:id", server.deletePerson)
+	authed.GET("/people/:id/relations", server.personRelations)
+	authed.POST("/people/:id/relations", server.linkPersons)
+	authed.GET("/people/:id/timeline", server.personTimeline)
+	authed.POST("/people/:id/timeline", server.createTimelineItem)
+	authed.PATCH("/people/:id/timeline/:itemId", server.updateTimelineItem)
+	authed.DELETE("/people/:id/timeline/:itemId", server.deleteTimelineItem)
+	authed.GET("/people/:id/files", server.personFiles)
+	authed.GET("/namedays/search", server.namedaySearch)
+	authed.GET("/namedays/date", server.namedayDate)
+	authed.GET("/namedays/countries", server.namedayCountries)
+	authed.GET("/holidays/browse", server.browseHolidays)
+	authed.GET("/holidays/browse/countries", server.browseHolidayCountries)
+	authed.POST("/holidays/import", server.importHolidays)
+	authed.POST("/carddav/:id/import-people", server.carddavImportPeople)
 
 	router.GET("/api/widget/today", server.widgetToday)
 	router.GET("/api/shared/files/:token", server.serveSharedFile)
@@ -465,12 +497,18 @@ func (s *Server) export(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "failed to export settings")
 		return
 	}
+	people, _ := s.store.ListPeople(c.Request.Context(), user.ID)
+	links, _ := s.store.AllPersonRelations(c.Request.Context(), user.ID)
+	timeline, _ := s.store.AllTimeline(c.Request.Context(), user.ID)
 	c.Header("Content-Disposition", `attachment; filename="cal-export.json"`)
 	c.JSON(http.StatusOK, gin.H{
-		"exportedAt": time.Now().UTC().Format(time.RFC3339),
-		"user":       user,
-		"settings":   settings,
-		"entries":    entries,
+		"exportedAt":     time.Now().UTC().Format(time.RFC3339),
+		"user":           user,
+		"settings":       settings,
+		"entries":        entries,
+		"people":         people,
+		"personLinks":    links,
+		"personTimeline": timeline,
 	})
 }
 

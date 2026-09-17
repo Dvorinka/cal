@@ -50,6 +50,14 @@ func (s *Server) uploadFile(c *gin.Context) {
 			return
 		}
 	}
+	// Optional person attachment — validate ownership before writing anything.
+	personID := nilIfEmptyStr(c.PostForm("personId"))
+	if personID != nil {
+		if _, err := s.store.GetPerson(c.Request.Context(), currentUser(c).ID, *personID); err != nil {
+			c.String(http.StatusBadRequest, "person not found")
+			return
+		}
+	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		c.String(http.StatusInternalServerError, "storage unavailable")
 		return
@@ -62,7 +70,7 @@ func (s *Server) uploadFile(c *gin.Context) {
 	if mime == "" {
 		mime = "application/octet-stream"
 	}
-	rec, err := s.store.CreateFile(c.Request.Context(), currentUser(c).ID, name, header.Filename, mime, header.Size, splitTags(c.PostForm("tags")), nilIfEmptyStr(c.PostForm("workspaceId")))
+	rec, err := s.store.CreateFile(c.Request.Context(), currentUser(c).ID, name, header.Filename, mime, header.Size, splitTags(c.PostForm("tags")), nilIfEmptyStr(c.PostForm("workspaceId")), personID)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "record failed")
 		return

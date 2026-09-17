@@ -240,10 +240,82 @@ solidtime-style timesheet depth and a mail module.
 
 - Trackeep: messages, learning, in-app AI assistant (MCP/API instead).
 
+## Phase 9 — PeopleVault merge (shipped 2026-09-17)
+
+Ports the relationship-manager depth of `ref/PeopleVault` onto the existing
+people module — migration `00013_people.sql` already ships CRUD, named
+yearly `dates`, and calendar/Today occurrence rendering. PV's separate
+events/reminders tables are not ported: `dates` JSONB already covers
+recurring yearly dates, and reminders ride the existing entry pipeline.
+
+- [x] **Profile depth** — extend `people`: nickname, avatar, phone, email,
+      address, `gift_ideas`, `interests`, `is_favorite`; `fields` and `links`
+      JSONB columns cover PV's `custom_fields` + `social_links` tables (same
+      pattern as `dates`, no extra joins).
+- [x] **Person tags** — `tags` text[] on people; counted on `/tags`
+      alongside entries and files.
+- [x] **Relationships** — `person_links(from_person_id, to_person_id, kind)`;
+      relation chips on the profile. The data model is the family-tree
+      foundation (parent/child/sibling/partner/friend/coworker/mentor).
+- [x] **Timeline** — `person_timeline(person_id, type, title, body,
+      occurred_on)`; chronological history on the person page (met, gift,
+      trip, achievement, memory).
+- [x] **Person attachments** — `files.person_id`; photos/docs on the profile,
+      reusing the Files pipeline (quota, share tokens, type icons).
+- [x] **Namedays** — port `internal/nameday` (nameday.abalin.net V2, 19
+      countries) with the `data/namedays/*.csv` fallback (CZ/SK/PL/HU/AT/DE)
+      and 24h cache; debounced `GET /api/namedays/search` in the person
+      editor writes a named `dates` entry, so namedays render on the
+      calendar and Today for free. `settings.nameday_country` sets the
+      default lookup country.
+- [x] **Date reminders** — optional `remindDays` per `dates` entry,
+      evaluated by the existing reminder/push/digest loops ("Mum's birthday
+      in 7 days" as a push, not just a calendar chip).
+- [x] **People in global search** — `GlobalSearch` covers name, nickname,
+      relation, notes, tags; pg_trgm index on `people(name, nickname)`;
+      palette results get a person section.
+- [x] **MCP people tools** — `list_people`, `create_person`,
+      `update_person`, `person_upcoming`. Agents stay first-class.
+- [x] **Contact import** — the CardDAV vCard parser already exists; "import
+      as people" turns an address book into person records (birthday →
+      `dates`), upgrading today's read-only birthday events into real
+      linked profiles.
+- [x] **Wider holiday coverage** — the rule engine (47 countries, offline)
+      stays primary; optional `date.nager.at` browse covers the other ~100
+      countries with import-as-entry, PV-style.
+- [x] **Today depth** — milestone chips ("turns 30"), a recently-added
+      strip; nameday occasions ride the existing upcoming-dates card.
+- [x] **Person profile page** — `/people/:id` carries the depth surface:
+      relations both directions, timeline CRUD, attachments, upcoming
+      dates, full-depth editing.
+- [x] **CardDAV account management** — `GET /api/carddav` lists saved
+      connections; Settings rows get sync, delete, and import-as-people.
+- [x] **People-aware export & backups** — `/api/export`, `POST /api/restore`
+      and the nightly snapshots now carry `people`, `personLinks` and
+      `personTimeline`, additive and FK-guarded like entries.
+
+### Still excluded (per spec)
+
+- PeopleVault: multi-tenant `owner_user_id` model (Cal is single-user with
+  workspace scoping), onboarding wizard, `audit_log`, the standalone
+  events/reminders tables (absorbed into `dates` + existing reminders).
+
 ## Remaining — buildable now
 
 - [ ] **YouTube video search** — needs the Data API key or an invidious
       instance; oEmbed covers save-time metadata only.
+- [x] **Family tree view** — `/people/tree` renders an SVG generation graph
+      over `person_links` (parent/child rows, partner/sibling arcs, other
+      kinds dashed).
+- [x] **Password reset email** — PeopleVault's forgot/reset flow, sent via
+      the Mail module's configured SMTP account instead of a new provider.
+- [ ] **MCP person relations & timeline tools** — humans can link people
+      and log timeline entries; MCP exposes only people CRUD + upcoming
+      dates (principle-2 gap).
+- [ ] **Files in export** — the JSON export covers entries, settings and
+      the people graph, but not `files` rows or their binaries; person
+      attachments ride that table, so a real export format needs a
+      binary archive (zip/tar) story.
 
 ## Remaining — UX/discoverability (found in the visual pass)
 
@@ -254,8 +326,8 @@ solidtime-style timesheet depth and a mail module.
 - [ ] **Discoverability audit** — every feature reachable in ≤2 clicks
       from a page that names it; currently several (share links,
       templates, digest) live only in context menus or Settings.
-- [ ] **Mobile nav audit** — the bottom nav covers five pages; Files,
-      Boards, Time, GitHub are sidebar-only on phones.
+- [x] **Mobile nav audit** — shipped in Phase 8: bottom nav + More tab
+      opens the full sidebar drawer, everything reachable on phones.
 
 ## Remaining — needs something external
 

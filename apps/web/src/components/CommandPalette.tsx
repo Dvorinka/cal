@@ -1,6 +1,6 @@
-import type { Entry } from "@cal/api-client";
+import type { Entry, Person } from "@cal/api-client";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, CalendarDays, Check, FolderOpen, Link2, Moon, Plus, Search, StickyNote, Sun, Trello } from "lucide-react";
+import { ArrowRight, CalendarDays, Check, FolderOpen, Link2, Moon, Plus, Search, StickyNote, Sun, Trello, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { formatDayShort } from "../lib/date";
@@ -35,6 +35,7 @@ export function CommandPalette() {
   const [results, setResults] = useState<Entry[]>([]);
   const [fileResults, setFileResults] = useState<{ id: string; origName: string; name: string }[]>([]);
   const [boardResults, setBoardResults] = useState<{ id: string; name: string }[]>([]);
+  const [peopleResults, setPeopleResults] = useState<Person[]>([]);
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -238,6 +239,7 @@ export function CommandPalette() {
         setResults(out.entries);
         setFileResults(out.files);
         setBoardResults(out.boards ?? []);
+        setPeopleResults(out.people ?? []);
       } catch {
         // Offline: fall back to the locally cached entries.
         const q = query.trim().toLowerCase();
@@ -263,14 +265,16 @@ export function CommandPalette() {
     return allowed.filter((action) => action.label.toLowerCase().includes(q));
   }, [actions, query, settings]);
 
+  const peopleOn = moduleOn(settings, "people");
   const items = useMemo(
     () => [
       ...filteredActions.map((action) => ({ kind: "action" as const, action })),
       ...results.map((entry) => ({ kind: "entry" as const, entry })),
+      ...(peopleOn ? peopleResults.map((person) => ({ kind: "person" as const, person })) : []),
       ...fileResults.map((file) => ({ kind: "file" as const, file })),
       ...boardResults.map((board) => ({ kind: "board" as const, board })),
     ],
-    [filteredActions, results, fileResults, boardResults],
+    [filteredActions, results, fileResults, boardResults, peopleResults, peopleOn],
   );
 
   useEffect(() => setCursor(0), [items.length]);
@@ -290,6 +294,9 @@ export function CommandPalette() {
     } else if (item.kind === "board") {
       close();
       navigate(`/boards/${item.board.id}`);
+    } else if (item.kind === "person") {
+      close();
+      navigate(`/people/${item.person.id}`);
     } else {
       close();
       selectDate(item.entry.date);
@@ -379,9 +386,27 @@ export function CommandPalette() {
                   </button>
                 );
               })}
+              {peopleOn && peopleResults.length > 0 && <div className="palette-group">People</div>}
+              {peopleOn &&
+                peopleResults.map((person) => {
+                  const index = filteredActions.length + results.length + peopleResults.indexOf(person);
+                  return (
+                    <button
+                      key={person.id}
+                      type="button"
+                      className={`palette-item ${cursor === index ? "active" : ""}`}
+                      onMouseEnter={() => setCursor(index)}
+                      onClick={() => choose(index)}
+                    >
+                      <span className="icon"><UserRound size={14} /></span>
+                      {person.name}
+                      {person.relation && <span className="meta">{person.relation}</span>}
+                    </button>
+                  );
+                })}
               {fileResults.length > 0 && <div className="palette-group">Files</div>}
               {fileResults.map((file) => {
-                const index = filteredActions.length + results.length + fileResults.indexOf(file);
+                const index = filteredActions.length + results.length + (peopleOn ? peopleResults.length : 0) + fileResults.indexOf(file);
                 return (
                   <button
                     key={file.id}
@@ -397,7 +422,8 @@ export function CommandPalette() {
               })}
               {boardResults.length > 0 && <div className="palette-group">Boards</div>}
               {boardResults.map((board) => {
-                const index = filteredActions.length + results.length + fileResults.length + boardResults.indexOf(board);
+                const index =
+                  filteredActions.length + results.length + (peopleOn ? peopleResults.length : 0) + fileResults.length + boardResults.indexOf(board);
                 return (
                   <button
                     key={board.id}
@@ -411,9 +437,14 @@ export function CommandPalette() {
                   </button>
                 );
               })}
-              {query.trim() && filteredActions.length === 0 && results.length === 0 && fileResults.length === 0 && boardResults.length === 0 && (
-                <div className="palette-empty">No matches for “{query.trim()}”</div>
-              )}
+              {query.trim() &&
+                filteredActions.length === 0 &&
+                results.length === 0 &&
+                fileResults.length === 0 &&
+                boardResults.length === 0 &&
+                (!peopleOn || peopleResults.length === 0) && (
+                  <div className="palette-empty">No matches for “{query.trim()}”</div>
+                )}
             </div>
             <div className="palette-foot">
               <span><kbd>↑↓</kbd> navigate</span>

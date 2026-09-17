@@ -103,11 +103,43 @@ func validPerson(p store.PersonInput) bool {
 	if len(p.Relation) > 60 || len(p.Color) > 30 || len(p.Notes) > 20000 {
 		return false
 	}
+	if len(p.Nickname) > 120 || len(p.Avatar) > 300 || len(p.Phone) > 60 ||
+		len(p.Email) > 200 || len(p.Address) > 500 ||
+		len(p.GiftIdeas) > 5000 || len(p.Interests) > 5000 {
+		return false
+	}
+	if p.Email != "" && !strings.Contains(p.Email, "@") {
+		return false
+	}
+	if p.BirthdayRemind != nil && (*p.BirthdayRemind < 0 || *p.BirthdayRemind > 365) {
+		return false
+	}
 	if p.Birthday != "" && !validDate(p.Birthday) {
 		return false
 	}
+	if len(p.Fields) > 50 || len(p.Links) > 20 || len(p.Tags) > 20 {
+		return false
+	}
+	for _, f := range p.Fields {
+		if strings.TrimSpace(f.Key) == "" || len(f.Key) > 120 || len(f.Value) > 2000 {
+			return false
+		}
+	}
+	for _, l := range p.Links {
+		if len(l.Platform) > 60 || len(l.URL) > 500 || l.URL == "" {
+			return false
+		}
+	}
+	for _, t := range p.Tags {
+		if strings.TrimSpace(t) == "" || len(t) > 40 {
+			return false
+		}
+	}
 	for _, d := range p.Dates {
 		if strings.TrimSpace(d.Label) == "" || len(d.Label) > 60 || !validDate(d.Date) {
+			return false
+		}
+		if d.RemindDays != nil && (*d.RemindDays < 0 || *d.RemindDays > 365) {
 			return false
 		}
 	}

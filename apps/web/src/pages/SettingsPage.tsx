@@ -1,5 +1,5 @@
-import type { Accent, SessionInfo, Webhook } from "@cal/api-client";
-import { Bell, BellOff, Copy, Download, FileText, LogOut, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
+import type { Accent, CarddavAccount, Country, NagerHoliday, SessionInfo, Webhook } from "@cal/api-client";
+import { Bell, BellOff, Copy, Download, FileText, LogOut, Plus, RefreshCw, Trash2, Upload, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { MODULES, moduleOn } from "../lib/modules";
@@ -65,6 +65,13 @@ export function SettingsPage() {
   const [cdUrl, setCdUrl] = useState("");
   const [cdUser, setCdUser] = useState("");
   const [cdPass, setCdPass] = useState("");
+  const [cdAccounts, setCdAccounts] = useState<CarddavAccount[]>([]);
+  const [namedayCountries, setNamedayCountries] = useState<string[]>([]);
+  const [nagerCountries, setNagerCountries] = useState<Country[]>([]);
+  const [browseCountry, setBrowseCountry] = useState("");
+  const [browseYear, setBrowseYear] = useState(() => new Date().getFullYear());
+  const [browsed, setBrowsed] = useState<NagerHoliday[] | null>(null);
+  const [browsing, setBrowsing] = useState(false);
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
   const [hookUrl, setHookUrl] = useState("");
   const [storage, setStorage] = useState<{ usedBytes: number; quotaBytes: number }>();
@@ -89,6 +96,9 @@ export function SettingsPage() {
     void api.googleStatus().then(setGoogle).catch(reportErr("Could not load Google status"));
     void api.storage().then(setStorage).catch(reportErr("Could not load storage"));
     void api.pushSubscriptions().then(setPushDevices).catch(reportErr("Could not load push devices"));
+    void api.carddavAccounts().then(setCdAccounts).catch(reportErr("Could not load addressbooks"));
+    void api.namedayCountries().then(setNamedayCountries).catch(() => setNamedayCountries([]));
+    void api.browseHolidayCountries().then(setNagerCountries).catch(() => setNagerCountries([]));
   }, [loadEntries, loadFeeds, loadAccounts, api]);
 
   const stats = useMemo(() => {
@@ -172,8 +182,43 @@ export function SettingsPage() {
       toast(`Imported ${out.imported} of ${out.found} birthdays`);
       setCdName(""); setCdUrl(""); setCdUser(""); setCdPass("");
       void loadEntries({});
+      void api.carddavAccounts().then(setCdAccounts).catch(reportErr("Could not load addressbooks"));
     } catch (error) {
       toast(error instanceof Error ? error.message : "CardDAV connect failed");
+    }
+  }
+
+  async function importPeopleFrom(id: string) {
+    try {
+      const out = await api.carddavImportPeople(id);
+      toast(`Imported ${out.imported} of ${out.found} contacts as people`);
+      void usePlanner.getState().loadPeople();
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "People import failed");
+    }
+  }
+
+  async function browseNager() {
+    if (!browseCountry) return;
+    setBrowsing(true);
+    try {
+      setBrowsed(await api.browseHolidays(browseCountry, browseYear));
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Browse failed");
+      setBrowsed(null);
+    } finally {
+      setBrowsing(false);
+    }
+  }
+
+  async function importNager() {
+    if (!browseCountry) return;
+    try {
+      const out = await api.importHolidays(browseCountry, browseYear);
+      toast(`Imported ${out.imported} of ${out.found} holidays`);
+      void loadEntries({});
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Import failed");
     }
   }
 
@@ -610,8 +655,52 @@ export function SettingsPage() {
           <h3>Birthdays (CardDAV)</h3>
           <p className="panel-note">
             Connect an addressbook (Nextcloud contacts, Radicale, Baikal) — contacts with a birthday
-            become yearly all-day events.
+            become yearly all-day events, or full people profiles.
           </p>
+          {cdAccounts.map((a) => (
+            <div key={a.id} className="feed-row">
+              <div className="feed-meta">
+                <span className="feed-name">{a.name}</span>
+                <span className="feed-url">{a.url}</span>
+              </div>
+              {a.lastSynced && <span className="feed-age">synced {new Date(a.lastSynced).toLocaleDateString()}</span>}
+              <button
+                type="button"
+                className="btn btn-secondary btn-xs"
+                title="Create people profiles from contacts"
+                onClick={() => void importPeopleFrom(a.id)}
+              >
+                <Users size={12} /> As people
+              </button>
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label="Sync birthdays"
+                title="Re-import birthday events"
+                onClick={() =>
+                  void api
+                    .syncCarddav(a.id)
+                    .then((out) => { toast(`Imported ${out.imported} of ${out.found} birthdays`); void loadEntries({}); })
+                    .catch((e) => toast(e instanceof Error ? e.message : "Sync failed"))
+                }
+              >
+                <RefreshCw size={14} />
+              </button>
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label="Remove addressbook"
+                onClick={() =>
+                  void api
+                    .deleteCarddav(a.id)
+                    .then(() => setCdAccounts((s) => s.filter((x) => x.id !== a.id)))
+                    .catch((e) => toast(e instanceof Error ? e.message : "Remove failed"))
+                }
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
           <div className="feed-add" style={{ gridTemplateColumns: "1fr 1fr" }}>
             <input className="input" placeholder="Name" value={cdName} onChange={(e) => setCdName(e.target.value)} />
             <input className="input" placeholder="Addressbook URL" value={cdUrl} onChange={(e) => setCdUrl(e.target.value)} />
@@ -685,7 +774,73 @@ export function SettingsPage() {
                 ))}
               </select>
             </label>
+            <label className="field">
+              <span>Nameday country</span>
+              <select
+                className="select"
+                value={settings.namedayCountry ?? ""}
+                onChange={(e) => set({ namedayCountry: e.target.value })}
+                title="Default country for nameday lookups in the person editor"
+              >
+                <option value="">All countries</option>
+                {namedayCountries.map((c) => (
+                  <option key={c} value={c}>
+                    {c.toUpperCase()}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
+          {nagerCountries.length > 0 && (
+            <div className="nager-browse">
+              <p className="panel-note">
+                Extended coverage — browse public holidays for ~150 countries (date.nager.at) and
+                import them as all-day entries.
+              </p>
+              <div className="feed-add" style={{ gridTemplateColumns: "1fr 110px auto auto" }}>
+                <select
+                  className="select"
+                  value={browseCountry}
+                  aria-label="Holiday country"
+                  onChange={(e) => { setBrowseCountry(e.target.value); setBrowsed(null); }}
+                >
+                  <option value="">Country…</option>
+                  {nagerCountries.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  className="input"
+                  type="number"
+                  min={1900}
+                  max={2100}
+                  value={browseYear}
+                  aria-label="Year"
+                  onChange={(e) => { setBrowseYear(Number(e.target.value) || browseYear); setBrowsed(null); }}
+                />
+                <button type="button" className="btn btn-secondary" disabled={!browseCountry || browsing} onClick={() => void browseNager()}>
+                  {browsing ? "Loading…" : "Browse"}
+                </button>
+                <button type="button" className="btn btn-primary" disabled={!browseCountry} onClick={() => void importNager()}>
+                  <Download size={14} /> Import
+                </button>
+              </div>
+              {browsed && (
+                <ul className="nager-list">
+                  {browsed.map((h) => (
+                    <li key={`${h.date}-${h.name}`}>
+                      <span className="nager-date">{h.date.slice(5).replace("-", "/")}</span>
+                      {h.name}
+                      {!h.nationalHoliday && <span className="meta-chip">regional</span>}
+                    </li>
+                  ))}
+                  {browsed.length === 0 && <li className="panel-empty">No holidays returned.</li>}
+                </ul>
+              )}
+            </div>
+          )}
         </section>
 
         <section className="panel">

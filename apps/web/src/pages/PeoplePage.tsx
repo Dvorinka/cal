@@ -1,21 +1,17 @@
 // People — a warm, private spot for the people who matter: birthdays,
 // anniversaries, namedays, notes. Personal by design, not a sales CRM.
 
-import type { Person, PersonDate, PersonInput } from "@cal/api-client";
-import { Cake, Heart, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import type { Person } from "@cal/api-client";
+import { Cake, GitBranch, Heart, Pencil, Plus, Search, Star, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { PageHeader } from "../components/PageHeader";
+import { PersonDialog, relationLabel } from "../components/PersonDialog";
 import { formatDayShort } from "../lib/date";
 import { daysLabel, nextByPerson, upcomingDates, type PersonOccurrence } from "../lib/people";
 import { usePlanner } from "../stores/planner";
 
 const RELATIONS = ["family", "partner", "friend", "colleague", "acquaintance"];
-const COLORS = ["slate", "mint", "sky", "violet", "amber", "orange", "rose", "red"];
-
-function relationLabel(relation: string): string {
-  return relation === "" ? "Other" : relation[0].toUpperCase() + relation.slice(1);
-}
 
 function occasionTitle(o: PersonOccurrence): string {
   const turned = o.turning ? ` — turns ${o.turning}` : "";
@@ -23,6 +19,7 @@ function occasionTitle(o: PersonOccurrence): string {
 }
 
 export function PeoplePage() {
+  const api = usePlanner((s) => s.api);
   const people = usePlanner((s) => s.people);
   const workspaces = usePlanner((s) => s.workspaces);
   const activeWorkspace = usePlanner((s) => s.settings.activeWorkspace);
@@ -64,18 +61,21 @@ export function PeoplePage() {
     return scoped.filter(
       (p) =>
         p.name.toLowerCase().includes(q) ||
+        (p.nickname ?? "").toLowerCase().includes(q) ||
         p.relation.toLowerCase().includes(q) ||
         p.notes.toLowerCase().includes(q) ||
+        (p.tags ?? []).some((t) => t.toLowerCase().includes(q)) ||
         (p.dates ?? []).some((d) => d.label.toLowerCase().includes(q)),
     );
   }, [scoped, query]);
 
   const upcoming = useMemo(() => upcomingDates(scoped, 30), [scoped]);
   const next = useMemo(() => nextByPerson(scoped), [scoped]);
+  const favorites = useMemo(() => visible.filter((p) => p.isFavorite), [visible]);
 
   const groups = useMemo(() => {
     const map = new Map<string, Person[]>();
-    for (const p of visible) {
+    for (const p of visible.filter((p) => !p.isFavorite)) {
       const key = p.relation.trim().toLowerCase();
       map.set(key, [...(map.get(key) ?? []), p]);
     }
@@ -91,6 +91,39 @@ export function PeoplePage() {
     void removePerson(p.id);
   }
 
+  function row(p: Person) {
+    const upcomingFor = next.get(p.id);
+    return (
+      <li key={p.id} className="person-row">
+        <Link to={`/people/${p.id}`} className="person-avatar" style={{ "--pc": `var(--c-${p.color || "slate"})` } as React.CSSProperties}>
+          {p.avatar ? <img src={api.assetUrl(`/files/${p.avatar}`)} alt="" /> : p.name.trim().charAt(0).toUpperCase() || "?"}
+        </Link>
+        <Link to={`/people/${p.id}`} className="row-title person-name">
+          {p.name}
+          {p.isFavorite && <Star size={11} className="person-fav" fill="currentColor" />}
+          {(p.tags ?? []).slice(0, 3).map((t) => (
+            <span key={t} className="tag-chip person-tag">
+              {t}
+            </span>
+          ))}
+          {p.notes.trim() !== "" && <span className="person-note">{p.notes.split("\n")[0]}</span>}
+        </Link>
+        {upcomingFor && (
+          <span className="meta-chip person-next" title={occasionTitle(upcomingFor)}>
+            {upcomingFor.label === "birthday" ? <Cake size={11} /> : <Heart size={11} />}
+            {formatDayShort(upcomingFor.date)} · {daysLabel(upcomingFor.daysUntil)}
+          </span>
+        )}
+        <button type="button" className="icon-btn" aria-label={`Edit ${p.name}`} onClick={() => setEditing(p)}>
+          <Pencil size={14} />
+        </button>
+        <button type="button" className="icon-btn danger" aria-label={`Delete ${p.name}`} onClick={() => confirmRemove(p)}>
+          <Trash2 size={14} />
+        </button>
+      </li>
+    );
+  }
+
   return (
     <>
       <PageHeader title="People" sub={`${scoped.length} ${scoped.length === 1 ? "person" : "people"}${activeWorkspace && activeWorkspace !== "none" ? " in this space" : ""}`}>
@@ -104,6 +137,9 @@ export function PeoplePage() {
             aria-label="Search people"
           />
         </span>
+        <Link className="btn btn-secondary" to="/people/tree" title="Family tree">
+          <GitBranch size={14} /> Tree
+        </Link>
         <button type="button" className="btn btn-primary" onClick={() => setEditing("new")}>
           <Plus size={14} strokeWidth={2.5} /> Add person
         </button>
@@ -113,19 +149,15 @@ export function PeoplePage() {
         {upcoming.length > 0 && (
           <div className="people-upcoming">
             {upcoming.map((o) => (
-              <button
+              <Link
                 key={o.id}
-                type="button"
+                to={`/people/${o.personId}`}
                 className={`habit-chip ${o.daysUntil <= 1 ? "on" : ""}`}
                 title={occasionTitle(o)}
-                onClick={() => {
-                  const p = people.find((x) => x.id === o.personId);
-                  if (p) setEditing(p);
-                }}
               >
                 {o.label === "birthday" ? <Cake size={12} /> : <Heart size={12} />}
                 {o.name} <b>{daysLabel(o.daysUntil)}</b>
-              </button>
+              </Link>
             ))}
           </div>
         )}
@@ -147,44 +179,20 @@ export function PeoplePage() {
             )}
           </div>
         ) : (
-          groups.map(([relation, members]) => (
-            <section key={relation || "other"} className="people-group">
-              <div className="side-label people-group-label">{relationLabel(relation)}</div>
-              <ul className="people-list">
-                {members.map((p) => {
-                  const upcomingFor = next.get(p.id);
-                  return (
-                    <li key={p.id} className="person-row">
-                      <span className="person-avatar" style={{ "--pc": `var(--c-${p.color || "slate"})` } as React.CSSProperties}>
-                        {p.name.trim().charAt(0).toUpperCase() || "?"}
-                      </span>
-                      <button type="button" className="row-title person-name" onClick={() => setEditing(p)}>
-                        {p.name}
-                        {p.notes.trim() !== "" && <span className="person-note">{p.notes.split("\n")[0]}</span>}
-                      </button>
-                      {upcomingFor && (
-                        <span className="meta-chip person-next" title={occasionTitle(upcomingFor)}>
-                          {upcomingFor.label === "birthday" ? <Cake size={11} /> : <Heart size={11} />}
-                          {formatDayShort(upcomingFor.date)} · {daysLabel(upcomingFor.daysUntil)}
-                        </span>
-                      )}
-                      <button type="button" className="icon-btn" aria-label={`Edit ${p.name}`} onClick={() => setEditing(p)}>
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-btn danger"
-                        aria-label={`Delete ${p.name}`}
-                        onClick={() => confirmRemove(p)}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          ))
+          <>
+            {favorites.length > 0 && (
+              <section className="people-group">
+                <div className="side-label people-group-label">Favorites</div>
+                <ul className="people-list">{favorites.map(row)}</ul>
+              </section>
+            )}
+            {groups.map(([relation, members]) => (
+              <section key={relation || "other"} className="people-group">
+                <div className="side-label people-group-label">{relationLabel(relation)}</div>
+                <ul className="people-list">{members.map(row)}</ul>
+              </section>
+            ))}
+          </>
         )}
       </div>
 
@@ -206,181 +214,5 @@ export function PeoplePage() {
         />
       )}
     </>
-  );
-}
-
-// PersonDialog — name, relation, birthday, named dates, notes, color, space.
-function PersonDialog({
-  person,
-  workspaces,
-  onClose,
-  onSave,
-  onDelete,
-}: {
-  person?: Person;
-  workspaces: { id: string; name: string }[];
-  onClose: () => void;
-  onSave: (input: PersonInput) => Promise<void>;
-  onDelete?: () => void;
-}) {
-  const toast = usePlanner((s) => s.toast);
-  const [name, setName] = useState(person?.name ?? "");
-  const [relation, setRelation] = useState(person?.relation ?? "");
-  const [birthday, setBirthday] = useState(person?.birthday ?? "");
-  const [dates, setDates] = useState<PersonDate[]>(person?.dates ?? []);
-  const [notes, setNotes] = useState(person?.notes ?? "");
-  const [color, setColor] = useState(person?.color ?? "slate");
-  const [wsId, setWsId] = useState(person?.workspaceId ?? "");
-  const [saving, setSaving] = useState(false);
-
-  const relationOptions = relation && !RELATIONS.includes(relation) ? [...RELATIONS, relation] : RELATIONS;
-
-  async function save() {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      toast("A name is required");
-      return;
-    }
-    const kept = dates.filter((d) => d.label.trim() !== "" || d.date !== "");
-    if (kept.some((d) => d.label.trim() === "" || d.date === "")) {
-      toast("Each date needs a label and a day");
-      return;
-    }
-    setSaving(true);
-    try {
-      await onSave({
-        name: trimmed,
-        relation,
-        birthday,
-        dates: kept.map((d) => ({ label: d.label.trim(), date: d.date })),
-        notes: notes.trim(),
-        color,
-        workspaceId: wsId,
-      });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div
-      className="scrim"
-      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") onClose();
-      }}
-    >
-      <div className="palette mail-dialog person-dialog" role="dialog" aria-label={person ? `Edit ${person.name}` : "New person"}>
-        <h3>{person ? person.name : "New person"}</h3>
-        <div className="field-row">
-          <label className="field">
-            <span>Name</span>
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ada" autoFocus />
-          </label>
-          <label className="field">
-            <span>Relation</span>
-            <select className="select" value={relation} onChange={(e) => setRelation(e.target.value)}>
-              <option value="">—</option>
-              {relationOptions.map((r) => (
-                <option key={r} value={r}>
-                  {relationLabel(r)}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <label className="field">
-          <span>Birthday</span>
-          <input className="input" type="date" value={birthday} onChange={(e) => setBirthday(e.target.value)} />
-        </label>
-        <div className="field">
-          <span>Important dates</span>
-          {dates.map((d, i) => (
-            <div key={i} className="person-date-row">
-              <input
-                className="input"
-                value={d.label}
-                placeholder="Anniversary, nameday…"
-                aria-label="Date label"
-                onChange={(e) => setDates(dates.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))}
-              />
-              <input
-                className="input person-date-when"
-                type="date"
-                value={d.date}
-                aria-label="Date"
-                onChange={(e) => setDates(dates.map((x, j) => (j === i ? { ...x, date: e.target.value } : x)))}
-              />
-              <button
-                type="button"
-                className="icon-btn"
-                aria-label="Remove date"
-                onClick={() => setDates(dates.filter((_, j) => j !== i))}
-              >
-                <X size={13} />
-              </button>
-            </div>
-          ))}
-          <button
-            type="button"
-            className="btn btn-secondary btn-xs"
-            onClick={() => setDates([...dates, { label: "", date: "" }])}
-          >
-            <Plus size={12} /> Add date
-          </button>
-        </div>
-        <label className="field">
-          <span>Notes</span>
-          <textarea
-            className="textarea"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Likes, gift ideas, how you met…"
-          />
-        </label>
-        <div className="field">
-          <span>Color</span>
-          <div className="dots">
-            {COLORS.map((c) => (
-              <button
-                key={c}
-                type="button"
-                className={`dot ${color === c ? "active" : ""}`}
-                style={{ "--dot": `var(--c-${c})` } as React.CSSProperties}
-                onClick={() => setColor(c)}
-                aria-label={`Color ${c}`}
-              />
-            ))}
-          </div>
-        </div>
-        {workspaces.length > 0 && (
-          <label className="field">
-            <span>Space</span>
-            <select className="select" value={wsId} onChange={(e) => setWsId(e.target.value)}>
-              <option value="">Personal</option>
-              {workspaces.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <div className="mail-dialog-actions">
-          {onDelete && (
-            <button type="button" className="btn btn-danger" onClick={onDelete}>
-              <Trash2 size={14} /> Delete
-            </button>
-          )}
-          <span style={{ flex: 1 }} />
-          <button type="button" className="btn btn-ghost" onClick={onClose}>
-            Cancel
-          </button>
-          <button type="button" className="btn btn-primary" disabled={saving} onClick={() => void save()}>
-            {person ? "Save" : "Create"}
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }

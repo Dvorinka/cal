@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import type { PersonOccurrence } from "../lib/people";
 
 // PersonChip — a birthday/anniversary marker on the calendar. Clicking opens
-// the person's editor on the People page via ?edit=<id>.
+// the person's profile page.
 export function PersonChip({ occasion, onOpen }: { occasion: PersonOccurrence; onOpen?: () => void }) {
   const navigate = useNavigate();
   const turned = occasion.turning ? ` · turns ${occasion.turning}` : "";
@@ -15,7 +15,7 @@ export function PersonChip({ occasion, onOpen }: { occasion: PersonOccurrence; o
       onClick={(e) => {
         e.stopPropagation();
         onOpen?.();
-        navigate(`/people?edit=${occasion.personId}`);
+        navigate(`/people/${occasion.personId}`);
       }}
     >
       {occasion.label === "birthday" ? <Cake size={11} /> : <Heart size={11} />}

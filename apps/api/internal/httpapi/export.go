@@ -14,26 +14,48 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// restoreJSON accepts the /export payload and re-inserts entries. Additive:
-// existing IDs are skipped, so a restore never clobbers current data.
+// restoreJSON accepts the /export payload and re-inserts entries, people,
+// person links and timeline items. Additive: existing IDs are skipped, so a
+// restore never clobbers current data.
 func (s *Server) restoreJSON(c *gin.Context) {
 	var body struct {
-		Entries []store.Entry `json:"entries"`
+		Entries        []store.Entry          `json:"entries"`
+		People         []store.Person         `json:"people"`
+		PersonLinks    []store.PersonRelation `json:"personLinks"`
+		PersonTimeline []store.TimelineItem   `json:"personTimeline"`
 	}
-	if err := c.ShouldBindJSON(&body); err != nil || len(body.Entries) == 0 {
-		c.String(http.StatusBadRequest, "expected a Cal export file ({entries: [...]})")
+	if err := c.ShouldBindJSON(&body); err != nil ||
+		(len(body.Entries) == 0 && len(body.People) == 0 && len(body.PersonLinks) == 0 && len(body.PersonTimeline) == 0) {
+		c.String(http.StatusBadRequest, "expected a Cal export file")
 		return
 	}
-	if len(body.Entries) > 50000 {
+	if len(body.Entries) > 50000 || len(body.People) > 20000 {
 		c.String(http.StatusBadRequest, "file too large")
 		return
 	}
-	imported, err := s.store.RestoreEntries(c.Request.Context(), currentUser(c).ID, body.Entries)
+	userID := currentUser(c).ID
+	imported, err := s.store.RestoreEntries(c.Request.Context(), userID, body.Entries)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "restore failed")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"restored": imported})
+	// People first — links and timeline reference person IDs.
+	people, err := s.store.RestorePeople(c.Request.Context(), userID, body.People)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "restore failed")
+		return
+	}
+	links, err := s.store.RestorePersonLinks(c.Request.Context(), userID, body.PersonLinks)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "restore failed")
+		return
+	}
+	timeline, err := s.store.RestorePersonTimeline(c.Request.Context(), userID, body.PersonTimeline)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "restore failed")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"restored": imported, "people": people, "links": links, "timeline": timeline})
 }
 
 func (s *Server) exportICS(c *gin.Context) {
