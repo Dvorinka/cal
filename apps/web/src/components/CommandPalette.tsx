@@ -181,6 +181,44 @@ export function CommandPalette() {
         },
       },
       {
+        id: "time",
+        label: "Go to time tracking",
+        icon: <ArrowRight size={15} />,
+        module: "time",
+        run: () => {
+          close();
+          navigate("/time");
+        },
+      },
+      {
+        id: "github",
+        label: "Go to GitHub",
+        icon: <ArrowRight size={15} />,
+        module: "github",
+        run: () => {
+          close();
+          navigate("/github");
+        },
+      },
+      {
+        id: "trash",
+        label: "Go to trash",
+        icon: <ArrowRight size={15} />,
+        run: () => {
+          close();
+          navigate("/trash");
+        },
+      },
+      {
+        id: "settings",
+        label: "Go to settings",
+        icon: <ArrowRight size={15} />,
+        run: () => {
+          close();
+          navigate("/settings");
+        },
+      },
+      {
         id: "timer",
         label: "Start focus timer",
         icon: <ArrowRight size={15} />,

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -404,6 +405,87 @@ func (s *Server) enrichLink(userID, entryID, raw string) {
 		return
 	}
 	s.store.SetLinkMeta(ctx, userID, entryID, p.Description, p.Image, p.Favicon, "", p.Title)
+}
+
+// --- YouTube search via the user's own Invidious instance ---
+
+// The instance base URL comes from settings.invidious_url - user-configured
+// like a CalDAV server address, so private/LAN hosts are allowed (the SSRF
+// guard is for attacker-influenced URLs, not the operator's own services).
+var ytClient = &http.Client{Timeout: 10 * time.Second}
+
+type ytResult struct {
+	VideoID   string `json:"videoId"`
+	Title     string `json:"title"`
+	Author    string `json:"author"`
+	URL       string `json:"url"`
+	Thumbnail string `json:"thumbnail"`
+	Seconds   int    `json:"seconds"`
+	Views     int64  `json:"views"`
+}
+
+// invidiousVideo is the subset of /api/v1/search items we consume.
+type invidiousVideo struct {
+	Type      string `json:"type"`
+	VideoID   string `json:"videoId"`
+	Title     string `json:"title"`
+	Author    string `json:"author"`
+	LengthSec int    `json:"lengthSeconds"`
+	Views     int64  `json:"viewCount"`
+}
+
+func (s *Server) youtubeSearch(c *gin.Context) {
+	q := strings.TrimSpace(c.Query("q"))
+	if q == "" {
+		c.JSON(http.StatusOK, []ytResult{})
+		return
+	}
+	st, err := s.store.Settings(c.Request.Context(), currentUser(c).ID)
+	base := strings.TrimRight(strings.TrimSpace(st.InvidiousURL), "/")
+	if err != nil || base == "" {
+		c.String(http.StatusBadRequest, "no Invidious instance configured - set one in Settings")
+		return
+	}
+	endpoint := base + "/api/v1/search?q=" + url.QueryEscape(q) + "&type=video&page=1"
+	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, endpoint, nil)
+	if err != nil {
+		c.String(http.StatusBadRequest, "invalid Invidious URL")
+		return
+	}
+	resp, err := ytClient.Do(req)
+	if err != nil {
+		c.String(http.StatusBadGateway, "Invidious instance unreachable")
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		c.String(http.StatusBadGateway, "Invidious search failed")
+		return
+	}
+	var items []invidiousVideo
+	if json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&items) != nil {
+		c.String(http.StatusBadGateway, "unexpected Invidious response")
+		return
+	}
+	out := make([]ytResult, 0, len(items))
+	for _, v := range items {
+		if v.Type != "video" || v.VideoID == "" {
+			continue
+		}
+		out = append(out, ytResult{
+			VideoID:   v.VideoID,
+			Title:     v.Title,
+			Author:    v.Author,
+			URL:       "https://www.youtube.com/watch?v=" + v.VideoID,
+			Thumbnail: "https://i.ytimg.com/vi/" + v.VideoID + "/hqdefault.jpg",
+			Seconds:   v.LengthSec,
+			Views:     v.Views,
+		})
+		if len(out) == 24 {
+			break
+		}
+	}
+	c.JSON(http.StatusOK, out)
 }
 
 // globalSearch — one endpoint across entries, files, boards, and people.

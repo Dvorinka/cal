@@ -1,11 +1,20 @@
 package httpapi
 
-// Subscribable ICS feed of the user's own entries — the inverse of feed
-// import. Authenticated by the read-only widget token, so the URL can live in
-// a calendar app without exposing full API access.
+// Export/restore plus the subscribable ICS feed of the user's own entries -
+// the inverse of feed import. The ICS feed is authenticated by the read-only
+// widget token, so the URL can live in a calendar app without exposing full
+// API access.
 
 import (
+	"archive/zip"
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"cal/apps/api/internal/ical"
@@ -14,18 +23,64 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// restoreJSON accepts the /export payload and re-inserts entries, people,
-// person links and timeline items. Additive: existing IDs are skipped, so a
-// restore never clobbers current data.
+const (
+	exportManifestName = "cal-export.json"
+	// Uploads cap at 20 MB each; a zip export of a heavy account is still
+	// bounded well under this.
+	maxRestoreBytes = 512 << 20
+)
+
+// exportPayload is the restore-side view of the /api/export manifest.
+type exportPayload struct {
+	Entries        []store.Entry          `json:"entries"`
+	People         []store.Person         `json:"people"`
+	PersonLinks    []store.PersonRelation `json:"personLinks"`
+	PersonTimeline []store.TimelineItem   `json:"personTimeline"`
+	Files          []store.File           `json:"files"`
+}
+
+// restoreJSON accepts the /export payload - plain JSON, or the zip archive
+// (cal-export.json manifest + files/<name> binaries) - and re-inserts
+// entries, people, person links, timeline items and file rows. Additive:
+// existing IDs are skipped, so a restore never clobbers current data.
 func (s *Server) restoreJSON(c *gin.Context) {
-	var body struct {
-		Entries        []store.Entry          `json:"entries"`
-		People         []store.Person         `json:"people"`
-		PersonLinks    []store.PersonRelation `json:"personLinks"`
-		PersonTimeline []store.TimelineItem   `json:"personTimeline"`
+	raw, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, maxRestoreBytes))
+	if err != nil {
+		c.String(http.StatusRequestEntityTooLarge, "file too large")
+		return
 	}
-	if err := c.ShouldBindJSON(&body); err != nil ||
-		(len(body.Entries) == 0 && len(body.People) == 0 && len(body.PersonLinks) == 0 && len(body.PersonTimeline) == 0) {
+	var body exportPayload
+	// binaries maps stored file name → zip member, present only for zip restores.
+	var binaries map[string]*zip.File
+	if bytes.HasPrefix(raw, []byte("PK\x03\x04")) {
+		zr, zerr := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
+		if zerr != nil {
+			c.String(http.StatusBadRequest, "invalid zip archive")
+			return
+		}
+		binaries = map[string]*zip.File{}
+		var manifest []byte
+		for _, zf := range zr.File {
+			switch {
+			case zf.Name == exportManifestName:
+				if rc, oerr := zf.Open(); oerr == nil {
+					manifest, _ = io.ReadAll(io.LimitReader(rc, 64<<20))
+					_ = rc.Close()
+				}
+			case strings.HasPrefix(zf.Name, "files/"):
+				binaries[strings.TrimPrefix(zf.Name, "files/")] = zf
+			}
+		}
+		if manifest == nil || json.Unmarshal(manifest, &body) != nil {
+			c.String(http.StatusBadRequest, "expected a Cal export archive")
+			return
+		}
+	} else if json.Unmarshal(raw, &body) != nil {
+		c.String(http.StatusBadRequest, "expected a Cal export file")
+		return
+	}
+	if len(body.Entries) == 0 && len(body.People) == 0 && len(body.PersonLinks) == 0 &&
+		len(body.PersonTimeline) == 0 && len(body.Files) == 0 {
 		c.String(http.StatusBadRequest, "expected a Cal export file")
 		return
 	}
@@ -34,28 +89,90 @@ func (s *Server) restoreJSON(c *gin.Context) {
 		return
 	}
 	userID := currentUser(c).ID
-	imported, err := s.store.RestoreEntries(c.Request.Context(), userID, body.Entries)
+	ctx := c.Request.Context()
+	imported, err := s.store.RestoreEntries(ctx, userID, body.Entries)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "restore failed")
 		return
 	}
-	// People first — links and timeline reference person IDs.
-	people, err := s.store.RestorePeople(c.Request.Context(), userID, body.People)
+	// People first — links, timeline and attachments reference person IDs.
+	people, err := s.store.RestorePeople(ctx, userID, body.People)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "restore failed")
 		return
 	}
-	links, err := s.store.RestorePersonLinks(c.Request.Context(), userID, body.PersonLinks)
+	links, err := s.store.RestorePersonLinks(ctx, userID, body.PersonLinks)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "restore failed")
 		return
 	}
-	timeline, err := s.store.RestorePersonTimeline(c.Request.Context(), userID, body.PersonTimeline)
+	timeline, err := s.store.RestorePersonTimeline(ctx, userID, body.PersonTimeline)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "restore failed")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"restored": imported, "people": people, "links": links, "timeline": timeline})
+	// Files need their binary in the archive and a free disk name; manifest
+	// rows without a binary are skipped, never restored dangling.
+	kept := s.writeRestoredFiles(ctx, userID, body.Files, binaries)
+	files, err := s.store.RestoreFiles(ctx, userID, kept)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "restore failed")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"restored": imported, "people": people, "links": links, "timeline": timeline,
+		"files": files, "filesSkipped": len(body.Files) - files,
+	})
+}
+
+// writeRestoredFiles unpacks archive binaries to the uploads dir and returns
+// the rows worth inserting (binary written, name free).
+func (s *Server) writeRestoredFiles(ctx context.Context, userID string, files []store.File, binaries map[string]*zip.File) []store.File {
+	if binaries == nil {
+		return nil
+	}
+	dir := filepath.Join(s.dataDir, "uploads", userID)
+	kept := make([]store.File, 0, len(files))
+	for _, f := range files {
+		zf, ok := binaries[f.Name]
+		if !ok || !reSafeName.MatchString(f.Name) {
+			continue
+		}
+		// A row or binary already occupying the name wins — additive restore.
+		if _, err := s.store.FileByName(ctx, userID, f.Name); err == nil {
+			continue
+		}
+		// The row insert skips on global id-conflict (e.g. restoring one
+		// account's export into another account on the same instance) — don't
+		// write an unreachable binary in that case.
+		if taken, err := s.store.FileIDExists(ctx, f.ID); err != nil || taken {
+			continue
+		}
+		dst := filepath.Join(dir, f.Name)
+		if _, err := os.Stat(dst); err == nil {
+			continue
+		}
+		rc, err := zf.Open()
+		if err != nil {
+			continue
+		}
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			_ = rc.Close()
+			continue
+		}
+		out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if err == nil {
+			_, err = io.Copy(out, io.LimitReader(rc, maxUploadBytes+1))
+			_ = out.Close()
+		}
+		_ = rc.Close()
+		if err != nil {
+			_ = os.Remove(dst)
+			continue
+		}
+		kept = append(kept, f)
+	}
+	return kept
 }
 
 func (s *Server) exportICS(c *gin.Context) {

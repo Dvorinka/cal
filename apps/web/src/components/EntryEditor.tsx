@@ -1,7 +1,7 @@
 import type { ActivityItem, Board, BoardColumn, EntryType, Recur, Revision } from "@cal/api-client";
 import { renderMarkdown } from "../lib/markdown";
 import { AnimatePresence, motion } from "framer-motion";
-import { CalendarClock, Check, History, Link2, ListOrdered, Paperclip, Pin, StickyNote, Trash2 } from "lucide-react";
+import { CalendarClock, Check, History, Link2, ListOrdered, Paperclip, Pin, RefreshCw, StickyNote, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { reportErr, usePlanner } from "../stores/planner";
 import { useUi } from "../stores/ui";
@@ -545,6 +545,25 @@ export function EntryEditor() {
                   >
                     Fetch title
                   </button>
+                  {editing && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      title="Re-fetch the saved preview (thumbnail, description)"
+                      onClick={() =>
+                        void api
+                          .refreshLink(editing.id)
+                          .then(() => {
+                            toast("Refreshing preview…");
+                            // Enrichment is async on the server — reload shortly after.
+                            window.setTimeout(() => void loadEntries({}), 2500);
+                          })
+                          .catch(() => toast("Refresh failed"))
+                      }
+                    >
+                      <RefreshCw size={13} /> Preview
+                    </button>
+                  )}
                 </div>
               </label>
             )}

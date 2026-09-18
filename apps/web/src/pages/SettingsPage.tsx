@@ -377,6 +377,16 @@ export function SettingsPage() {
                 onChange={(e) => set({ city: e.target.value })}
               />
             </label>
+            <label className="field">
+              <span>Invidious instance</span>
+              <input
+                type="url"
+                className="input"
+                placeholder="https://invidious.example — enables YouTube search on Links"
+                value={settings.invidiousUrl ?? ""}
+                onChange={(e) => set({ invidiousUrl: e.target.value })}
+              />
+            </label>
             <div className="field">
               <span>Accent</span>
               <div className="dots">
@@ -967,7 +977,10 @@ export function SettingsPage() {
           )}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <a className="btn btn-secondary" href="/api/export" download>
-              <Download size={14} /> Export everything (JSON)
+              <Download size={14} /> Export (JSON)
+            </a>
+            <a className="btn btn-secondary" href="/api/export?format=zip" download>
+              <Download size={14} /> Export + files (zip)
             </a>
             <a className="btn btn-secondary" href="/api/agenda?days=7" target="_blank" rel="noreferrer">
               <FileText size={14} /> Week agenda (markdown)
@@ -975,7 +988,7 @@ export function SettingsPage() {
             <input
               ref={restoreRef}
               type="file"
-              accept=".json,application/json"
+              accept=".json,.zip,application/json,application/zip"
               style={{ display: "none" }}
               onChange={(e) => {
                 const file = e.target.files?.[0];
@@ -988,8 +1001,9 @@ export function SettingsPage() {
             </button>
           </div>
           <p className="panel-note" style={{ marginTop: 10 }}>
-            A restore merges — entries already present are kept, missing ones come back. The server also writes
-            a nightly backup to <code>DATA_DIR/backups/</code> (14 days kept).
+            JSON carries everything except upload binaries; the zip adds them. A restore merges — data already
+            present is kept, missing pieces come back (accepts .json or .zip). The server also writes a nightly
+            backup to <code>DATA_DIR/backups/</code> (14 days kept).
           </p>
         </section>
 

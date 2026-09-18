@@ -100,6 +100,19 @@ export interface Settings {
   activeWorkspace?: string;
   /** Default two-letter country for nameday lookups in the person editor. */
   namedayCountry?: string;
+  /** Base URL of the user's Invidious instance for YouTube search ("" = off). */
+  invidiousUrl?: string;
+}
+
+/** One YouTube search hit from the user's Invidious instance. */
+export interface YtResult {
+  videoId: string;
+  title: string;
+  author: string;
+  url: string;
+  thumbnail: string;
+  seconds: number;
+  views: number;
 }
 
 export interface WeekReview {
@@ -789,6 +802,10 @@ export class CalApi {
     return this.request("/github/import", { method: "POST", body: { url, boardId, columnId } });
   }
 
+  async youtubeSearch(q: string): Promise<YtResult[]> {
+    return this.request<YtResult[]>(`/youtube/search?q=${encodeURIComponent(q)}`);
+  }
+
   async search(q: string): Promise<{ entries: Entry[]; files: { id: string; name: string; origName: string }[]; boards: Board[]; people: Person[] }> {
     return this.request(`/search?q=${encodeURIComponent(q)}`);
   }
@@ -861,7 +878,14 @@ export class CalApi {
     await this.request<void>(`/entries/${entryId}/restore/${revId}`, { method: "POST" });
   }
 
-  async restore(file: File): Promise<{ restored: number }> {
+  async restore(file: File): Promise<{
+    restored: number;
+    people: number;
+    links: number;
+    timeline: number;
+    files: number;
+    filesSkipped: number;
+  }> {
     const response = await fetch(`${this.root}/restore`, {
       method: "POST",
       credentials: "include",

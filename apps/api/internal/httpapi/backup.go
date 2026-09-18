@@ -56,9 +56,13 @@ func writeBackups(ctx context.Context, s *store.Store, dataDir string) error {
 		people, _ := s.ListPeople(ctx, userID)
 		links, _ := s.AllPersonRelations(ctx, userID)
 		timeline, _ := s.AllTimeline(ctx, userID)
+		// File rows are listed for completeness; the binaries already live in
+		// uploads/ and are not duplicated 14× into backups. A JSON-only restore
+		// skips file rows (no binaries in the archive).
+		files, _ := s.ListFiles(ctx, userID)
 		payload, _ := json.MarshalIndent(map[string]any{
 			"userId": userID, "settings": settings, "entries": entries, "exportedAt": time.Now(),
-			"people": people, "personLinks": links, "personTimeline": timeline,
+			"people": people, "personLinks": links, "personTimeline": timeline, "files": files,
 		}, "", "  ")
 		path := filepath.Join(dir, "cal-"+userID+"-"+day+".json")
 		if err := os.WriteFile(path, payload, 0o600); err != nil {
