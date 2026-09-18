@@ -610,7 +610,10 @@ export const usePlanner = create<PlannerState>((set, get) => ({
     try {
       const out = await get().api.restore(file);
       await get().loadEntries({});
-      get().toast(`Restored ${out.restored} entr${out.restored === 1 ? "y" : "ies"}`);
+      const parts = [`${out.restored} entr${out.restored === 1 ? "y" : "ies"}`];
+      if (out.files > 0) parts.push(`${out.files} file${out.files === 1 ? "" : "s"}`);
+      if (out.filesSkipped > 0) parts.push(`${out.filesSkipped} file${out.filesSkipped === 1 ? "" : "s"} skipped (no binary in archive)`);
+      get().toast(`Restored ${parts.join(", ")}`);
     } catch (error) {
       get().toast(error instanceof Error ? error.message : "Restore failed");
     }

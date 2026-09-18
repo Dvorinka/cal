@@ -37,8 +37,12 @@ own server, or can sign in to a server URL to share data between devices.
   tasks, natural-language quick add (`dentist fri 5pm #health`), reminders,
   per-entry version history, soft-delete trash
 - **Beyond the calendar** — notes with templates and `[[wikilinks]]`, a link
-  library that unfurls titles/thumbnails, file uploads with public share
-  links, kanban boards with WIP limits and read-only public sharing
+  library that unfurls titles/thumbnails and searches YouTube via your own
+  Invidious instance, file uploads with public share links, kanban boards
+  with WIP limits and read-only public sharing
+- **Portable** — full JSON export one click away, or a zip that packs every
+  upload binary too; restores merge additively, and the server writes
+  nightly snapshots for 14 days
 - **Time & people** — focus timer with pomodoro mode, billable sessions with
   hourly rates and CSV/JSON export; a private relationship manager whose
   birthdays, anniversaries and namedays surface on the calendar

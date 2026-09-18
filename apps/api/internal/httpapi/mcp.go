@@ -318,6 +318,95 @@ var mcpTools = []gin.H{
 			},
 		},
 	},
+	{
+		"name":        "delete_person",
+		"description": "Delete a person and their timeline/links by id.",
+		"inputSchema": gin.H{
+			"type":       "object",
+			"properties": gin.H{"id": gin.H{"type": "string"}},
+			"required":   []string{"id"},
+		},
+	},
+	{
+		"name":        "list_person_relations",
+		"description": "List relationship links between people. With personId, only links touching that person (both directions); without, every link in the account.",
+		"inputSchema": gin.H{
+			"type": "object",
+			"properties": gin.H{
+				"personId": gin.H{"type": "string", "description": "optional - scope to one person"},
+			},
+		},
+	},
+	{
+		"name":        "link_people",
+		"description": "Create a directed relationship from one person to another. kind: parent|child|sibling|partner|friend|coworker|mentor.",
+		"inputSchema": gin.H{
+			"type": "object",
+			"properties": gin.H{
+				"fromId": gin.H{"type": "string"},
+				"toId":   gin.H{"type": "string"},
+				"kind":   gin.H{"type": "string", "enum": []string{"parent", "child", "sibling", "partner", "friend", "coworker", "mentor"}},
+			},
+			"required": []string{"fromId", "toId", "kind"},
+		},
+	},
+	{
+		"name":        "unlink_people",
+		"description": "Remove a relationship link by its id (from list_person_relations).",
+		"inputSchema": gin.H{
+			"type":       "object",
+			"properties": gin.H{"linkId": gin.H{"type": "string"}},
+			"required":   []string{"linkId"},
+		},
+	},
+	{
+		"name":        "person_timeline",
+		"description": "List a person's timeline items (met, gift, trip, achievement, memory, note), newest first.",
+		"inputSchema": gin.H{
+			"type":       "object",
+			"properties": gin.H{"personId": gin.H{"type": "string"}},
+			"required":   []string{"personId"},
+		},
+	},
+	{
+		"name":        "add_timeline_item",
+		"description": "Add a timeline item to a person. type: met|gift|trip|achievement|memory|note (default note). occurredOn is YYYY-MM-DD (optional).",
+		"inputSchema": gin.H{
+			"type": "object",
+			"properties": gin.H{
+				"personId":   gin.H{"type": "string"},
+				"type":       gin.H{"type": "string", "enum": []string{"met", "gift", "trip", "achievement", "memory", "note"}},
+				"title":      gin.H{"type": "string"},
+				"body":       gin.H{"type": "string"},
+				"occurredOn": gin.H{"type": "string", "description": "YYYY-MM-DD"},
+			},
+			"required": []string{"personId", "title"},
+		},
+	},
+	{
+		"name":        "update_timeline_item",
+		"description": "Replace a timeline item's fields (full update - type, title, body, occurredOn all sent).",
+		"inputSchema": gin.H{
+			"type": "object",
+			"properties": gin.H{
+				"itemId":     gin.H{"type": "string"},
+				"type":       gin.H{"type": "string", "enum": []string{"met", "gift", "trip", "achievement", "memory", "note"}},
+				"title":      gin.H{"type": "string"},
+				"body":       gin.H{"type": "string"},
+				"occurredOn": gin.H{"type": "string", "description": "YYYY-MM-DD"},
+			},
+			"required": []string{"itemId", "title"},
+		},
+	},
+	{
+		"name":        "delete_timeline_item",
+		"description": "Delete a timeline item by id.",
+		"inputSchema": gin.H{
+			"type":       "object",
+			"properties": gin.H{"itemId": gin.H{"type": "string"}},
+			"required":   []string{"itemId"},
+		},
+	},
 }
 
 func (s *Server) mcpAuth(c *gin.Context) (store.User, bool) {
@@ -904,6 +993,158 @@ func (s *Server) mcpCall(c *gin.Context, user store.User, req rpcRequest) {
 			return
 		}
 		respond(toolText(string(mustJSON(upcomingPersonDates(people, args.Days, time.Now()))), false))
+
+	case "delete_person":
+		var args struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(params.Arguments, &args)
+		if err := s.store.DeletePerson(ctx, user.ID, args.ID); err != nil {
+			fail("person not found")
+			return
+		}
+		respond(toolText("deleted", false))
+
+	case "list_person_relations":
+		var args struct {
+			PersonID string `json:"personId"`
+		}
+		_ = json.Unmarshal(params.Arguments, &args)
+		var rels []store.PersonRelation
+		var err error
+		if args.PersonID == "" {
+			rels, err = s.store.AllPersonRelations(ctx, user.ID)
+		} else {
+			if _, gerr := s.store.GetPerson(ctx, user.ID, args.PersonID); gerr != nil {
+				fail("person not found")
+				return
+			}
+			rels, err = s.store.PersonRelations(ctx, user.ID, args.PersonID)
+		}
+		if err != nil {
+			fail("query failed")
+			return
+		}
+		respond(toolText(string(mustJSON(rels)), false))
+
+	case "link_people":
+		var args struct {
+			FromID string `json:"fromId"`
+			ToID   string `json:"toId"`
+			Kind   string `json:"kind"`
+		}
+		_ = json.Unmarshal(params.Arguments, &args)
+		if !relationKinds[args.Kind] {
+			fail("kind must be parent|child|sibling|partner|friend|coworker|mentor")
+			return
+		}
+		if args.FromID == "" || args.ToID == "" || args.FromID == args.ToID {
+			fail("fromId and toId are required and must differ")
+			return
+		}
+		if _, err := s.store.GetPerson(ctx, user.ID, args.FromID); err != nil {
+			fail("fromId: person not found")
+			return
+		}
+		if _, err := s.store.GetPerson(ctx, user.ID, args.ToID); err != nil {
+			fail("toId: person not found")
+			return
+		}
+		rel, err := s.store.LinkPersons(ctx, user.ID, args.FromID, args.ToID, args.Kind)
+		if err != nil {
+			fail("link already exists")
+			return
+		}
+		respond(toolText(string(mustJSON(rel)), false))
+
+	case "unlink_people":
+		var args struct {
+			LinkID string `json:"linkId"`
+		}
+		_ = json.Unmarshal(params.Arguments, &args)
+		if err := s.store.UnlinkPersons(ctx, user.ID, args.LinkID); err != nil {
+			fail("link not found")
+			return
+		}
+		respond(toolText("unlinked", false))
+
+	case "person_timeline":
+		var args struct {
+			PersonID string `json:"personId"`
+		}
+		_ = json.Unmarshal(params.Arguments, &args)
+		if _, err := s.store.GetPerson(ctx, user.ID, args.PersonID); err != nil {
+			fail("person not found")
+			return
+		}
+		items, err := s.store.PersonTimeline(ctx, user.ID, args.PersonID)
+		if err != nil {
+			fail("query failed")
+			return
+		}
+		respond(toolText(string(mustJSON(items)), false))
+
+	case "add_timeline_item":
+		var args struct {
+			PersonID string `json:"personId"`
+			timelineInput
+		}
+		_ = json.Unmarshal(params.Arguments, &args)
+		in := args.timelineInput
+		in.Title = strings.TrimSpace(in.Title)
+		if in.Type == "" {
+			in.Type = "note"
+		}
+		if args.PersonID == "" || !validTimelineInput(in) {
+			fail("invalid item - personId + title required; type: met|gift|trip|achievement|memory|note")
+			return
+		}
+		if _, err := s.store.GetPerson(ctx, user.ID, args.PersonID); err != nil {
+			fail("person not found")
+			return
+		}
+		item, err := s.store.CreateTimelineItem(ctx, user.ID, args.PersonID, in.Type, in.Title, in.Body, in.OccurredOn)
+		if err != nil {
+			fail("create failed")
+			return
+		}
+		respond(toolText(string(mustJSON(item)), false))
+
+	case "update_timeline_item":
+		var args struct {
+			ItemID string `json:"itemId"`
+			timelineInput
+		}
+		_ = json.Unmarshal(params.Arguments, &args)
+		in := args.timelineInput
+		in.Title = strings.TrimSpace(in.Title)
+		if in.Type == "" {
+			in.Type = "note"
+		}
+		if args.ItemID == "" || !validTimelineInput(in) {
+			fail("invalid item - itemId + title required")
+			return
+		}
+		item, err := s.store.UpdateTimelineItem(ctx, user.ID, args.ItemID, in.Type, in.Title, in.Body, in.OccurredOn)
+		if errors.Is(err, store.ErrNotFound) {
+			fail("item not found")
+			return
+		} else if err != nil {
+			fail("update failed")
+			return
+		}
+		respond(toolText(string(mustJSON(item)), false))
+
+	case "delete_timeline_item":
+		var args struct {
+			ItemID string `json:"itemId"`
+		}
+		_ = json.Unmarshal(params.Arguments, &args)
+		if err := s.store.DeleteTimelineItem(ctx, user.ID, args.ItemID); err != nil {
+			fail("item not found")
+			return
+		}
+		respond(toolText("deleted", false))
 
 	default:
 		c.JSON(http.StatusOK, rpcError(req.ID, -32602, "unknown tool"))

@@ -414,6 +414,7 @@ paths:
   /restore:
     post:
       summary: Merge an export file back into the account (additive)
+      description: Accepts the plain JSON manifest or the zip archive (detected by magic bytes). File rows restore only when their binary is present in the archive.
       requestBody:
         required: true
         content:
@@ -437,9 +438,17 @@ paths:
                   type: array
                   items:
                     type: object
+                files:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/File"
+          application/zip:
+            schema:
+              type: string
+              format: binary
       responses:
         "200":
-          description: Counts of restored entries, people, links, timeline items
+          description: Counts of restored entries, people, links, timeline items, files (+ filesSkipped for manifest rows without binaries)
   /sessions:
     get:
       summary: List active sessions
@@ -500,6 +509,43 @@ paths:
           description: Page metadata
         "400":
           description: Invalid or private URL
+  /youtube/search:
+    get:
+      summary: Search YouTube via the user's Invidious instance (settings.invidiousUrl)
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Video results (≤24; url/thumbnail point at youtube.com/i.ytimg.com)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    videoId:
+                      type: string
+                    title:
+                      type: string
+                    author:
+                      type: string
+                    url:
+                      type: string
+                    thumbnail:
+                      type: string
+                    seconds:
+                      type: integer
+                    views:
+                      type: integer
+        "400":
+          description: No Invidious instance configured
+        "502":
+          description: Instance unreachable or bad response
   /files:
     post:
       summary: Upload an attachment (≤20 MB, multipart 'file')
@@ -886,10 +932,17 @@ paths:
           description: Subscription removed
   /export:
     get:
-      summary: Download all user data as JSON
+      summary: Download all user data (JSON manifest, or zip with upload binaries)
+      parameters:
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [zip]
+          description: "zip returns application/zip: cal-export.json manifest + files/<name> binaries"
       responses:
         "200":
-          description: Full export (user, settings, entries, people + personLinks + personTimeline)
+          description: Full export (user, settings, entries, people + personLinks + personTimeline + files)
           content:
             application/json:
               schema:
@@ -918,6 +971,14 @@ paths:
                     type: array
                     items:
                       type: object
+                  files:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/File"
+            application/zip:
+              schema:
+                type: string
+                format: binary
   /holidays:
     get:
       parameters:
@@ -1101,6 +1162,39 @@ components:
         defaultView:
           enum: [month, week, day]
           description: Calendar view fresh devices open on (default month)
+        invidiousUrl:
+          type: string
+          description: Base URL of the user's Invidious instance for YouTube search (empty = off)
+    File:
+      type: object
+      required: [id, name, origName, size, mime]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          description: Server-side random name on disk
+        origName:
+          type: string
+          description: Client filename for display
+        size:
+          type: integer
+        mime:
+          type: string
+        shareToken:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        tags:
+          type: array
+          items:
+            type: string
+        workspaceId:
+          type: string
+        personId:
+          type: string
+          description: Set when attached to a person profile
     Feed:
       type: object
       required: [id, name, url, color]

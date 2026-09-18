@@ -99,6 +99,9 @@ type Settings struct {
 	// NamedayCountry is the default two-letter country for nameday lookups
 	// in the person editor ("" = none).
 	NamedayCountry string `json:"namedayCountry"`
+	// InvidiousURL is the base URL of the user's Invidious instance for
+	// YouTube search ("" = feature off). Not a secret — a server address.
+	InvidiousURL string `json:"invidiousUrl"`
 }
 
 type Feed struct {
@@ -761,16 +764,16 @@ func (s *Store) Settings(ctx context.Context, userID string) (Settings, error) {
 	err := s.db.QueryRow(ctx, `
 		SELECT country, show_holidays, theme, week_start, accent, timezone, coalesce(city, ''), quota_mb,
 		       coalesce(to_char(digest_time,'HH24:MI'), ''), widget_token, api_token, default_rate, coalesce(github_token,''),
-		       modules, active_workspace::text, default_view, nameday_country FROM settings WHERE user_id = $1
-	`, userID).Scan(&settings.Country, &settings.ShowHolidays, &settings.Theme, &settings.WeekStart, &settings.Accent, &settings.Timezone, &settings.City, &settings.QuotaMB, &settings.DigestTime, &settings.WidgetToken, &settings.ApiToken, &settings.DefaultRate, &settings.GithubToken, &settings.Modules, &settings.ActiveWorkspace, &settings.DefaultView, &settings.NamedayCountry)
+		       modules, active_workspace::text, default_view, nameday_country, invidious_url FROM settings WHERE user_id = $1
+	`, userID).Scan(&settings.Country, &settings.ShowHolidays, &settings.Theme, &settings.WeekStart, &settings.Accent, &settings.Timezone, &settings.City, &settings.QuotaMB, &settings.DigestTime, &settings.WidgetToken, &settings.ApiToken, &settings.DefaultRate, &settings.GithubToken, &settings.Modules, &settings.ActiveWorkspace, &settings.DefaultView, &settings.NamedayCountry, &settings.InvidiousURL)
 	return settings, err
 }
 
 func (s *Store) UpdateSettings(ctx context.Context, userID string, settings Settings) (Settings, error) {
 	var out Settings
 	err := s.db.QueryRow(ctx, `
-		INSERT INTO settings (user_id, country, show_holidays, theme, week_start, accent, timezone, city, digest_time, default_rate, github_token, modules, active_workspace, default_view, nameday_country)
-		VALUES ($1, $2, $3, $4, $5, $6, coalesce(nullif($7, ''), 'UTC'), nullif($8, ''), nullif($9, '')::time, $10, nullif($11, ''), coalesce($12::jsonb, '{}'::jsonb), $13::uuid, coalesce(nullif($14, ''), 'month'), $15)
+		INSERT INTO settings (user_id, country, show_holidays, theme, week_start, accent, timezone, city, digest_time, default_rate, github_token, modules, active_workspace, default_view, nameday_country, invidious_url)
+		VALUES ($1, $2, $3, $4, $5, $6, coalesce(nullif($7, ''), 'UTC'), nullif($8, ''), nullif($9, '')::time, $10, nullif($11, ''), coalesce($12::jsonb, '{}'::jsonb), $13::uuid, coalesce(nullif($14, ''), 'month'), $15, $16)
 		ON CONFLICT (user_id) DO UPDATE
 		SET country = EXCLUDED.country,
 		    show_holidays = EXCLUDED.show_holidays,
@@ -785,12 +788,13 @@ func (s *Store) UpdateSettings(ctx context.Context, userID string, settings Sett
 		    modules = EXCLUDED.modules,
 		    active_workspace = EXCLUDED.active_workspace,
 		    default_view = coalesce(EXCLUDED.default_view, 'month'),
-		    nameday_country = EXCLUDED.nameday_country
+		    nameday_country = EXCLUDED.nameday_country,
+		    invidious_url = EXCLUDED.invidious_url
 		RETURNING country, show_holidays, theme, week_start, accent, timezone, coalesce(city, ''), quota_mb,
 		          coalesce(to_char(digest_time,'HH24:MI'), ''), widget_token, api_token, default_rate, coalesce(github_token,''),
-		          modules, active_workspace::text, default_view, nameday_country
-	`, userID, settings.Country, settings.ShowHolidays, settings.Theme, settings.WeekStart, settings.Accent, settings.Timezone, settings.City, settings.DigestTime, settings.DefaultRate, settings.GithubToken, settings.Modules, settings.ActiveWorkspace, settings.DefaultView, settings.NamedayCountry).
-		Scan(&out.Country, &out.ShowHolidays, &out.Theme, &out.WeekStart, &out.Accent, &out.Timezone, &out.City, &out.QuotaMB, &out.DigestTime, &out.WidgetToken, &out.ApiToken, &out.DefaultRate, &out.GithubToken, &out.Modules, &out.ActiveWorkspace, &out.DefaultView, &out.NamedayCountry)
+		          modules, active_workspace::text, default_view, nameday_country, invidious_url
+	`, userID, settings.Country, settings.ShowHolidays, settings.Theme, settings.WeekStart, settings.Accent, settings.Timezone, settings.City, settings.DigestTime, settings.DefaultRate, settings.GithubToken, settings.Modules, settings.ActiveWorkspace, settings.DefaultView, settings.NamedayCountry, settings.InvidiousURL).
+		Scan(&out.Country, &out.ShowHolidays, &out.Theme, &out.WeekStart, &out.Accent, &out.Timezone, &out.City, &out.QuotaMB, &out.DigestTime, &out.WidgetToken, &out.ApiToken, &out.DefaultRate, &out.GithubToken, &out.Modules, &out.ActiveWorkspace, &out.DefaultView, &out.NamedayCountry, &out.InvidiousURL)
 	return out, err
 }
 
@@ -1432,6 +1436,14 @@ func (s *Store) FileByName(ctx context.Context, userID, name string) (File, erro
 	return f, err
 }
 
+// FileIDExists reports whether a file id is taken (any owner) — the restore
+// path uses it to skip binaries whose row insert would conflict anyway.
+func (s *Store) FileIDExists(ctx context.Context, id string) (bool, error) {
+	var ok bool
+	err := s.db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM files WHERE id = $1::uuid)`, id).Scan(&ok)
+	return ok, err
+}
+
 // FileByShareToken resolves a public share link — no ownership check.
 func (s *Store) FileByShareToken(ctx context.Context, token string) (string, File, error) {
 	var f File
@@ -1456,6 +1468,40 @@ func (s *Store) DeleteFile(ctx context.Context, userID, id string) (string, erro
 	var name string
 	err := s.db.QueryRow(ctx, `DELETE FROM files WHERE id = $1 AND user_id = $2 RETURNING name`, id, userID).Scan(&name)
 	return name, err
+}
+
+// RestoreFiles re-inserts file metadata rows additively — same contract as
+// RestoreEntries: existing ids and already-taken disk names are skipped.
+// person_id/workspace_id are kept only when the target exists locally;
+// share_token is kept only when still free (global unique index).
+func (s *Store) RestoreFiles(ctx context.Context, userID string, files []File) (int, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(ctx)
+	imported := 0
+	for _, f := range files {
+		if f.ID == "" || f.Name == "" {
+			continue
+		}
+		tag, err := tx.Exec(ctx, `
+			INSERT INTO files (id, user_id, name, orig_name, size, mime, share_token, created_at, tags, workspace_id, person_id)
+			SELECT $1::uuid, $2, $3, $4, $5, $6,
+				CASE WHEN EXISTS (SELECT 1 FROM files WHERE share_token = $7) THEN NULL ELSE $7 END,
+				coalesce($8, now()), coalesce($9::text[], '{}'::text[]),
+				CASE WHEN EXISTS (SELECT 1 FROM workspaces WHERE id = $10::uuid AND user_id = $2) THEN $10::uuid ELSE NULL END,
+				CASE WHEN EXISTS (SELECT 1 FROM people WHERE id = $11::uuid AND user_id = $2) THEN $11::uuid ELSE NULL END
+			WHERE NOT EXISTS (SELECT 1 FROM files WHERE user_id = $2 AND name = $3)
+			ON CONFLICT (id) DO NOTHING`,
+			f.ID, userID, f.Name, f.OrigName, f.Size, f.Mime, f.ShareToken,
+			orNow(f.CreatedAt), f.Tags, f.WorkspaceID, f.PersonID)
+		if err != nil {
+			return imported, err
+		}
+		imported += int(tag.RowsAffected())
+	}
+	return imported, tx.Commit(ctx)
 }
 
 // Activity returns date → entry count over the last N days.

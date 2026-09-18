@@ -1,12 +1,16 @@
 package httpapi
 
 import (
+	"archive/zip"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -62,7 +66,12 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 			if strings.HasPrefix(origin, "capacitor://") || strings.HasPrefix(origin, "ionic://") {
 				return true
 			}
-			return strings.HasPrefix(origin, "http://localhost") || strings.HasPrefix(origin, "https://localhost")
+			for _, p := range []string{"http://localhost", "https://localhost", "http://127.0.0.1", "https://127.0.0.1", "http://[::1]", "https://[::1]"} {
+				if strings.HasPrefix(origin, p) {
+					return true
+				}
+			}
+			return false
 		},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
@@ -148,6 +157,7 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authed.GET("/tags", server.tagCounts)
 	authed.GET("/agenda", server.agendaMarkdown)
 	authed.GET("/search", server.globalSearch)
+	authed.GET("/youtube/search", server.youtubeSearch)
 	authed.GET("/dashboard", server.dashboard)
 	authed.GET("/workspaces", server.listWorkspaces)
 	authed.POST("/workspaces", server.createWorkspace)
@@ -500,8 +510,8 @@ func (s *Server) export(c *gin.Context) {
 	people, _ := s.store.ListPeople(c.Request.Context(), user.ID)
 	links, _ := s.store.AllPersonRelations(c.Request.Context(), user.ID)
 	timeline, _ := s.store.AllTimeline(c.Request.Context(), user.ID)
-	c.Header("Content-Disposition", `attachment; filename="cal-export.json"`)
-	c.JSON(http.StatusOK, gin.H{
+	files, _ := s.store.ListFiles(c.Request.Context(), user.ID)
+	payload := gin.H{
 		"exportedAt":     time.Now().UTC().Format(time.RFC3339),
 		"user":           user,
 		"settings":       settings,
@@ -509,7 +519,40 @@ func (s *Server) export(c *gin.Context) {
 		"people":         people,
 		"personLinks":    links,
 		"personTimeline": timeline,
-	})
+		"files":          files,
+	}
+	if c.Query("format") != "zip" {
+		c.Header("Content-Disposition", `attachment; filename="cal-export.json"`)
+		c.JSON(http.StatusOK, payload)
+		return
+	}
+	// Zip archive: cal-export.json manifest + every upload binary under
+	// files/<stored-name>. A row whose binary is missing on disk stays in the
+	// manifest (restore counts it as skipped) but gets no archive member.
+	c.Header("Content-Disposition", `attachment; filename="cal-export.zip"`)
+	c.Header("Content-Type", "application/zip")
+	zw := zip.NewWriter(c.Writer)
+	mj, err := json.MarshalIndent(payload, "", "  ")
+	if err == nil {
+		if w, cerr := zw.Create("cal-export.json"); cerr == nil {
+			_, _ = w.Write(mj)
+		}
+	}
+	dir := filepath.Join(s.dataDir, "uploads", user.ID)
+	for _, f := range files {
+		if !reSafeName.MatchString(f.Name) {
+			continue
+		}
+		src, err := os.Open(filepath.Join(dir, f.Name))
+		if err != nil {
+			continue
+		}
+		if w, cerr := zw.Create("files/" + f.Name); cerr == nil {
+			_, _ = io.Copy(w, src)
+		}
+		_ = src.Close()
+	}
+	_ = zw.Close()
 }
 
 func (s *Server) holidays(c *gin.Context) {
@@ -777,6 +820,13 @@ func validSettings(settings store.Settings) bool {
 	}
 	if settings.DigestTime != "" && !validTime(settings.DigestTime) {
 		return false
+	}
+	if settings.InvidiousURL != "" {
+		u, err := url.Parse(settings.InvidiousURL)
+		if err != nil || len(settings.InvidiousURL) > 500 ||
+			(u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+			return false
+		}
 	}
 	validView := settings.DefaultView == "" || settings.DefaultView == "month" ||
 		settings.DefaultView == "week" || settings.DefaultView == "day"
