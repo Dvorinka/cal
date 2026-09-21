@@ -1,4 +1,5 @@
-import { Check, ExternalLink, Link2, Play, Plus, SquarePlay } from "lucide-react";
+import type { YtResult } from "@cal/api-client";
+import { Check, ExternalLink, Link2, Play, Plus, Search, SquarePlay } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { linkDomain } from "../lib/entries";
@@ -12,10 +13,19 @@ export function LinksPage() {
   const entries = usePlanner((state) => state.entries);
   const loadEntries = usePlanner((state) => state.loadEntries);
   const updateEntry = usePlanner((state) => state.updateEntry);
+  const createEntry = usePlanner((state) => state.createEntry);
+  const settings = usePlanner((state) => state.settings);
+  const api = usePlanner((state) => state.api);
+  const toast = usePlanner((state) => state.toast);
   const openCreate = useUi((state) => state.openCreate);
   const openEdit = useUi((state) => state.openEdit);
   const [grid, setGrid] = useState(true);
   const [filter, setFilter] = useState<Filter>("all");
+  const [showSearch, setShowSearch] = useState(false);
+  const [ytQuery, setYtQuery] = useState("");
+  const [ytResults, setYtResults] = useState<YtResult[] | null>(null);
+  const [ytBusy, setYtBusy] = useState(false);
+  const [ytSaved, setYtSaved] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     void loadEntries({});
@@ -37,6 +47,36 @@ export function LinksPage() {
 
   const videoCount = links.filter((l) => l.linkVideoId).length;
 
+  async function runSearch() {
+    const q = ytQuery.trim();
+    if (!q || ytBusy) return;
+    setYtBusy(true);
+    try {
+      setYtResults(await api.youtubeSearch(q));
+    } catch (error) {
+      setYtResults(null);
+      toast(error instanceof Error ? error.message : "Search failed");
+    } finally {
+      setYtBusy(false);
+    }
+  }
+
+  async function saveVideo(v: YtResult) {
+    try {
+      await createEntry({
+        title: v.title,
+        type: "link",
+        linkUrl: v.url,
+        date: todayIso(),
+        tags: ["video"],
+      });
+      setYtSaved((prev) => new Set(prev).add(v.videoId));
+      toast("Saved to links");
+    } catch {
+      // createEntry already reports via toast
+    }
+  }
+
   return (
     <>
       <PageHeader title="Links" sub={`${links.length} saved · ${videoCount} video${videoCount === 1 ? "" : "s"}`}>
@@ -53,10 +93,91 @@ export function LinksPage() {
         <button type="button" className="btn btn-secondary btn-xs" onClick={() => setGrid((v) => !v)}>
           {grid ? "List" : "Cards"}
         </button>
+        <button
+          type="button"
+          className={`btn btn-secondary btn-xs ${showSearch ? "on" : ""}`}
+          aria-pressed={showSearch}
+          onClick={() => setShowSearch((v) => !v)}
+        >
+          <SquarePlay size={13} /> YouTube
+        </button>
         <button type="button" className="btn btn-primary" onClick={() => openCreate(todayIso())}>
           <Plus size={14} strokeWidth={2.5} /> Save link
         </button>
       </PageHeader>
+      {showSearch && (
+        <div className="yt-search">
+          <form
+            className="yt-search-bar"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void runSearch();
+            }}
+          >
+            <Search size={14} />
+            <input
+              className="input"
+              value={ytQuery}
+              onChange={(e) => setYtQuery(e.target.value)}
+              placeholder="Search YouTube…"
+              aria-label="Search YouTube"
+              autoFocus
+            />
+            <button type="submit" className="btn btn-secondary btn-xs" disabled={ytBusy || !ytQuery.trim()}>
+              {ytBusy ? "Searching…" : "Search"}
+            </button>
+          </form>
+          {!settings.invidiousUrl ? (
+            <p className="panel-note" style={{ marginTop: 8 }}>
+              YouTube search runs through your own Invidious instance — set its URL in{" "}
+              <a href="/settings">Settings</a> first.
+            </p>
+          ) : ytResults === null ? null : ytResults.length === 0 ? (
+            <p className="panel-note" style={{ marginTop: 8 }}>No videos found.</p>
+          ) : (
+            <div className="link-grid" style={{ marginTop: 10 }}>
+              {ytResults.map((v) => (
+                <article key={v.videoId} className="link-card">
+                  <a href={v.url} target="_blank" rel="noopener noreferrer" className="link-thumb">
+                    <img
+                      src={v.thumbnail}
+                      alt=""
+                      loading="lazy"
+                      style={{ position: "absolute", inset: 0 }}
+                      onError={(e) => { e.currentTarget.style.display = "none"; }}
+                    />
+                    <span className="link-play">
+                      <span className="link-play-btn"><Play size={18} fill="currentColor" /></span>
+                    </span>
+                  </a>
+                  <div className="link-card-body">
+                    <a href={v.url} target="_blank" rel="noopener noreferrer" className="link-card-title">
+                      {v.title}
+                    </a>
+                    <div className="link-card-meta">
+                      <span className="link-domain">{v.author}</span>
+                      {v.seconds > 0 && (
+                        <span className="meta-chip">
+                          {Math.floor(v.seconds / 60)}:{String(v.seconds % 60).padStart(2, "0")}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-xs"
+                      disabled={ytSaved.has(v.videoId)}
+                      onClick={() => void saveVideo(v)}
+                    >
+                      {ytSaved.has(v.videoId) ? <Check size={12} /> : <Plus size={12} />}
+                      {ytSaved.has(v.videoId) ? "Saved" : "Save"}
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <div className="page-scroll">
         {visible.length === 0 ? (
           <div className="empty-hint">

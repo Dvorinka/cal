@@ -300,22 +300,48 @@ recurring yearly dates, and reminders ride the existing entry pipeline.
   workspace scoping), onboarding wizard, `audit_log`, the standalone
   events/reminders tables (absorbed into `dates` + existing reminders).
 
+## Phase 10 — Parity & portability (shipped 2026-09-18)
+
+The leftover "buildable now" gaps: agents reach the full people surface,
+export carries real files, YouTube search works without a Google key, and
+the last API-only features get UI handles.
+
+- [x] **MCP people parity** — `delete_person`, `list_person_relations`
+      (every link, or one person's both directions), `link_people`,
+      `unlink_people`, `person_timeline`, `add_timeline_item`,
+      `update_timeline_item`, `delete_timeline_item`. Same validation as
+      the HTTP handlers (relation kinds, timeline types, no self-links,
+      ownership) — 34 tools total. Principle 2 holds.
+- [x] **Files in export** — `GET /api/export?format=zip` streams
+      `cal-export.json` + `files/<name>` binaries; the plain JSON gains a
+      `files` manifest array. `POST /api/restore` sniffs the zip magic and
+      unpacks binaries additively: a file row is restored only when its
+      binary is in the archive (no dangling attachments), and share
+      tokens/person/workspace FKs are kept only when still valid locally.
+      Nightly backups carry the manifest only — binaries already live in
+      `uploads/` and are not duplicated 14×.
+- [x] **YouTube search via Invidious** — `settings.invidious_url` +
+      `GET /api/youtube/search` proxies the instance's `/api/v1/search`.
+      The Links page gets a YouTube panel whose results save as link
+      entries (oEmbed enriches on create, as usual). No Google key; the
+      instance is user-configured like a CalDAV URL, so LAN hosts are
+      allowed — the SSRF guard stays for attacker-influenced URLs only.
+- [x] **Discoverability pass** — `POST /entries/:id/refresh-link` finally
+      has a button (link editor → Preview); the palette gains Go-to
+      actions for time tracking, GitHub, trash and settings.
+
 ## Remaining — buildable now
 
-- [ ] **YouTube video search** — needs the Data API key or an invidious
-      instance; oEmbed covers save-time metadata only.
+- [x] **YouTube video search** — shipped in Phase 10 via a configurable
+      Invidious instance (no Data API key needed).
 - [x] **Family tree view** — `/people/tree` renders an SVG generation graph
       over `person_links` (parent/child rows, partner/sibling arcs, other
       kinds dashed).
 - [x] **Password reset email** — PeopleVault's forgot/reset flow, sent via
       the Mail module's configured SMTP account instead of a new provider.
-- [ ] **MCP person relations & timeline tools** — humans can link people
-      and log timeline entries; MCP exposes only people CRUD + upcoming
-      dates (principle-2 gap).
-- [ ] **Files in export** — the JSON export covers entries, settings and
-      the people graph, but not `files` rows or their binaries; person
-      attachments ride that table, so a real export format needs a
-      binary archive (zip/tar) story.
+- [x] **MCP person relations & timeline tools** — shipped in Phase 10.
+- [x] **Files in export** — shipped in Phase 10 (zip archive + additive
+      restore of binaries).
 
 ## Remaining — UX/discoverability (found in the visual pass)
 
@@ -323,9 +349,9 @@ recurring yearly dates, and reminders ride the existing entry pipeline.
       `PageHeader` + `page-scroll` like every other page.
 - [x] ~~Timer start was buried in a context menu~~ — Time header gets
       "Start timer", Today gets a Focus chip.
-- [ ] **Discoverability audit** — every feature reachable in ≤2 clicks
-      from a page that names it; currently several (share links,
-      templates, digest) live only in context menus or Settings.
+- [x] **Discoverability audit** — Phase 10: refresh-preview button for
+      links (the endpoint existed API-only), palette Go-to for time,
+      GitHub, trash and settings. Every page route is now in the palette.
 - [x] **Mobile nav audit** — shipped in Phase 8: bottom nav + More tab
       opens the full sidebar drawer, everything reachable on phones.
 
@@ -334,8 +360,8 @@ recurring yearly dates, and reminders ride the existing entry pipeline.
 - [ ] **GitHub PAT** — the inbox, import, and sync loop are built and
       verified up to the token check; populate `settings.github_token`
       to exercise them end-to-end.
-- [ ] **YouTube Data API key** — only if in-app video search lands;
-      oEmbed covers save-time metadata.
+- [ ] **YouTube Data API key** — optional now; the Invidious path shipped
+      in Phase 10 covers search without a Google key.
 - [ ] **Google OAuth client pair** — the Google Calendar path is
       complete; needs real `GOOGLE_CLIENT_ID`/`_SECRET` to run consent.
 - [ ] **iOS build** — `apps/web/ios/` is scaffolded; needs a Mac +
@@ -343,6 +369,35 @@ recurring yearly dates, and reminders ride the existing entry pipeline.
 - [ ] **Inbound email plumbing** — `/api/intake` works; wiring real
       email needs SendGrid/SES inbound (or a forwarding rule hitting
       the endpoint with the intake token).
+
+## Future — candidates for the next phases
+
+### Product
+
+- [ ] **Restore preview** — a dry-run that reports what an export would
+      merge (counts, name/ID collisions) before anything is written.
+- [ ] **Upload dedup** — sha256 on `files` would let upload/restore skip
+      identical binaries instead of trusting random names.
+- [ ] **MCP resources for people** — person profiles/timelines as
+      `cal://people/<id>` resources, not just tools.
+- [ ] **Public person pages** — a share-token page like shared boards,
+      e.g. a family birthday list relatives can subscribe to (the ICS
+      feed machinery already exists).
+
+### Engineering
+
+- [ ] **DB-backed API tests** — `httpapi` has only pure-function tests
+      today; an embedded-postgres harness would give MCP and restore
+      paths real coverage.
+- [ ] **One installer** — `apps/web/node_modules` holds a pnpm snapshot
+      of the `file:` api-client while root is npm workspaces; the copies
+      drift. Pick one installer (or a `link:` dep) so the client can't
+      desync.
+- [ ] **Enrichment status** — link enrichment is fire-and-forget; a
+      `link_meta_at` column or a tiny status endpoint would let the UI
+      stop guessing after 2.5 s.
+- [ ] **Streaming restore** — the zip restore buffers the whole archive
+      (512 MB cap); fine for personal data, revisit if libraries grow.
 
 ## Deliberately out of scope
 
