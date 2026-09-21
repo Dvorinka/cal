@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/json"
 	"mime/multipart"
@@ -88,6 +89,35 @@ func TestUploadDedupSameBytes(t *testing.T) {
 	json.Unmarshal([]byte(second), &b)
 	if a.ID == "" || a.ID != b.ID {
 		t.Fatalf("dedup should return the original row: %s vs %s", first, second)
+	}
+}
+
+func TestRestoreZipUnpacksBinary(t *testing.T) {
+	srv, session := newTestServer(t)
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	manifest, _ := zw.Create("cal-export.json")
+	manifest.Write([]byte(`{"files":[{"id":"55555555-5555-5555-5555-555555555555","name":"zipfile.png","origName":"z.png","size":7,"mime":"image/png"}]}`))
+	bin, _ := zw.Create("files/zipfile.png")
+	bin.Write([]byte("pngdata"))
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/restore", &buf)
+	req.Header.Set("Content-Type", "application/zip")
+	req.Header.Set("Authorization", "Bearer "+session)
+	res, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+
+	// The restored row must serve its binary back.
+	got := doJSON(t, srv, http.MethodGet, "/api/files/zipfile.png", "", session)
+	if got != "pngdata" {
+		t.Fatalf("restored binary: %q", got)
 	}
 }
 

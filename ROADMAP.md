@@ -397,8 +397,8 @@ the last API-only features get UI handles.
 - [x] **Enrichment status** — `entries.link_meta_at` stamps every enrichment
       attempt (failures included); the Links UI shows a pulsing "Fetching…"
       chip until it lands instead of guessing.
-- [ ] **Streaming restore** — the zip restore buffers the whole archive
-      (512 MB cap); fine for personal data, revisit if libraries grow.
+- [x] **Streaming restore** — the request body spools to a temp file and the
+      zip reads lazily via `io.ReaderAt`; big archives no longer sit in RAM.
 
 ## Deliberately out of scope
 
