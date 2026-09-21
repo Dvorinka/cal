@@ -47,12 +47,21 @@ type exportPayload struct {
 // counts per collection, existing-ID conflicts, orphaned rows — without
 // writing anything.
 func (s *Server) restoreJSON(c *gin.Context) {
-	raw, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, maxRestoreBytes))
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxRestoreBytes)
+	// Spool to a temp file — zip needs io.ReaderAt anyway, and big archives
+	// shouldn't sit in RAM. Lives only for this request.
+	tmp, err := os.CreateTemp("", "cal-restore-*")
+	if err != nil {
+		c.String(http.StatusInternalServerError, "restore failed")
+		return
+	}
+	defer func() { _ = tmp.Close(); _ = os.Remove(tmp.Name()) }()
+	size, err := io.Copy(tmp, c.Request.Body)
 	if err != nil {
 		c.String(http.StatusRequestEntityTooLarge, "file too large")
 		return
 	}
-	body, binaries, ok := parseExportPayload(raw)
+	body, binaries, ok := parseExportPayload(tmp, size)
 	if !ok {
 		c.String(http.StatusBadRequest, "expected a Cal export file")
 		return
@@ -99,12 +108,15 @@ func (s *Server) restoreJSON(c *gin.Context) {
 }
 
 // parseExportPayload decodes a restore body — plain JSON or the zip archive —
-// into the manifest plus the binaries map (zip restores only).
-func parseExportPayload(raw []byte) (exportPayload, map[string]*zip.File, bool) {
+// into the manifest plus the binaries map (zip restores only). Reads the
+// spooled file; zip binaries stay lazily attached until the caller closes it.
+func parseExportPayload(f *os.File, size int64) (exportPayload, map[string]*zip.File, bool) {
 	var body exportPayload
 	var binaries map[string]*zip.File
-	if bytes.HasPrefix(raw, []byte("PK\x03\x04")) {
-		zr, zerr := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
+	head := make([]byte, 4)
+	_, _ = f.ReadAt(head, 0)
+	if bytes.Equal(head, []byte("PK\x03\x04")) {
+		zr, zerr := zip.NewReader(f, size)
 		if zerr != nil {
 			return body, nil, false
 		}
@@ -124,8 +136,13 @@ func parseExportPayload(raw []byte) (exportPayload, map[string]*zip.File, bool) 
 		if manifest == nil || json.Unmarshal(manifest, &body) != nil {
 			return body, nil, false
 		}
-	} else if json.Unmarshal(raw, &body) != nil {
-		return body, nil, false
+	} else {
+		if _, err := f.Seek(0, io.SeekStart); err != nil {
+			return body, nil, false
+		}
+		if json.NewDecoder(f).Decode(&body) != nil {
+			return body, nil, false
+		}
 	}
 	if len(body.Entries) == 0 && len(body.People) == 0 && len(body.PersonLinks) == 0 &&
 		len(body.PersonTimeline) == 0 && len(body.Files) == 0 {
