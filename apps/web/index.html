@@ -9,15 +9,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/pwa-192.svg" />
     <title>Cal - self-hosted planner</title>
-    <script>
-      // Apply the cached theme before first paint to avoid a flash.
-      try {
-        var s = JSON.parse(localStorage.getItem("cal:settings") || "{}");
-        var t = s.theme || "system";
-        var dark = t === "dark" || (t === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
-        document.documentElement.dataset.theme = dark ? "dark" : "light";
-      } catch (e) {}
-    </script>
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>

@@ -52,6 +52,10 @@ accounts on someone else's server — one container and it's yours.
 | --- | --- |
 | ![Notes page with tag filters](docs/screenshots/notes.png) | ![Time page with billable sessions](docs/screenshots/time.png) |
 
+| Shopping — sections, quantities, can't-find flags |
+| --- |
+| ![Shopping list with sections, quantities and checked items](docs/screenshots/shopping.png) |
+
 ## Features
 
 - **Planner core** — month, week and day views with drag-and-drop, recurring
