@@ -459,6 +459,11 @@ func (s *Server) mcp(c *gin.Context) {
 			{"uri": "cal://today", "name": "Today", "description": "Today's agenda as JSON", "mimeType": "application/json"},
 			{"uri": "cal://week", "name": "This week", "description": "Entries for the current week", "mimeType": "application/json"},
 			{"uri": "cal://open-tasks", "name": "Open tasks", "description": "Every incomplete task", "mimeType": "application/json"},
+			{"uri": "cal://people", "name": "People", "description": "Everyone in the relationship manager", "mimeType": "application/json"},
+		}}))
+	case req.Method == "resources/templates/list":
+		c.JSON(http.StatusOK, rpcResult(req.ID, gin.H{"resourceTemplates": []gin.H{
+			{"uriTemplate": "cal://people/{id}", "name": "Person", "description": "Person profile with relations, timeline and attachments", "mimeType": "application/json"},
 		}}))
 	case req.Method == "resources/read":
 		var p struct {
@@ -466,6 +471,38 @@ func (s *Server) mcp(c *gin.Context) {
 		}
 		_ = json.Unmarshal(req.Params, &p)
 		ctx := c.Request.Context()
+		if p.URI == "cal://people" {
+			people, err := s.store.ListPeople(ctx, user.ID)
+			if err != nil {
+				c.JSON(http.StatusOK, rpcError(req.ID, -32603, "query failed"))
+				return
+			}
+			data, _ := json.Marshal(people)
+			c.JSON(http.StatusOK, rpcResult(req.ID, gin.H{"contents": []gin.H{
+				{"uri": p.URI, "mimeType": "application/json", "text": string(data)},
+			}}))
+			return
+		}
+		if id, ok := strings.CutPrefix(p.URI, "cal://people/"); ok && id != "" {
+			person, err := s.store.GetPerson(ctx, user.ID, id)
+			if err != nil {
+				c.JSON(http.StatusOK, rpcError(req.ID, -32602, "unknown person"))
+				return
+			}
+			rels, _ := s.store.PersonRelations(ctx, user.ID, id)
+			timeline, _ := s.store.PersonTimeline(ctx, user.ID, id)
+			files, _ := s.store.FilesForPerson(ctx, user.ID, id)
+			data, _ := json.Marshal(gin.H{
+				"person":    person,
+				"relations": rels,
+				"timeline":  timeline,
+				"files":     files,
+			})
+			c.JSON(http.StatusOK, rpcResult(req.ID, gin.H{"contents": []gin.H{
+				{"uri": p.URI, "mimeType": "application/json", "text": string(data)},
+			}}))
+			return
+		}
 		var entries []store.Entry
 		var err error
 		today := time.Now().Format(time.DateOnly)

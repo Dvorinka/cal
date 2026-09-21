@@ -235,9 +235,9 @@ func (s *Store) UpdateFile(ctx context.Context, userID, id string, tags []string
 			tags = coalesce($3, tags),
 			workspace_id = CASE WHEN $4 THEN workspace_id WHEN $5::text = '' THEN NULL ELSE coalesce($5::uuid, workspace_id) END
 		WHERE id = $1 AND user_id = $2
-		RETURNING id::text, name, orig_name, size, mime, share_token, created_at, tags, workspace_id::text`,
+		RETURNING `+fileCols,
 		id, userID, tags, workspaceID == nil, workspaceID).
-		Scan(&f.ID, &f.Name, &f.OrigName, &f.Size, &f.Mime, &f.ShareToken, &f.CreatedAt, &f.Tags, &f.WorkspaceID)
+		Scan(&f.ID, &f.Name, &f.OrigName, &f.Size, &f.Mime, &f.ShareToken, &f.CreatedAt, &f.Tags, &f.WorkspaceID, &f.PersonID, &f.Sha256)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return f, ErrNotFound
 	}

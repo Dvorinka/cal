@@ -256,6 +256,7 @@ export function LinksPage() {
                     )}
                     <div className="link-card-meta">
                       <span className="link-domain">{domain}</span>
+                      {!link.linkMetaAt && <span className="meta-chip enriching">Fetching…</span>}
                       <span className="meta-chip date">{formatDayShort(link.date)}</span>
                       {link.tags?.slice(0, 2).map((t) => (
                         <span key={t} className="meta-chip">#{t}</span>
@@ -290,6 +291,7 @@ export function LinksPage() {
                     {domain && <span className="link-domain">{domain}</span>}
                   </button>
                   {link.linkVideoId && <SquarePlay size={13} style={{ color: "var(--text-3)" }} />}
+                  {!link.linkMetaAt && <span className="meta-chip enriching">Fetching…</span>}
                   <span className="meta-chip date">{formatDayShort(link.date)}</span>
                   {link.linkUrl && (
                     <a

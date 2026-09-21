@@ -13,6 +13,7 @@ import { Toasts } from "./components/Toasts";
 import { CalendarPage } from "./pages/CalendarPage";
 import { BoardsPage } from "./pages/BoardsPage";
 import { SharedBoardPage } from "./pages/SharedBoardPage";
+import { SharedPeoplePage } from "./pages/SharedPeoplePage";
 import { TagsPage } from "./pages/TagsPage";
 import { TimePage } from "./pages/TimePage";
 import { TrashPage } from "./pages/TrashPage";
@@ -115,11 +116,12 @@ function Shell() {
     return () => window.clearInterval(timer);
   }, [user, mode]);
 
-  // Public shared boards render without auth.
-  if (window.location.pathname.startsWith("/board/")) {
+  // Public shared pages render without auth.
+  if (window.location.pathname.startsWith("/board/") || window.location.pathname.startsWith("/people/shared/")) {
     return (
       <Routes>
         <Route path="/board/:token" element={<SharedBoardPage />} />
+        <Route path="/people/shared/:token" element={<SharedPeoplePage />} />
       </Routes>
     );
   }

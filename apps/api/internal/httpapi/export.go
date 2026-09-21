@@ -43,53 +43,26 @@ type exportPayload struct {
 // (cal-export.json manifest + files/<name> binaries) - and re-inserts
 // entries, people, person links, timeline items and file rows. Additive:
 // existing IDs are skipped, so a restore never clobbers current data.
+// ?dry=1 parses the same payload and reports what a restore would merge —
+// counts per collection, existing-ID conflicts, orphaned rows — without
+// writing anything.
 func (s *Server) restoreJSON(c *gin.Context) {
 	raw, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, maxRestoreBytes))
 	if err != nil {
 		c.String(http.StatusRequestEntityTooLarge, "file too large")
 		return
 	}
-	var body exportPayload
-	// binaries maps stored file name → zip member, present only for zip restores.
-	var binaries map[string]*zip.File
-	if bytes.HasPrefix(raw, []byte("PK\x03\x04")) {
-		zr, zerr := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
-		if zerr != nil {
-			c.String(http.StatusBadRequest, "invalid zip archive")
-			return
-		}
-		binaries = map[string]*zip.File{}
-		var manifest []byte
-		for _, zf := range zr.File {
-			switch {
-			case zf.Name == exportManifestName:
-				if rc, oerr := zf.Open(); oerr == nil {
-					manifest, _ = io.ReadAll(io.LimitReader(rc, 64<<20))
-					_ = rc.Close()
-				}
-			case strings.HasPrefix(zf.Name, "files/"):
-				binaries[strings.TrimPrefix(zf.Name, "files/")] = zf
-			}
-		}
-		if manifest == nil || json.Unmarshal(manifest, &body) != nil {
-			c.String(http.StatusBadRequest, "expected a Cal export archive")
-			return
-		}
-	} else if json.Unmarshal(raw, &body) != nil {
+	body, binaries, ok := parseExportPayload(raw)
+	if !ok {
 		c.String(http.StatusBadRequest, "expected a Cal export file")
-		return
-	}
-	if len(body.Entries) == 0 && len(body.People) == 0 && len(body.PersonLinks) == 0 &&
-		len(body.PersonTimeline) == 0 && len(body.Files) == 0 {
-		c.String(http.StatusBadRequest, "expected a Cal export file")
-		return
-	}
-	if len(body.Entries) > 50000 || len(body.People) > 20000 {
-		c.String(http.StatusBadRequest, "file too large")
 		return
 	}
 	userID := currentUser(c).ID
 	ctx := c.Request.Context()
+	if c.Query("dry") == "1" {
+		s.previewRestore(c, userID, body, binaries)
+		return
+	}
 	imported, err := s.store.RestoreEntries(ctx, userID, body.Entries)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "restore failed")
@@ -125,17 +98,153 @@ func (s *Server) restoreJSON(c *gin.Context) {
 	})
 }
 
+// parseExportPayload decodes a restore body — plain JSON or the zip archive —
+// into the manifest plus the binaries map (zip restores only).
+func parseExportPayload(raw []byte) (exportPayload, map[string]*zip.File, bool) {
+	var body exportPayload
+	var binaries map[string]*zip.File
+	if bytes.HasPrefix(raw, []byte("PK\x03\x04")) {
+		zr, zerr := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
+		if zerr != nil {
+			return body, nil, false
+		}
+		binaries = map[string]*zip.File{}
+		var manifest []byte
+		for _, zf := range zr.File {
+			switch {
+			case zf.Name == exportManifestName:
+				if rc, oerr := zf.Open(); oerr == nil {
+					manifest, _ = io.ReadAll(io.LimitReader(rc, 64<<20))
+					_ = rc.Close()
+				}
+			case strings.HasPrefix(zf.Name, "files/"):
+				binaries[strings.TrimPrefix(zf.Name, "files/")] = zf
+			}
+		}
+		if manifest == nil || json.Unmarshal(manifest, &body) != nil {
+			return body, nil, false
+		}
+	} else if json.Unmarshal(raw, &body) != nil {
+		return body, nil, false
+	}
+	if len(body.Entries) == 0 && len(body.People) == 0 && len(body.PersonLinks) == 0 &&
+		len(body.PersonTimeline) == 0 && len(body.Files) == 0 {
+		return body, nil, false
+	}
+	if len(body.Entries) > 50000 || len(body.People) > 20000 {
+		return body, nil, false
+	}
+	return body, binaries, true
+}
+
+// previewRestore reports what a restore would merge — without writing.
+// "new" = rows that would be inserted; "existing" = skipped by id-conflict;
+// "orphaned" = links/timeline items whose person isn't local or in the
+// payload; files also report rows missing their binary in the archive.
+func (s *Server) previewRestore(c *gin.Context, userID string, body exportPayload, binaries map[string]*zip.File) {
+	ctx := c.Request.Context()
+
+	entryIDs := make([]string, 0, len(body.Entries))
+	for _, e := range body.Entries {
+		if e.ID != "" && e.Title != "" && e.Type != "" && e.Date != "" {
+			entryIDs = append(entryIDs, e.ID)
+		}
+	}
+	entryExisting, _ := s.store.ExistingIDs(ctx, "entries", userID, entryIDs)
+
+	personIDs := make([]string, 0, len(body.People))
+	payloadPersons := map[string]bool{}
+	for _, p := range body.People {
+		if p.ID != "" && p.Name != "" {
+			personIDs = append(personIDs, p.ID)
+			payloadPersons[p.ID] = true
+		}
+	}
+	personExisting, _ := s.store.ExistingIDs(ctx, "people", userID, personIDs)
+	localPersons, _ := s.store.ExistingIDs(ctx, "people", userID, func() []string {
+		ids := make([]string, 0, len(body.PersonLinks)+len(body.PersonTimeline))
+		for _, l := range body.PersonLinks {
+			ids = append(ids, l.PersonID, l.OtherID)
+		}
+		for _, t := range body.PersonTimeline {
+			ids = append(ids, t.PersonID)
+		}
+		return ids
+	}())
+	personKnown := func(id string) bool { return payloadPersons[id] || localPersons[id] }
+
+	linkExisting, _ := s.store.ExistingPersonLinks(ctx, userID, body.PersonLinks)
+	linkOrphans, linkValid := 0, 0
+	for _, l := range body.PersonLinks {
+		if l.PersonID == "" || l.OtherID == "" || l.Kind == "" || l.PersonID == l.OtherID ||
+			!personKnown(l.PersonID) || !personKnown(l.OtherID) {
+			linkOrphans++
+			continue
+		}
+		linkValid++
+	}
+
+	timelineIDs := make([]string, 0, len(body.PersonTimeline))
+	tlOrphans := 0
+	for _, t := range body.PersonTimeline {
+		if t.ID == "" || t.PersonID == "" || t.Title == "" || !personKnown(t.PersonID) {
+			tlOrphans++
+			continue
+		}
+		timelineIDs = append(timelineIDs, t.ID)
+	}
+	tlExisting, _ := s.store.ExistingIDs(ctx, "person_timeline", userID, timelineIDs)
+
+	fileIDs := make([]string, 0, len(body.Files))
+	fileNames := make([]string, 0, len(body.Files))
+	fileHashes := make([]string, 0, len(body.Files))
+	for _, f := range body.Files {
+		if f.ID != "" && f.Name != "" && reSafeName.MatchString(f.Name) {
+			fileIDs = append(fileIDs, f.ID)
+			fileNames = append(fileNames, f.Name)
+			if f.Sha256 != "" {
+				fileHashes = append(fileHashes, f.Sha256)
+			}
+		}
+	}
+	fileExistingIDs, _ := s.store.ExistingIDs(ctx, "files", userID, fileIDs)
+	fileTakenNames, _ := s.store.ExistingFileNames(ctx, userID, fileNames)
+	fileKnownHashes, _ := s.store.ExistingFileHashes(ctx, userID, fileHashes)
+	fileNew, fileNoBinary, fileExisting, fileInvalid := 0, 0, 0, 0
+	for _, f := range body.Files {
+		if f.ID == "" || f.Name == "" || !reSafeName.MatchString(f.Name) {
+			fileInvalid++
+			continue
+		}
+		if fileExistingIDs[f.ID] || fileTakenNames[f.Name] {
+			fileExisting++
+			continue
+		}
+		// Restorable with an archive binary or an on-disk twin (hardlink).
+		if _, ok := binaries[f.Name]; !ok && !fileKnownHashes[f.Sha256] {
+			fileNoBinary++
+			continue
+		}
+		fileNew++
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"dryRun":   true,
+		"entries":  gin.H{"total": len(body.Entries), "new": len(entryIDs) - len(entryExisting), "existing": len(entryExisting), "invalid": len(body.Entries) - len(entryIDs)},
+		"people":   gin.H{"total": len(body.People), "new": len(personIDs) - len(personExisting), "existing": len(personExisting), "invalid": len(body.People) - len(personIDs)},
+		"links":    gin.H{"total": len(body.PersonLinks), "new": linkValid - linkExisting, "existing": linkExisting, "orphaned": linkOrphans},
+		"timeline": gin.H{"total": len(body.PersonTimeline), "new": len(timelineIDs) - len(tlExisting), "existing": len(tlExisting), "orphaned": tlOrphans},
+		"files":    gin.H{"total": len(body.Files), "new": fileNew, "existing": fileExisting, "noBinary": fileNoBinary, "invalid": fileInvalid},
+	})
+}
+
 // writeRestoredFiles unpacks archive binaries to the uploads dir and returns
 // the rows worth inserting (binary written, name free).
 func (s *Server) writeRestoredFiles(ctx context.Context, userID string, files []store.File, binaries map[string]*zip.File) []store.File {
-	if binaries == nil {
-		return nil
-	}
 	dir := filepath.Join(s.dataDir, "uploads", userID)
 	kept := make([]store.File, 0, len(files))
 	for _, f := range files {
-		zf, ok := binaries[f.Name]
-		if !ok || !reSafeName.MatchString(f.Name) {
+		if !reSafeName.MatchString(f.Name) {
 			continue
 		}
 		// A row or binary already occupying the name wins — additive restore.
@@ -150,6 +259,20 @@ func (s *Server) writeRestoredFiles(ctx context.Context, userID string, files []
 		}
 		dst := filepath.Join(dir, f.Name)
 		if _, err := os.Stat(dst); err == nil {
+			continue
+		}
+		// Content dedup: an identical binary already on disk gets a hardlink —
+		// zero extra bytes, works even for JSON exports that carry no binaries.
+		if f.Sha256 != "" {
+			if dup, err := s.store.FileByHash(ctx, userID, f.Sha256); err == nil {
+				if os.Link(filepath.Join(dir, dup.Name), dst) == nil {
+					kept = append(kept, f)
+				}
+				continue
+			}
+		}
+		zf, ok := binaries[f.Name]
+		if !ok {
 			continue
 		}
 		rc, err := zf.Open()

@@ -1,4 +1,4 @@
-import type { Accent, CarddavAccount, Country, NagerHoliday, SessionInfo, Webhook } from "@cal/api-client";
+import type { Accent, CarddavAccount, Country, NagerHoliday, RestorePreview, SessionInfo, Webhook } from "@cal/api-client";
 import { Bell, BellOff, Copy, Download, FileText, LogOut, Plus, RefreshCw, Trash2, Upload, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
@@ -82,6 +82,8 @@ export function SettingsPage() {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const restoreRef = useRef<HTMLInputElement>(null);
+  const [restorePlan, setRestorePlan] = useState<{ file: File; preview: RestorePreview } | null>(null);
+  const [previewing, setPreviewing] = useState(false);
 
   useEffect(() => {
     void pushEnabled().then(setPushOn).catch(() => setPushOn(false));
@@ -992,14 +994,73 @@ export function SettingsPage() {
               style={{ display: "none" }}
               onChange={(e) => {
                 const file = e.target.files?.[0];
-                if (file) void restore(file);
                 e.target.value = "";
+                if (!file) return;
+                setPreviewing(true);
+                void api
+                  .restorePreview(file)
+                  .then((preview) => setRestorePlan({ file, preview }))
+                  .catch(reportErr("Not a Cal export file"))
+                  .finally(() => setPreviewing(false));
               }}
             />
             <button type="button" className="btn btn-secondary" onClick={() => restoreRef.current?.click()}>
-              <Upload size={14} /> Restore from backup
+              <Upload size={14} /> {previewing ? "Reading…" : "Restore from backup"}
             </button>
           </div>
+          {restorePlan && (
+            <div className="panel" style={{ marginTop: 10 }}>
+              <p className="panel-note" style={{ marginBottom: 8 }}>
+                <strong>{restorePlan.file.name}</strong> — restore merges into your current data:
+              </p>
+              <ul className="panel-note" style={{ margin: "0 0 10px 18px", padding: 0 }}>
+                <li>
+                  {restorePlan.preview.entries.new} entries
+                  {restorePlan.preview.entries.existing > 0 && ` (${restorePlan.preview.entries.existing} already present)`}
+                </li>
+                {restorePlan.preview.people.total > 0 && (
+                  <li>
+                    {restorePlan.preview.people.new} people
+                    {restorePlan.preview.people.existing > 0 && ` (${restorePlan.preview.people.existing} already present)`}
+                  </li>
+                )}
+                {restorePlan.preview.links.total > 0 && (
+                  <li>
+                    {restorePlan.preview.links.new} relations
+                    {restorePlan.preview.links.orphaned > 0 && ` (${restorePlan.preview.links.orphaned} skipped — person missing)`}
+                  </li>
+                )}
+                {restorePlan.preview.timeline.total > 0 && (
+                  <li>
+                    {restorePlan.preview.timeline.new} timeline items
+                    {restorePlan.preview.timeline.orphaned > 0 && ` (${restorePlan.preview.timeline.orphaned} skipped — person missing)`}
+                  </li>
+                )}
+                {restorePlan.preview.files.total > 0 && (
+                  <li>
+                    {restorePlan.preview.files.new} files
+                    {restorePlan.preview.files.noBinary > 0 && ` (${restorePlan.preview.files.noBinary} skipped — no binary in archive)`}
+                  </li>
+                )}
+              </ul>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    const file = restorePlan.file;
+                    setRestorePlan(null);
+                    void restore(file);
+                  }}
+                >
+                  Restore
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={() => setRestorePlan(null)}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
           <p className="panel-note" style={{ marginTop: 10 }}>
             JSON carries everything except upload binaries; the zip adds them. A restore merges — data already
             present is kept, missing pieces come back (accepts .json or .zip). The server also writes a nightly

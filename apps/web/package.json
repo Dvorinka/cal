@@ -12,7 +12,7 @@
     "android:build": "npm run android:sync && cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
-    "@cal/api-client": "file:../../packages/api-client",
+    "@cal/api-client": "0.1.0",
     "@capacitor/android": "^8.5.2",
     "@capacitor/core": "^8.5.1",
     "@capacitor/ios": "^8.5.2",

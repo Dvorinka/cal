@@ -6,8 +6,10 @@ package httpapi
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -70,7 +72,26 @@ func (s *Server) uploadFile(c *gin.Context) {
 	if mime == "" {
 		mime = "application/octet-stream"
 	}
-	rec, err := s.store.CreateFile(c.Request.Context(), currentUser(c).ID, name, header.Filename, mime, header.Size, splitTags(c.PostForm("tags")), nilIfEmptyStr(c.PostForm("workspaceId")), personID)
+	sha := sha256File(dst)
+	// Dedup: an identical binary already stored for this user wins — drop the
+	// fresh copy, keep the original row (fill person_id if the caller asked).
+	if sha != "" {
+		if dup, err := s.store.FileByHash(c.Request.Context(), currentUser(c).ID, sha); err == nil {
+			_ = os.Remove(dst)
+			if personID != nil {
+				_ = s.store.AttachFileToPerson(c.Request.Context(), currentUser(c).ID, dup.ID, *personID)
+			}
+			c.JSON(http.StatusOK, gin.H{
+				"id":       dup.ID,
+				"url":      "/api/files/" + dup.Name,
+				"name":     header.Filename,
+				"markdown": "![" + header.Filename + "](/api/files/" + dup.Name + ")",
+				"deduped":  true,
+			})
+			return
+		}
+	}
+	rec, err := s.store.CreateFile(c.Request.Context(), currentUser(c).ID, name, header.Filename, mime, header.Size, sha, splitTags(c.PostForm("tags")), nilIfEmptyStr(c.PostForm("workspaceId")), personID)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "record failed")
 		return
@@ -81,6 +102,20 @@ func (s *Server) uploadFile(c *gin.Context) {
 		"name":     header.Filename,
 		"markdown": "![" + header.Filename + "](/api/files/" + name + ")",
 	})
+}
+
+// sha256File hashes a stored binary; "" on error (hash is best-effort).
+func sha256File(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return ""
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // listFiles returns the caller's uploads, newest first.
