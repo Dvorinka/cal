@@ -26,6 +26,7 @@ import { PeoplePage } from "./pages/PeoplePage";
 import { PersonProfilePage } from "./pages/PersonProfilePage";
 import { FamilyTreePage } from "./pages/FamilyTreePage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { ShoppingPage } from "./pages/ShoppingPage";
 import { TasksPage } from "./pages/TasksPage";
 import { TodayPage } from "./pages/TodayPage";
 import { WidgetPage } from "./pages/WidgetPage";
@@ -149,6 +150,7 @@ function Shell() {
           <Route path="/people" element={<Gated><PeoplePage /></Gated>} />
           <Route path="/people/tree" element={<Gated><FamilyTreePage /></Gated>} />
           <Route path="/people/:id" element={<Gated><PersonProfilePage /></Gated>} />
+          <Route path="/shopping" element={<Gated><ShoppingPage /></Gated>} />
           <Route path="/time" element={<Gated><TimePage /></Gated>} />
           <Route path="/mail" element={<Gated><MailPage /></Gated>} />
           <Route path="/github" element={<Gated><GitHubPage /></Gated>} />

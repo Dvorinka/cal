@@ -141,6 +141,314 @@ paths:
           description: Not an admin
         "404":
           description: Unknown user
+  /shopping/lists:
+    get:
+      description: Shopping lists with item/open counts.
+      responses:
+        "200":
+          description: Lists
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ShoppingList"
+    post:
+      description: Create a list.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                icon:
+                  type: string
+                  description: Emoji or short label shown on the list chip.
+      responses:
+        "201":
+          description: Created list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingList"
+  /shopping/lists/{id}:
+    get:
+      description: Full list payload — sections and items.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Sections and items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sections:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ShoppingSection"
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ShoppingItem"
+        "404":
+          description: Unknown or foreign list
+    patch:
+      description: Rename/re-icon a list.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                icon:
+                  type: string
+      responses:
+        "200":
+          description: Updated list
+        "404":
+          description: Unknown or foreign list
+    delete:
+      description: Delete a list, its sections and items.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Unknown or foreign list
+  /shopping/lists/{id}/sections:
+    post:
+      description: Add a section to a list.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+      responses:
+        "201":
+          description: Created section
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingSection"
+        "404":
+          description: Unknown or foreign list
+  /shopping/lists/{id}/items:
+    post:
+      description: Add an item; sectionId must belong to the same list.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                note:
+                  type: string
+                quantity:
+                  type: string
+                sectionId:
+                  type: string
+      responses:
+        "201":
+          description: Created item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingItem"
+        "400":
+          description: Bad input or foreign section
+        "404":
+          description: Unknown or foreign list
+  /shopping/lists/{id}/clear:
+    post:
+      description: Delete every checked item on the list.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Count of removed items
+        "404":
+          description: Unknown or foreign list
+  /shopping/sections/{id}:
+    patch:
+      description: Rename a section.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+      responses:
+        "204":
+          description: Renamed
+        "404":
+          description: Unknown or foreign section
+    delete:
+      description: Delete a section; its items move to the unsectioned block.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Unknown or foreign section
+  /shopping/sections/{id}/check:
+    post:
+      description: Check or uncheck every item in a section.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [checked]
+              properties:
+                checked:
+                  type: boolean
+      responses:
+        "204":
+          description: Applied
+        "404":
+          description: Unknown or foreign section
+  /shopping/items/{id}:
+    patch:
+      description: Partial update — name, note, quantity, checked, uncertain, sectionId ("" = unsectioned), position.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                note:
+                  type: string
+                quantity:
+                  type: string
+                sectionId:
+                  type: string
+                checked:
+                  type: boolean
+                uncertain:
+                  type: boolean
+                position:
+                  type: number
+      responses:
+        "200":
+          description: Updated item
+        "404":
+          description: Unknown or foreign item
+    delete:
+      description: Remove an item.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Unknown or foreign item
+  /shopping/suggest:
+    get:
+      description: Autocomplete — previously-used item names with their last section.
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Up to 10 suggestions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    section:
+                      type: string
   /admin/config:
     get:
       description: Instance access policy — admin only.
@@ -1169,6 +1477,66 @@ components:
           type: boolean
           description: Instance administrator — first registered user.
         createdAt:
+          type: string
+          format: date-time
+    ShoppingList:
+      type: object
+      required: [id, name, icon, position, items, open, createdAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        icon:
+          type: string
+        position:
+          type: number
+        items:
+          type: integer
+        open:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+    ShoppingSection:
+      type: object
+      required: [id, listId, name, position]
+      properties:
+        id:
+          type: string
+        listId:
+          type: string
+        name:
+          type: string
+        position:
+          type: number
+    ShoppingItem:
+      type: object
+      required: [id, listId, name, note, quantity, checked, uncertain, position, createdAt]
+      properties:
+        id:
+          type: string
+        listId:
+          type: string
+        sectionId:
+          type: string
+        name:
+          type: string
+        note:
+          type: string
+        quantity:
+          type: string
+        checked:
+          type: boolean
+        uncertain:
+          type: boolean
+          description: '"Can''t find it" flag from the store.'
+        position:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+        checkedAt:
           type: string
           format: date-time
     Entry:

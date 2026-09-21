@@ -217,6 +217,20 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authed.GET("/holidays/browse/countries", server.browseHolidayCountries)
 	authed.POST("/holidays/import", server.importHolidays)
 	authed.POST("/carddav/:id/import-people", server.carddavImportPeople)
+	authed.GET("/shopping/lists", server.shoppingLists)
+	authed.POST("/shopping/lists", server.shoppingCreateList)
+	authed.GET("/shopping/lists/:id", server.shoppingListDetail)
+	authed.PATCH("/shopping/lists/:id", server.shoppingUpdateList)
+	authed.DELETE("/shopping/lists/:id", server.shoppingDeleteList)
+	authed.POST("/shopping/lists/:id/sections", server.shoppingCreateSection)
+	authed.PATCH("/shopping/sections/:id", server.shoppingUpdateSection)
+	authed.DELETE("/shopping/sections/:id", server.shoppingDeleteSection)
+	authed.POST("/shopping/sections/:id/check", server.shoppingCheckSection)
+	authed.POST("/shopping/lists/:id/clear", server.shoppingClearPurchased)
+	authed.POST("/shopping/lists/:id/items", server.shoppingCreateItem)
+	authed.PATCH("/shopping/items/:id", server.shoppingUpdateItem)
+	authed.DELETE("/shopping/items/:id", server.shoppingDeleteItem)
+	authed.GET("/shopping/suggest", server.shoppingSuggest)
 
 	admin := authed.Group("/admin", server.requireAdmin)
 	admin.GET("/users", server.adminUsers)
@@ -526,15 +540,21 @@ func (s *Server) export(c *gin.Context) {
 	links, _ := s.store.AllPersonRelations(c.Request.Context(), user.ID)
 	timeline, _ := s.store.AllTimeline(c.Request.Context(), user.ID)
 	files, _ := s.store.ListFiles(c.Request.Context(), user.ID)
+	shopLists, _ := s.store.ListShoppingLists(c.Request.Context(), user.ID)
+	shopSections, _ := s.store.AllShoppingSections(c.Request.Context(), user.ID)
+	shopItems, _ := s.store.AllShoppingItems(c.Request.Context(), user.ID)
 	payload := gin.H{
-		"exportedAt":     time.Now().UTC().Format(time.RFC3339),
-		"user":           user,
-		"settings":       settings,
-		"entries":        entries,
-		"people":         people,
-		"personLinks":    links,
-		"personTimeline": timeline,
-		"files":          files,
+		"exportedAt":       time.Now().UTC().Format(time.RFC3339),
+		"user":             user,
+		"settings":         settings,
+		"entries":          entries,
+		"people":           people,
+		"personLinks":      links,
+		"personTimeline":   timeline,
+		"files":            files,
+		"shoppingLists":    shopLists,
+		"shoppingSections": shopSections,
+		"shoppingItems":    shopItems,
 	}
 	if c.Query("format") != "zip" {
 		c.Header("Content-Disposition", `attachment; filename="cal-export.json"`)

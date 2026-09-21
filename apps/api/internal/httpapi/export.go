@@ -32,11 +32,14 @@ const (
 
 // exportPayload is the restore-side view of the /api/export manifest.
 type exportPayload struct {
-	Entries        []store.Entry          `json:"entries"`
-	People         []store.Person         `json:"people"`
-	PersonLinks    []store.PersonRelation `json:"personLinks"`
-	PersonTimeline []store.TimelineItem   `json:"personTimeline"`
-	Files          []store.File           `json:"files"`
+	Entries          []store.Entry           `json:"entries"`
+	People           []store.Person          `json:"people"`
+	PersonLinks      []store.PersonRelation  `json:"personLinks"`
+	PersonTimeline   []store.TimelineItem    `json:"personTimeline"`
+	Files            []store.File            `json:"files"`
+	ShoppingLists    []store.ShoppingList    `json:"shoppingLists"`
+	ShoppingSections []store.ShoppingSection `json:"shoppingSections"`
+	ShoppingItems    []store.ShoppingItem    `json:"shoppingItems"`
 }
 
 // restoreJSON accepts the /export payload - plain JSON, or the zip archive
@@ -101,9 +104,26 @@ func (s *Server) restoreJSON(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "restore failed")
 		return
 	}
+	// Shopping: lists first, then children — they only attach to owned lists.
+	shopLists, err := s.store.RestoreShoppingLists(ctx, userID, body.ShoppingLists)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "restore failed")
+		return
+	}
+	shopSections, err := s.store.RestoreShoppingSections(ctx, userID, body.ShoppingSections)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "restore failed")
+		return
+	}
+	shopItems, err := s.store.RestoreShoppingItems(ctx, userID, body.ShoppingItems)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "restore failed")
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"restored": imported, "people": people, "links": links, "timeline": timeline,
 		"files": files, "filesSkipped": len(body.Files) - files,
+		"shoppingLists": shopLists, "shoppingSections": shopSections, "shoppingItems": shopItems,
 	})
 }
 
@@ -145,7 +165,8 @@ func parseExportPayload(f *os.File, size int64) (exportPayload, map[string]*zip.
 		}
 	}
 	if len(body.Entries) == 0 && len(body.People) == 0 && len(body.PersonLinks) == 0 &&
-		len(body.PersonTimeline) == 0 && len(body.Files) == 0 {
+		len(body.PersonTimeline) == 0 && len(body.Files) == 0 && len(body.ShoppingLists) == 0 &&
+		len(body.ShoppingSections) == 0 && len(body.ShoppingItems) == 0 {
 		return body, nil, false
 	}
 	if len(body.Entries) > 50000 || len(body.People) > 20000 {
@@ -245,13 +266,59 @@ func (s *Server) previewRestore(c *gin.Context, userID string, body exportPayloa
 		fileNew++
 	}
 
+	// Shopping: children are orphaned when their list is neither already
+	// stored nor part of this payload.
+	shopListIDs := make([]string, 0, len(body.ShoppingLists))
+	payloadLists := map[string]bool{}
+	for _, l := range body.ShoppingLists {
+		if l.ID != "" && l.Name != "" {
+			shopListIDs = append(shopListIDs, l.ID)
+			payloadLists[l.ID] = true
+		}
+	}
+	shopListExisting, _ := s.store.ExistingShoppingIDs(ctx, "shopping_lists", userID, shopListIDs)
+	refLists := make([]string, 0, len(body.ShoppingSections)+len(body.ShoppingItems))
+	for _, sc := range body.ShoppingSections {
+		refLists = append(refLists, sc.ListID)
+	}
+	for _, it := range body.ShoppingItems {
+		refLists = append(refLists, it.ListID)
+	}
+	ownedLists, _ := s.store.OwnedShoppingListIDs(ctx, userID, refLists)
+	listKnown := func(id string) bool { return payloadLists[id] || ownedLists[id] }
+
+	secIDs := make([]string, 0, len(body.ShoppingSections))
+	secOrphans := 0
+	for _, sc := range body.ShoppingSections {
+		if sc.ID == "" || sc.ListID == "" || sc.Name == "" || !listKnown(sc.ListID) {
+			secOrphans++
+			continue
+		}
+		secIDs = append(secIDs, sc.ID)
+	}
+	secExisting, _ := s.store.ExistingShoppingIDs(ctx, "shopping_sections", userID, secIDs)
+
+	itemIDs := make([]string, 0, len(body.ShoppingItems))
+	itemOrphans := 0
+	for _, it := range body.ShoppingItems {
+		if it.ID == "" || it.ListID == "" || it.Name == "" || !listKnown(it.ListID) {
+			itemOrphans++
+			continue
+		}
+		itemIDs = append(itemIDs, it.ID)
+	}
+	itemExisting, _ := s.store.ExistingShoppingIDs(ctx, "shopping_items", userID, itemIDs)
+
 	c.JSON(http.StatusOK, gin.H{
-		"dryRun":   true,
-		"entries":  gin.H{"total": len(body.Entries), "new": len(entryIDs) - len(entryExisting), "existing": len(entryExisting), "invalid": len(body.Entries) - len(entryIDs)},
-		"people":   gin.H{"total": len(body.People), "new": len(personIDs) - len(personExisting), "existing": len(personExisting), "invalid": len(body.People) - len(personIDs)},
-		"links":    gin.H{"total": len(body.PersonLinks), "new": linkValid - linkExisting, "existing": linkExisting, "orphaned": linkOrphans},
-		"timeline": gin.H{"total": len(body.PersonTimeline), "new": len(timelineIDs) - len(tlExisting), "existing": len(tlExisting), "orphaned": tlOrphans},
-		"files":    gin.H{"total": len(body.Files), "new": fileNew, "existing": fileExisting, "noBinary": fileNoBinary, "invalid": fileInvalid},
+		"dryRun":           true,
+		"entries":          gin.H{"total": len(body.Entries), "new": len(entryIDs) - len(entryExisting), "existing": len(entryExisting), "invalid": len(body.Entries) - len(entryIDs)},
+		"people":           gin.H{"total": len(body.People), "new": len(personIDs) - len(personExisting), "existing": len(personExisting), "invalid": len(body.People) - len(personIDs)},
+		"links":            gin.H{"total": len(body.PersonLinks), "new": linkValid - linkExisting, "existing": linkExisting, "orphaned": linkOrphans},
+		"timeline":         gin.H{"total": len(body.PersonTimeline), "new": len(timelineIDs) - len(tlExisting), "existing": len(tlExisting), "orphaned": tlOrphans},
+		"files":            gin.H{"total": len(body.Files), "new": fileNew, "existing": fileExisting, "noBinary": fileNoBinary, "invalid": fileInvalid},
+		"shoppingLists":    gin.H{"total": len(body.ShoppingLists), "new": len(shopListIDs) - len(shopListExisting), "existing": len(shopListExisting), "invalid": len(body.ShoppingLists) - len(shopListIDs)},
+		"shoppingSections": gin.H{"total": len(body.ShoppingSections), "new": len(secIDs) - len(secExisting), "existing": len(secExisting), "orphaned": secOrphans},
+		"shoppingItems":    gin.H{"total": len(body.ShoppingItems), "new": len(itemIDs) - len(itemExisting), "existing": len(itemExisting), "orphaned": itemOrphans},
 	})
 }
 

@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronLeft, ChevronRight, FolderOpen, GitPullRequest as GithubIcon, Hash, Link2, ListChecks, Mail, Plus, Search, Settings2, StickyNote, Sun, Timer as TimerIcon, Trash2, Kanban, Users } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, FolderOpen, GitPullRequest as GithubIcon, Hash, Link2, ListChecks, Mail, Plus, Search, Settings2, ShoppingCart, StickyNote, Sun, Timer as TimerIcon, Trash2, Kanban, Users } from "lucide-react";
 import { TimerPill } from "./TimerPill";
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
@@ -24,6 +24,7 @@ const NAV: { to: string; label: string; icon: typeof Sun; end?: boolean; module?
   { to: "/boards", label: "Boards", icon: Kanban, module: "boards" },
   { to: "/tags", label: "Tags", icon: Hash, module: "tags" },
   { to: "/people", label: "People", icon: Users, module: "people" },
+  { to: "/shopping", label: "Shopping", icon: ShoppingCart, module: "shopping" },
   { to: "/time", label: "Time", icon: TimerIcon, module: "time" },
   { to: "/mail", label: "Mail", icon: Mail, module: "mail" },
   { to: "/github", label: "GitHub", icon: GithubIcon, module: "github" },

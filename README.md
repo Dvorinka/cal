@@ -64,6 +64,12 @@ accounts on someone else's server — one container and it's yours.
 - **Time & people** — focus timer with pomodoro mode, billable sessions with
   hourly rates and CSV/JSON export; a private relationship manager whose
   birthdays, anniversaries and namedays surface on the calendar
+- **Shopping lists** — multiple lists with sections (Dairy, Produce…),
+  quantities, a "can't find it" flag, bulk check-off, clear-purchased, and
+  autocomplete from your own item history
+- **Admin & multi-user** — the first registered account administers the
+  instance: open/close sign-ups, promote admins, remove accounts, all from
+  Settings → Users & access
 - **Portable** — full JSON export one click away, or a zip that packs every
   upload binary too; restores merge additively, and the server writes
   nightly snapshots for 14 days

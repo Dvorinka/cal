@@ -22,6 +22,56 @@ export interface AdminConfig {
   allowRegistration: boolean;
 }
 
+export interface ShoppingList {
+  id: string;
+  name: string;
+  icon: string;
+  position: number;
+  /** Total items on the list. */
+  items: number;
+  /** Unchecked items — what still needs buying. */
+  open: number;
+  createdAt: string;
+}
+
+export interface ShoppingSection {
+  id: string;
+  listId: string;
+  name: string;
+  position: number;
+}
+
+export interface ShoppingItem {
+  id: string;
+  listId: string;
+  sectionId?: string;
+  name: string;
+  note: string;
+  quantity: string;
+  checked: boolean;
+  /** "Can't find it" flag from the store. */
+  uncertain: boolean;
+  position: number;
+  createdAt: string;
+  checkedAt?: string;
+}
+
+/** Patch for an item; sectionId "" moves it to the unsectioned block. */
+export interface ShoppingItemPatch {
+  name?: string;
+  note?: string;
+  quantity?: string;
+  sectionId?: string;
+  checked?: boolean;
+  uncertain?: boolean;
+  position?: number;
+}
+
+export interface ShoppingSuggestion {
+  name: string;
+  section?: string;
+}
+
 export interface Entry {
   id: string;
   title: string;
@@ -473,6 +523,64 @@ export class CalApi {
 
   async adminUpdateConfig(input: AdminConfig): Promise<AdminConfig> {
     return this.request<AdminConfig>("/admin/config", { method: "PUT", body: input });
+  }
+
+  // ---------- Shopping lists ----------
+
+  async shoppingLists(): Promise<ShoppingList[]> {
+    return this.request<ShoppingList[]>("/shopping/lists");
+  }
+
+  async shoppingCreateList(input: { name: string; icon?: string }): Promise<ShoppingList> {
+    return this.request<ShoppingList>("/shopping/lists", { method: "POST", body: input });
+  }
+
+  async shoppingList(id: string): Promise<{ sections: ShoppingSection[]; items: ShoppingItem[] }> {
+    return this.request(`/shopping/lists/${id}`);
+  }
+
+  async shoppingUpdateList(id: string, input: { name: string; icon?: string }): Promise<ShoppingList> {
+    return this.request<ShoppingList>(`/shopping/lists/${id}`, { method: "PATCH", body: input });
+  }
+
+  async shoppingDeleteList(id: string): Promise<void> {
+    await this.request(`/shopping/lists/${id}`, { method: "DELETE" });
+  }
+
+  async shoppingCreateSection(listId: string, name: string): Promise<ShoppingSection> {
+    return this.request<ShoppingSection>(`/shopping/lists/${listId}/sections`, { method: "POST", body: { name } });
+  }
+
+  async shoppingUpdateSection(id: string, name: string): Promise<void> {
+    await this.request(`/shopping/sections/${id}`, { method: "PATCH", body: { name } });
+  }
+
+  async shoppingDeleteSection(id: string): Promise<void> {
+    await this.request(`/shopping/sections/${id}`, { method: "DELETE" });
+  }
+
+  async shoppingCheckSection(id: string, checked: boolean): Promise<void> {
+    await this.request(`/shopping/sections/${id}/check`, { method: "POST", body: { checked } });
+  }
+
+  async shoppingClearPurchased(listId: string): Promise<{ removed: number }> {
+    return this.request<{ removed: number }>(`/shopping/lists/${listId}/clear`, { method: "POST", body: {} });
+  }
+
+  async shoppingCreateItem(listId: string, input: { name: string; note?: string; quantity?: string; sectionId?: string }): Promise<ShoppingItem> {
+    return this.request<ShoppingItem>(`/shopping/lists/${listId}/items`, { method: "POST", body: input });
+  }
+
+  async shoppingUpdateItem(id: string, patch: ShoppingItemPatch): Promise<ShoppingItem> {
+    return this.request<ShoppingItem>(`/shopping/items/${id}`, { method: "PATCH", body: patch });
+  }
+
+  async shoppingDeleteItem(id: string): Promise<void> {
+    await this.request(`/shopping/items/${id}`, { method: "DELETE" });
+  }
+
+  async shoppingSuggest(q: string): Promise<ShoppingSuggestion[]> {
+    return this.request<ShoppingSuggestion[]>(`/shopping/suggest?q=${encodeURIComponent(q)}`);
   }
 
   async entries(params: { from?: string; to?: string; q?: string; workspace?: string } = {}): Promise<Entry[]> {
