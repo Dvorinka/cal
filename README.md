@@ -1,37 +1,58 @@
-# Cal
+<p align="center">
+  <img src="./logo.svg" alt="Cal" width="120">
+</p>
 
-The self-hosted daily toolkit people actually enjoy opening.
+<h1 align="center">Cal</h1>
 
-[![CI](https://github.com/Dvorinka/cal/actions/workflows/ci.yml/badge.svg)](https://github.com/Dvorinka/cal/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/Dvorinka/cal)](https://github.com/Dvorinka/cal/releases)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+<p align="center">
+  The self-hosted daily toolkit people actually enjoy opening.<br>
+  Calendar, tasks, notes, links, files, kanban, time tracking and a GitHub inbox — one quiet place, on your own hardware.
+</p>
 
-**[calhq.vercel.app](https://calhq.vercel.app)** — landing page
+<p align="center">
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#screenshots">Screenshots</a> •
+  <a href="#features">Features</a> •
+  <a href="ROADMAP.md">Roadmap</a> •
+  <a href="CONTRIBUTING.md">Contributing</a>
+</p>
 
-Calendar, tasks, notes, links, files, kanban boards, time tracking and a GitHub
-inbox in one quiet place. No accounts on someone else's server — one
-`docker run` and it's yours.
+<p align="center">
+  <a href="https://github.com/Dvorinka/cal/actions/workflows/ci.yml"><img src="https://github.com/Dvorinka/cal/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/Dvorinka/cal/releases"><img src="https://img.shields.io/github/v/release/Dvorinka/cal" alt="Release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT"></a>
+</p>
 
-![Month view](docs/screenshot-month.png)
-![Week view, dark theme](docs/screenshot-week-dark.png)
+<p align="center">
+  <a href="https://calhq.vercel.app">calhq.vercel.app</a> — landing page
+</p>
 
-## Quickstart
+Cal is an open-source personal planner that replaces a handful of SaaS tabs.
+Month, week and day views with drag-and-drop; tasks with recurrence and
+natural-language quick add; markdown notes with wikilinks; kanban boards whose
+cards are real calendar entries; a focus timer and billable timesheets; a
+private relationship manager whose birthdays surface on the calendar. No
+accounts on someone else's server — one container and it's yours.
 
-```bash
-docker run -d --name cal -p 8080:8080 -v cal-data:/data ghcr.io/dvorinka/cal:latest
-```
+## Screenshots
 
-Open http://localhost:8080 and create your account. UI, API and an embedded
-Postgres all run in that one container; the `cal-data` volume is the only thing
-to back up. Prefer your own database? Set `DATABASE_URL` and the embedded one
-stays off.
+| Today — agenda, streaks, deadlines | Month view |
+| --- | --- |
+| ![Today view with schedule, habit streaks, upcoming dates and deadlines](docs/screenshots/today.png) | ![Month view with events, tasks and birthdays](docs/screenshots/month.png) |
 
-Desktop apps (Windows/Linux/macOS), headless `cal-server` binaries and an
-Android APK attach to every
-[release](https://github.com/Dvorinka/cal/releases). The desktop app bundles its
-own server, or can sign in to a server URL to share data between devices.
+| Week view — timed blocks | Week view, dark theme |
+| --- | --- |
+| ![Week view with timed event blocks](docs/screenshots/week.png) | ![Week view in dark theme](docs/screenshots/week-dark.png) |
 
-## What you get
+| Kanban board — cards are real tasks | People — relationship manager |
+| --- | --- |
+| ![Kanban board with due dates and checklists](docs/screenshots/board.png) | ![People page with birthdays and relations](docs/screenshots/people.png) |
+
+| Notes — markdown, wikilinks, tags | Time — timesheets and billables |
+| --- | --- |
+| ![Notes page with tag filters](docs/screenshots/notes.png) | ![Time page with billable sessions](docs/screenshots/time.png) |
+
+## Features
 
 - **Planner core** — month, week and day views with drag-and-drop, recurring
   tasks, natural-language quick add (`dentist fri 5pm #health`), reminders,
@@ -40,12 +61,12 @@ own server, or can sign in to a server URL to share data between devices.
   library that unfurls titles/thumbnails and searches YouTube via your own
   Invidious instance, file uploads with public share links, kanban boards
   with WIP limits and read-only public sharing
-- **Portable** — full JSON export one click away, or a zip that packs every
-  upload binary too; restores merge additively, and the server writes
-  nightly snapshots for 14 days
 - **Time & people** — focus timer with pomodoro mode, billable sessions with
   hourly rates and CSV/JSON export; a private relationship manager whose
   birthdays, anniversaries and namedays surface on the calendar
+- **Portable** — full JSON export one click away, or a zip that packs every
+  upload binary too; restores merge additively, and the server writes
+  nightly snapshots for 14 days
 - **Sync & feeds** — two-way CalDAV, read-only Google Calendar, iCalendar feed
   subscriptions, CardDAV birthdays, RSS/Atom items on their publish date,
   holidays for 40+ regions
@@ -62,21 +83,59 @@ own server, or can sign in to a server URL to share data between devices.
   AES-256-GCM for stored credentials, SSRF-guarded outbound URLs, zero
   external services required
 
-## Stack
+## Quick Start
 
-React 19 + Vite + TypeScript + Tailwind 4 + Zustand · Go + Gin + PostgreSQL
-(pgx, Goose migrations) · Wails 2 desktop · Capacitor shells · one Docker
-image for everything. API contract lives in `openapi.yaml`; the typed TS
-client in `packages/api-client` is kept in sync with it.
+Requires Docker:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Dvorinka/cal/main/install.sh | sh
+```
+
+Pulls the published image, starts one container with a `cal-data` volume, and
+waits for the health check — UI and API at `http://localhost:8080`. The
+script is idempotent: re-running upgrades in place and never touches your
+data.
+
+Override with env vars:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Dvorinka/cal/main/install.sh | \
+  PORT=9090 CAL_VERSION=v1.2.3 sh
+```
+
+No script needed, either — it's a single `docker run`:
+
+```bash
+docker run -d --name cal -p 8080:8080 -v cal-data:/data ghcr.io/dvorinka/cal:latest
+```
+
+Open http://localhost:8080 and create your account. UI, API and an embedded
+Postgres all run in that one container; the `cal-data` volume is the only
+thing to back up. Prefer your own database? Set `DATABASE_URL` and the
+embedded one stays off.
+
+Desktop apps (Windows/Linux/macOS), headless `cal-server` binaries and an
+Android APK attach to every
+[release](https://github.com/Dvorinka/cal/releases). The desktop app bundles
+its own server, or can sign in to a server URL to share data between devices.
+
+## Architecture
 
 ```
 apps/web         React PWA + Capacitor android/ios shells
-apps/api         Go API + migrations + MCP endpoint
+apps/api         Go API (Gin) + migrations + MCP endpoint
 apps/desktop     Wails app; `-tags headless` is the all-in-one server
-packages/api-client   shared typed client
+packages/api-client   shared typed client, generated from openapi.yaml
 ```
 
+React 19 + Vite + TypeScript + Tailwind 4 + Zustand · Go + Gin + PostgreSQL
+(pgx, Goose migrations) · Wails 2 desktop · Capacitor shells · one Docker
+image for everything. The API contract lives in `openapi.yaml`; the typed TS
+client in `packages/api-client` is kept in sync with it.
+
 ## Configuration
+
+All configuration is via environment variables:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -87,6 +146,8 @@ packages/api-client   shared typed client
 | `WEB_ORIGIN` | unset | extra CORS origin for the web app |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | unset | enable Google Calendar sync |
 | `CAL_ALLOW_PRIVATE_FEEDS` / `CAL_ALLOW_PRIVATE_WEBHOOKS` | unset | allow private/LAN URLs (SSRF guard off) |
+
+Never commit `.env` — if a secret was ever committed, rotate it.
 
 ## Development
 
@@ -112,15 +173,14 @@ cd apps/api && go vet ./... && go test ./...
 E2E: `cd apps/web && npx playwright test` (Playwright + axe).
 Load: `k6 run perf/k6.js -e EMAIL=… -e PASS=…`.
 
-## Docs
+## Documentation
 
 - [`openapi.yaml`](openapi.yaml) — full API schema; session-cookie auth, bearer
   tokens for MCP/intake/widget/feed endpoints
 - [`docs/releasing.md`](docs/releasing.md) — how releases build, code-signing
   secrets
-- [`ROADMAP.md`](ROADMAP.md) · [`CONTRIBUTING.md`](CONTRIBUTING.md) ·
-  [`SECURITY.md`](SECURITY.md)
+- [`ROADMAP.md`](ROADMAP.md) — what shipped, what's next, what's out of scope
 
-## License
+---
 
-MIT — see [`LICENSE`](LICENSE).
+[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [MIT License](LICENSE) © 2026 Tomas Dvorak
