@@ -638,3 +638,27 @@ func (s *Store) MarkPersonReminderSent(ctx context.Context, personID, dateKey st
 		INSERT INTO person_reminder_log (person_id, date_key, year) VALUES ($1, $2, $3)
 		ON CONFLICT DO NOTHING`, personID, dateKey, year)
 }
+
+// SetPeopleShare turns the public people list on/off; returns the token.
+func (s *Store) SetPeopleShare(ctx context.Context, userID string, on bool) (string, error) {
+	token := ""
+	if on {
+		token = newToken(20)
+	}
+	tag, err := s.db.Exec(ctx, `UPDATE settings SET people_share_token = nullif($2, '') WHERE user_id = $1`, userID, token)
+	if tag.RowsAffected() == 0 {
+		return "", ErrNotFound
+	}
+	return token, err
+}
+
+// SharedPeopleOwner resolves a people share token → owner user id.
+func (s *Store) SharedPeopleOwner(ctx context.Context, token string) (string, error) {
+	var userID string
+	err := s.db.QueryRow(ctx,
+		`SELECT user_id::text FROM settings WHERE people_share_token = $1`, token).Scan(&userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return userID, err
+}

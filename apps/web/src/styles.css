@@ -2732,6 +2732,7 @@ button {
 
 /* deadline chips */
 .meta-chip.soon { color: var(--c-orange); }
+.meta-chip.enriching { color: var(--text-3); animation: pulse 1.6s ease-in-out infinite; }
 .meta-chip.overdue { color: var(--c-red, #d33); background: rgb(220 60 60 / .12); }
 
 /* Today activity feed + storage */

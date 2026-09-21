@@ -26,6 +26,8 @@ export interface Entry {
   linkDesc?: string;
   linkFavicon?: string;
   linkVideoId?: string;
+  /** Set once enrichment ran (fields may still be empty if unfurl failed); absent = pending. */
+  linkMetaAt?: string;
   color: string;
   boardId?: string;
   columnId?: string;
@@ -102,6 +104,8 @@ export interface Settings {
   namedayCountry?: string;
   /** Base URL of the user's Invidious instance for YouTube search ("" = off). */
   invidiousUrl?: string;
+  /** Public people-list share token ("" = sharing off). */
+  peopleShareToken?: string;
 }
 
 /** One YouTube search hit from the user's Invidious instance. */
@@ -133,6 +137,15 @@ export interface Habit {
   recur: string;
   streak: number;
   lastDone?: string;
+}
+
+export interface RestorePreview {
+  dryRun: boolean;
+  entries: { total: number; new: number; existing: number; invalid: number };
+  people: { total: number; new: number; existing: number; invalid: number };
+  links: { total: number; new: number; existing: number; orphaned: number };
+  timeline: { total: number; new: number; existing: number; orphaned: number };
+  files: { total: number; new: number; existing: number; noBinary: number; invalid: number };
 }
 
 export interface Webhook {
@@ -240,6 +253,16 @@ export interface PersonField {
 export interface PersonLink {
   platform: string;
   url: string;
+}
+
+/** Public people-page row — private fields never leave the server. */
+export interface SharedPerson {
+  name: string;
+  nickname?: string;
+  relation?: string;
+  color?: string;
+  birthday?: string;
+  dates: PersonDate[];
 }
 
 export interface Person {
@@ -617,6 +640,14 @@ export class CalApi {
     });
     if (!r.ok) throw new Error(await r.text());
   }
+  async sharePeople(on: boolean): Promise<{ shareToken: string | null }> {
+    return this.request(`/people/share`, { method: "POST", body: { on } });
+  }
+  async sharedPeople(token: string): Promise<{ people: SharedPerson[] }> {
+    const r = await fetch(`${this.root}/shared/people/${token}`, { headers: this.headers(false) });
+    if (!r.ok) throw new Error("not found");
+    return r.json();
+  }
   async tags(): Promise<Record<string, number>> {
     return this.request("/tags");
   }
@@ -887,6 +918,22 @@ export class CalApi {
     filesSkipped: number;
   }> {
     const response = await fetch(`${this.root}/restore`, {
+      method: "POST",
+      credentials: "include",
+      headers: this.headers(true),
+      body: file,
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || `Request failed: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  // Dry-run a restore file: per-collection totals, new vs existing rows,
+  // orphaned person references, and file rows lacking their binary.
+  async restorePreview(file: File): Promise<RestorePreview> {
+    const response = await fetch(`${this.root}/restore?dry=1`, {
       method: "POST",
       credentials: "include",
       headers: this.headers(true),

@@ -402,6 +402,9 @@ func (s *Server) enrichLink(userID, entryID, raw string) {
 
 	p, err := unfurlURL(ctx, raw)
 	if err != nil {
+		// Record the attempt — link_meta_at tells the UI enrichment finished
+		// (with nothing found) instead of waiting forever.
+		s.store.SetLinkMeta(ctx, userID, entryID, "", "", "", "", "")
 		return
 	}
 	s.store.SetLinkMeta(ctx, userID, entryID, p.Description, p.Image, p.Favicon, "", p.Title)

@@ -2,7 +2,7 @@
 // anniversaries, namedays, notes. Personal by design, not a sales CRM.
 
 import type { Person } from "@cal/api-client";
-import { Cake, GitBranch, Heart, Pencil, Plus, Search, Star, Trash2 } from "lucide-react";
+import { Cake, GitBranch, Heart, Link2, Pencil, Plus, Search, Star, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { PageHeader } from "../components/PageHeader";
@@ -23,6 +23,8 @@ export function PeoplePage() {
   const people = usePlanner((s) => s.people);
   const workspaces = usePlanner((s) => s.workspaces);
   const activeWorkspace = usePlanner((s) => s.settings.activeWorkspace);
+  const peopleShareToken = usePlanner((s) => s.settings.peopleShareToken);
+  const toast = usePlanner((s) => s.toast);
   const loadPeople = usePlanner((s) => s.loadPeople);
   const addPerson = usePlanner((s) => s.addPerson);
   const savePerson = usePlanner((s) => s.savePerson);
@@ -137,6 +139,55 @@ export function PeoplePage() {
             aria-label="Search people"
           />
         </span>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          title={peopleShareToken ? "Copy the public birthday-list link" : "Share birthdays & dates as a public page"}
+          onClick={() => {
+            if (peopleShareToken) {
+              const url = `${api.remote || location.origin}/people/shared/${peopleShareToken}`;
+              void navigator.clipboard.writeText(url).then(
+                () => toast("Share link copied"),
+                () => toast(`Share link: ${url}`),
+              );
+              return;
+            }
+            void api
+              .sharePeople(true)
+              .then(({ shareToken }) => {
+                if (!shareToken) return;
+                usePlanner.setState({ settings: { ...usePlanner.getState().settings, peopleShareToken: shareToken } });
+                const url = `${api.remote || location.origin}/people/shared/${shareToken}`;
+                void navigator.clipboard.writeText(url).then(
+                  () => toast("Share link copied"),
+                  () => toast(`Share link: ${url}`),
+                );
+              })
+              .catch(() => toast("Share failed"));
+          }}
+        >
+          <Link2 size={14} /> {peopleShareToken ? "Copy link" : "Share"}
+        </button>
+        {peopleShareToken && (
+          <button
+            type="button"
+            className="icon-btn danger"
+            aria-label="Turn off the public people page"
+            title="Revoke public link"
+            onClick={() => {
+              if (!window.confirm("Turn off the public people page? The link stops working.")) return;
+              void api
+                .sharePeople(false)
+                .then(() => {
+                  usePlanner.setState({ settings: { ...usePlanner.getState().settings, peopleShareToken: "" } });
+                  toast("Sharing off");
+                })
+                .catch(() => toast("Share failed"));
+            }}
+          >
+            <Trash2 size={14} />
+          </button>
+        )}
         <Link className="btn btn-secondary" to="/people/tree" title="Family tree">
           <GitBranch size={14} /> Tree
         </Link>

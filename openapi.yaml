@@ -414,7 +414,12 @@ paths:
   /restore:
     post:
       summary: Merge an export file back into the account (additive)
-      description: Accepts the plain JSON manifest or the zip archive (detected by magic bytes). File rows restore only when their binary is present in the archive.
+      description: Accepts the plain JSON manifest or the zip archive (detected by magic bytes). File rows restore when their binary is in the archive or an identical binary (sha256) is already stored. With `?dry=1` nothing is written — the response reports per-collection new/existing/orphaned counts instead.
+      parameters:
+        - name: dry
+          in: query
+          schema: { type: string, enum: ["1"] }
+          description: Preview only — returns the dry-run report, writes nothing
       requestBody:
         required: true
         content:
@@ -448,7 +453,7 @@ paths:
               format: binary
       responses:
         "200":
-          description: Counts of restored entries, people, links, timeline items, files (+ filesSkipped for manifest rows without binaries)
+          description: Counts of restored entries, people, links, timeline items, files (+ filesSkipped for manifest rows without binaries). With `?dry=1` returns `{dryRun: true, entries|people|links|timeline|files: {total, new, existing, invalid|orphaned|noBinary}}`.
   /sessions:
     get:
       summary: List active sessions
@@ -648,6 +653,24 @@ paths:
   /people/relations/{linkId}:
     delete:
       summary: Remove a person link by id
+  /people/share:
+    post:
+      summary: Enable/disable the public people page {on}; returns shareToken
+      responses:
+        "200":
+          description: shareToken when enabled — page at /people/shared/<token>, ICS at /api/shared/people/<token>/calendar.ics
+  /shared/people/{token}:
+    get:
+      summary: Public people list — names, relations, birthdays, named dates only (no auth)
+      responses:
+        "404":
+          description: Revoked or unknown token
+  /shared/people/{token}/calendar.ics:
+    get:
+      summary: The same dates as a yearly-recurring subscribable ICS feed (no auth)
+      responses:
+        "404":
+          description: Revoked or unknown token
   /people/{id}:
     get:
       summary: One person by id
@@ -1195,6 +1218,9 @@ components:
         personId:
           type: string
           description: Set when attached to a person profile
+        sha256:
+          type: string
+          description: Content hash — uploads/restore dedupe identical binaries
     Feed:
       type: object
       required: [id, name, url, color]

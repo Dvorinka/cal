@@ -374,28 +374,29 @@ the last API-only features get UI handles.
 
 ### Product
 
-- [ ] **Restore preview** — a dry-run that reports what an export would
-      merge (counts, name/ID collisions) before anything is written.
-- [ ] **Upload dedup** — sha256 on `files` would let upload/restore skip
-      identical binaries instead of trusting random names.
-- [ ] **MCP resources for people** — person profiles/timelines as
-      `cal://people/<id>` resources, not just tools.
-- [ ] **Public person pages** — a share-token page like shared boards,
-      e.g. a family birthday list relatives can subscribe to (the ICS
-      feed machinery already exists).
+- [x] **Restore preview** — `POST /api/restore?dry=1` reports per-collection
+      new/existing/invalid/orphaned counts and file rows lacking binaries;
+      Settings shows the summary and asks before restoring.
+- [x] **Upload dedup** — `files.sha256` (migration 0018): a second upload of
+      an identical binary returns the original row (`deduped: true`), and
+      restore hardlinks an on-disk twin instead of unpacking a duplicate.
+- [x] **MCP resources for people** — `cal://people` lists everyone,
+      `cal://people/<id>` returns profile + relations + timeline + files;
+      declared via `resources/templates/list`.
+- [x] **Public person pages** — `POST /api/people/share` mints a token;
+      `/people/shared/<token>` is a no-auth birthday/date list and
+      `/api/shared/people/<token>/calendar.ics` a yearly-recurring ICS feed.
 
 ### Engineering
 
-- [ ] **DB-backed API tests** — `httpapi` has only pure-function tests
-      today; an embedded-postgres harness would give MCP and restore
-      paths real coverage.
-- [ ] **One installer** — `apps/web/node_modules` holds a pnpm snapshot
-      of the `file:` api-client while root is npm workspaces; the copies
-      drift. Pick one installer (or a `link:` dep) so the client can't
-      desync.
-- [ ] **Enrichment status** — link enrichment is fire-and-forget; a
-      `link_meta_at` column or a tiny status endpoint would let the UI
-      stop guessing after 2.5 s.
+- [x] **DB-backed API tests** — `testdb_test.go` boots embedded Postgres
+      (or `CAL_TEST_DATABASE_URL`), migrates it, and covers restore dry-run,
+      upload dedup, MCP person resources and shared people end-to-end.
+- [x] **One installer** — npm workspaces is canonical; `@cal/api-client` is a
+      plain `"0.1.0"` workspace dep, no `file:` snapshot to drift.
+- [x] **Enrichment status** — `entries.link_meta_at` stamps every enrichment
+      attempt (failures included); the Links UI shows a pulsing "Fetching…"
+      chip until it lands instead of guessing.
 - [ ] **Streaming restore** — the zip restore buffers the whole archive
       (512 MB cap); fine for personal data, revisit if libraries grow.
 

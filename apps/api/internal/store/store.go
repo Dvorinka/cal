@@ -34,7 +34,7 @@ const entryCols = `id::text, title, content, type, link_url, date::text,
 	watched, link_image, link_desc, link_favicon, link_video_id,
 	board_id::text, column_id::text, position, created_at,
 	account_id::text, external_uid, external_href, external_etag, dirty,
-	workspace_id::text, blocked_by::text`
+	workspace_id::text, blocked_by::text, link_meta_at`
 
 type Entry struct {
 	ID           string    `json:"id"`
@@ -68,12 +68,14 @@ type Entry struct {
 	Dirty        bool      `json:"-"`
 	WorkspaceID  *string   `json:"workspaceId,omitempty"`
 	BlockedBy    *string   `json:"blockedBy,omitempty"`
+	// LinkMetaAt — set once enrichment (unfurl/oEmbed) has run; NULL = pending.
+	LinkMetaAt *time.Time `json:"linkMetaAt,omitempty"`
 }
 
 func (e *Entry) scan(row interface{ Scan(...any) error }) error {
 	return row.Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date,
 		&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.Watched, &e.LinkImage, &e.LinkDesc, &e.LinkFavicon, &e.LinkVideoID, &e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
-		&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty, &e.WorkspaceID, &e.BlockedBy)
+		&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty, &e.WorkspaceID, &e.BlockedBy, &e.LinkMetaAt)
 }
 
 type Settings struct {
@@ -102,6 +104,8 @@ type Settings struct {
 	// InvidiousURL is the base URL of the user's Invidious instance for
 	// YouTube search ("" = feature off). Not a secret — a server address.
 	InvidiousURL string `json:"invidiousUrl"`
+	// PeopleShareToken exposes the public birthday/date list when set.
+	PeopleShareToken string `json:"peopleShareToken"`
 }
 
 type Feed struct {
@@ -598,7 +602,7 @@ func (s *Store) RestoreEntries(ctx context.Context, userID string, entries []Ent
 		}
 		tag, err := tx.Exec(ctx, `
 			INSERT INTO entries (id, user_id, title, content, type, link_url, date, start_time, end_time, completed, color, tags, recur, remind)
-			VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, nullif($8, '')::time, nullif($9, '')::time, $10, $11, $12, coalesce(nullif($13, ''), 'none'), $14)
+			VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, nullif($8, '')::time, nullif($9, '')::time, $10, $11, coalesce($12::text[], '{}'::text[]), coalesce(nullif($13, ''), 'none'), $14)
 			ON CONFLICT (id) DO NOTHING
 		`, e.ID, userID, e.Title, e.Content, e.Type, e.LinkURL, e.Date, strOr(e.StartTime), strOr(e.EndTime), e.Completed, e.Color, e.Tags, e.Recur, e.Remind)
 		if err != nil {
@@ -764,8 +768,9 @@ func (s *Store) Settings(ctx context.Context, userID string) (Settings, error) {
 	err := s.db.QueryRow(ctx, `
 		SELECT country, show_holidays, theme, week_start, accent, timezone, coalesce(city, ''), quota_mb,
 		       coalesce(to_char(digest_time,'HH24:MI'), ''), widget_token, api_token, default_rate, coalesce(github_token,''),
-		       modules, active_workspace::text, default_view, nameday_country, invidious_url FROM settings WHERE user_id = $1
-	`, userID).Scan(&settings.Country, &settings.ShowHolidays, &settings.Theme, &settings.WeekStart, &settings.Accent, &settings.Timezone, &settings.City, &settings.QuotaMB, &settings.DigestTime, &settings.WidgetToken, &settings.ApiToken, &settings.DefaultRate, &settings.GithubToken, &settings.Modules, &settings.ActiveWorkspace, &settings.DefaultView, &settings.NamedayCountry, &settings.InvidiousURL)
+		       modules, active_workspace::text, default_view, nameday_country, invidious_url,
+		       coalesce(people_share_token, '') FROM settings WHERE user_id = $1
+	`, userID).Scan(&settings.Country, &settings.ShowHolidays, &settings.Theme, &settings.WeekStart, &settings.Accent, &settings.Timezone, &settings.City, &settings.QuotaMB, &settings.DigestTime, &settings.WidgetToken, &settings.ApiToken, &settings.DefaultRate, &settings.GithubToken, &settings.Modules, &settings.ActiveWorkspace, &settings.DefaultView, &settings.NamedayCountry, &settings.InvidiousURL, &settings.PeopleShareToken)
 	return settings, err
 }
 
@@ -1359,7 +1364,7 @@ func (s *Store) LinkEntryExists(ctx context.Context, userID, linkURL string) (bo
 // --- Files ---
 
 // fileCols is the canonical files column list (id last-but-two style kept stable).
-const fileCols = `id::text, name, orig_name, size, mime, share_token, created_at, tags, workspace_id::text, person_id::text`
+const fileCols = `id::text, name, orig_name, size, mime, share_token, created_at, tags, workspace_id::text, person_id::text, sha256`
 
 type File struct {
 	ID          string    `json:"id"`
@@ -1372,21 +1377,43 @@ type File struct {
 	Tags        []string  `json:"tags"`
 	WorkspaceID *string   `json:"workspaceId,omitempty"`
 	PersonID    *string   `json:"personId,omitempty"` // attached to a person profile
+	Sha256      string    `json:"sha256,omitempty"`   // content hash — set for dedup on upload/restore
 }
 
 func (f *File) scan(row interface{ Scan(...any) error }) error {
-	return row.Scan(&f.ID, &f.Name, &f.OrigName, &f.Size, &f.Mime, &f.ShareToken, &f.CreatedAt, &f.Tags, &f.WorkspaceID, &f.PersonID)
+	return row.Scan(&f.ID, &f.Name, &f.OrigName, &f.Size, &f.Mime, &f.ShareToken, &f.CreatedAt, &f.Tags, &f.WorkspaceID, &f.PersonID, &f.Sha256)
 }
 
-func (s *Store) CreateFile(ctx context.Context, userID, name, origName, mime string, size int64, tags []string, workspaceID, personID *string) (File, error) {
+func (s *Store) CreateFile(ctx context.Context, userID, name, origName, mime string, size int64, sha256 string, tags []string, workspaceID, personID *string) (File, error) {
 	var f File
 	err := s.db.QueryRow(ctx, `
-		INSERT INTO files (user_id, name, orig_name, size, mime, tags, workspace_id, person_id)
-		VALUES ($1, $2, $3, $4, $5, coalesce($6::text[], '{}'::text[]), $7::uuid, $8::uuid)
+		INSERT INTO files (user_id, name, orig_name, size, mime, sha256, tags, workspace_id, person_id)
+		VALUES ($1, $2, $3, $4, $5, nullif($6, ''), coalesce($7::text[], '{}'::text[]), $8::uuid, $9::uuid)
 		RETURNING `+fileCols+`
-	`, userID, name, origName, size, mime, tags, workspaceID, personID).
-		Scan(&f.ID, &f.Name, &f.OrigName, &f.Size, &f.Mime, &f.ShareToken, &f.CreatedAt, &f.Tags, &f.WorkspaceID, &f.PersonID)
+	`, userID, name, origName, size, mime, sha256, tags, workspaceID, personID).
+		Scan(&f.ID, &f.Name, &f.OrigName, &f.Size, &f.Mime, &f.ShareToken, &f.CreatedAt, &f.Tags, &f.WorkspaceID, &f.PersonID, &f.Sha256)
 	return f, err
+}
+
+// FileByHash — identical binary already stored for this user (upload dedup).
+func (s *Store) FileByHash(ctx context.Context, userID, sha256 string) (File, error) {
+	var f File
+	err := s.db.QueryRow(ctx, `
+		SELECT `+fileCols+`
+		FROM files WHERE user_id = $1 AND sha256 = $2 ORDER BY created_at LIMIT 1`, userID, sha256).
+		Scan(&f.ID, &f.Name, &f.OrigName, &f.Size, &f.Mime, &f.ShareToken, &f.CreatedAt, &f.Tags, &f.WorkspaceID, &f.PersonID, &f.Sha256)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return f, ErrNotFound
+	}
+	return f, err
+}
+
+// AttachFileToPerson — fill person_id on a deduped upload when empty.
+func (s *Store) AttachFileToPerson(ctx context.Context, userID, id, personID string) error {
+	_, err := s.db.Exec(ctx, `
+		UPDATE files SET person_id = $3::uuid
+		WHERE id = $1 AND user_id = $2 AND person_id IS NULL`, id, userID, personID)
+	return err
 }
 
 // FilesForPerson — attachments shown on a person profile, newest first.
@@ -1451,7 +1478,7 @@ func (s *Store) FileByShareToken(ctx context.Context, token string) (string, Fil
 	err := s.db.QueryRow(ctx, `
 		SELECT user_id::text, `+fileCols+`
 		FROM files WHERE share_token = $1`, token).
-		Scan(&userID, &f.ID, &f.Name, &f.OrigName, &f.Size, &f.Mime, &f.ShareToken, &f.CreatedAt, &f.Tags, &f.WorkspaceID)
+		Scan(&userID, &f.ID, &f.Name, &f.OrigName, &f.Size, &f.Mime, &f.ShareToken, &f.CreatedAt, &f.Tags, &f.WorkspaceID, &f.PersonID, &f.Sha256)
 	return userID, f, err
 }
 
@@ -1486,15 +1513,15 @@ func (s *Store) RestoreFiles(ctx context.Context, userID string, files []File) (
 			continue
 		}
 		tag, err := tx.Exec(ctx, `
-			INSERT INTO files (id, user_id, name, orig_name, size, mime, share_token, created_at, tags, workspace_id, person_id)
-			SELECT $1::uuid, $2, $3, $4, $5, $6,
-				CASE WHEN EXISTS (SELECT 1 FROM files WHERE share_token = $7) THEN NULL ELSE $7 END,
-				coalesce($8, now()), coalesce($9::text[], '{}'::text[]),
-				CASE WHEN EXISTS (SELECT 1 FROM workspaces WHERE id = $10::uuid AND user_id = $2) THEN $10::uuid ELSE NULL END,
-				CASE WHEN EXISTS (SELECT 1 FROM people WHERE id = $11::uuid AND user_id = $2) THEN $11::uuid ELSE NULL END
+			INSERT INTO files (id, user_id, name, orig_name, size, mime, sha256, share_token, created_at, tags, workspace_id, person_id)
+			SELECT $1::uuid, $2, $3, $4, $5, $6, nullif($7, ''),
+				CASE WHEN EXISTS (SELECT 1 FROM files WHERE share_token = $8) THEN NULL ELSE $8 END,
+				coalesce($9, now()), coalesce($10::text[], '{}'::text[]),
+				CASE WHEN EXISTS (SELECT 1 FROM workspaces WHERE id = $11::uuid AND user_id = $2) THEN $11::uuid ELSE NULL END,
+				CASE WHEN EXISTS (SELECT 1 FROM people WHERE id = $12::uuid AND user_id = $2) THEN $12::uuid ELSE NULL END
 			WHERE NOT EXISTS (SELECT 1 FROM files WHERE user_id = $2 AND name = $3)
 			ON CONFLICT (id) DO NOTHING`,
-			f.ID, userID, f.Name, f.OrigName, f.Size, f.Mime, f.ShareToken,
+			f.ID, userID, f.Name, f.OrigName, f.Size, f.Mime, f.Sha256, f.ShareToken,
 			orNow(f.CreatedAt), f.Tags, f.WorkspaceID, f.PersonID)
 		if err != nil {
 			return imported, err
@@ -2119,6 +2146,7 @@ func (s *Store) SetLinkMeta(ctx context.Context, userID, id string, desc, image,
 	_, _ = s.db.Exec(ctx, `
 		UPDATE entries SET link_desc = nullif($3,''), link_image = nullif($4,''),
 		  link_favicon = nullif($5,''), link_video_id = nullif($6,''),
+		  link_meta_at = now(),
 		  title = CASE WHEN $7 <> '' AND (title = '' OR title = link_url) THEN $7 ELSE title END
 		WHERE id = $1 AND user_id = $2`, id, userID, desc, image, favicon, videoID, title)
 }
