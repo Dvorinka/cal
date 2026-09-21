@@ -1,6 +1,6 @@
 import type { Entry, Person } from "@cal/api-client";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, CalendarDays, Check, FolderOpen, Link2, Moon, Plus, Search, StickyNote, Sun, Trello, UserRound } from "lucide-react";
+import { ArrowRight, CalendarDays, Check, FolderOpen, Link2, Moon, Plus, Search, StickyNote, Sun, Kanban, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { formatDayShort } from "../lib/date";
@@ -470,7 +470,7 @@ export function CommandPalette() {
                     onMouseEnter={() => setCursor(index)}
                     onClick={() => choose(index)}
                   >
-                    <span className="icon"><Trello size={14} /></span>
+                    <span className="icon"><Kanban size={14} /></span>
                     {board.name}
                   </button>
                 );

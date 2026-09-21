@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronLeft, ChevronRight, FolderOpen, Github as GithubIcon, Hash, Link2, ListChecks, Mail, Plus, Search, Settings2, StickyNote, Sun, Timer as TimerIcon, Trash2, Trello, Users } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, FolderOpen, GitPullRequest as GithubIcon, Hash, Link2, ListChecks, Mail, Plus, Search, Settings2, StickyNote, Sun, Timer as TimerIcon, Trash2, Kanban, Users } from "lucide-react";
 import { TimerPill } from "./TimerPill";
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
@@ -21,7 +21,7 @@ const NAV: { to: string; label: string; icon: typeof Sun; end?: boolean; module?
   { to: "/notes", label: "Notes", icon: StickyNote, module: "notes" },
   { to: "/links", label: "Links", icon: Link2, module: "links" },
   { to: "/files", label: "Files", icon: FolderOpen, module: "files" },
-  { to: "/boards", label: "Boards", icon: Trello, module: "boards" },
+  { to: "/boards", label: "Boards", icon: Kanban, module: "boards" },
   { to: "/tags", label: "Tags", icon: Hash, module: "tags" },
   { to: "/people", label: "People", icon: Users, module: "people" },
   { to: "/time", label: "Time", icon: TimerIcon, module: "time" },

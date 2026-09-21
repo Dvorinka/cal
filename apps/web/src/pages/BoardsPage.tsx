@@ -3,7 +3,7 @@
 // calendar, and in Today. Drag between columns, add cards inline.
 
 import type { Board, BoardColumn, Entry } from "@cal/api-client";
-import { Check, Link2, ListOrdered, Plus, Trash2, Trello } from "lucide-react";
+import { Check, Link2, ListOrdered, Plus, Trash2, Kanban } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { PageHeader } from "../components/PageHeader";
@@ -143,7 +143,7 @@ export function BoardsPage() {
             <div className="board-list">
               {boards.map((b) => (
                 <Link key={b.id} to={`/boards/${b.id}`} className="board-tile">
-                  <Trello size={18} strokeWidth={1.8} />
+                  <Kanban size={18} strokeWidth={1.8} />
                   <span className="board-name">{b.name}</span>
                   {b.total > 0 && (
                     <span className={`board-progress ${b.done === b.total ? "all" : ""}`}>
