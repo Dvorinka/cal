@@ -1,4 +1,4 @@
-import type { Accent, CarddavAccount, Country, NagerHoliday, RestorePreview, SessionInfo, Webhook } from "@cal/api-client";
+import type { Accent, AdminConfig, CarddavAccount, Country, NagerHoliday, RestorePreview, SessionInfo, User, Webhook } from "@cal/api-client";
 import { Bell, BellOff, Copy, Download, FileText, LogOut, Plus, RefreshCw, Trash2, Upload, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
@@ -78,6 +78,8 @@ export function SettingsPage() {
   const [pushDevices, setPushDevices] = useState<{ id: string; label: string; endpoint: string }[]>([]);
   const [pwCurrent, setPwCurrent] = useState("");
   const [pwNext, setPwNext] = useState("");
+  const [adminUsers, setAdminUsers] = useState<User[]>([]);
+  const [adminCfg, setAdminCfg] = useState<AdminConfig>();
   const [pwSaving, setPwSaving] = useState(false);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -102,6 +104,43 @@ export function SettingsPage() {
     void api.namedayCountries().then(setNamedayCountries).catch(() => setNamedayCountries([]));
     void api.browseHolidayCountries().then(setNagerCountries).catch(() => setNagerCountries([]));
   }, [loadEntries, loadFeeds, loadAccounts, api]);
+
+  useEffect(() => {
+    if (!user?.isAdmin) return;
+    void api.adminUsers().then(setAdminUsers).catch(reportErr("Could not load users"));
+    void api.adminConfig().then(setAdminCfg).catch(reportErr("Could not load access settings"));
+  }, [api, user?.isAdmin]);
+
+  async function toggleRegistration() {
+    if (!adminCfg) return;
+    try {
+      const next = await api.adminUpdateConfig({ allowRegistration: !adminCfg.allowRegistration });
+      setAdminCfg(next);
+      toast(next.allowRegistration ? "Sign-ups open" : "Sign-ups closed");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Failed");
+    }
+  }
+
+  async function toggleUserAdmin(target: User) {
+    try {
+      await api.adminSetUserAdmin(target.id, !target.isAdmin);
+      setAdminUsers((list) => list.map((u) => (u.id === target.id ? { ...u, isAdmin: !target.isAdmin } : u)));
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Failed");
+    }
+  }
+
+  async function deleteUserAccount(target: User) {
+    if (!window.confirm(`Delete ${target.email}? All their data is removed — this cannot be undone.`)) return;
+    try {
+      await api.adminDeleteUser(target.id);
+      setAdminUsers((list) => list.filter((u) => u.id !== target.id));
+      toast("User deleted");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Failed");
+    }
+  }
 
   const stats = useMemo(() => {
     const counts = { task: 0, event: 0, note: 0, link: 0, done: 0 };
@@ -1125,6 +1164,60 @@ export function SettingsPage() {
             </div>
           ))}
         </section>
+
+        {user?.isAdmin && (
+          <section className="panel">
+            <h3>Users &amp; access</h3>
+            <p className="panel-note">
+              Instance administration. The first registered account is the administrator;
+              admins manage who can sign up and who keeps an account.
+            </p>
+            {adminCfg && (
+              <label className="switch-row" style={{ marginBottom: 12 }}>
+                Allow new registrations
+                <span className="switch">
+                  <input
+                    type="checkbox"
+                    checked={adminCfg.allowRegistration}
+                    onChange={() => void toggleRegistration()}
+                  />
+                  <i />
+                </span>
+              </label>
+            )}
+            {adminUsers.map((u) => (
+              <div key={u.id} className="feed-row">
+                <div className="feed-meta">
+                  <span className="feed-name">
+                    {u.email}
+                    {u.isAdmin && <span className="feed-kind">admin</span>}
+                    {u.id === user.id && <span className="feed-kind">you</span>}
+                  </span>
+                  <span className="feed-url">
+                    joined {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—"}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => void toggleUserAdmin(u)}
+                >
+                  {u.isAdmin ? "Remove admin" : "Make admin"}
+                </button>
+                {u.id !== user.id && (
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label={`Delete ${u.email}`}
+                    onClick={() => void deleteUserAccount(u)}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </section>
+        )}
       </div>
     </>
   );

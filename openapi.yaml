@@ -11,9 +11,24 @@ paths:
       responses:
         "200":
           description: API status
+  /auth/config:
+    get:
+      description: Public auth state for the login screen — whether the instance has accounts and accepts new registrations. The first registered user becomes admin.
+      responses:
+        "200":
+          description: Auth configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hasUsers:
+                    type: boolean
+                  registrationOpen:
+                    type: boolean
   /auth/register:
     post:
-      description: Register an account. Rate-limited to 8 attempts per minute per IP.
+      description: Register an account. Always open while the instance has zero users (that account becomes admin); afterwards the admin-controlled allow_registration flag applies. Rate-limited to 8 attempts per minute per IP.
       requestBody:
         required: true
         content:
@@ -27,6 +42,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/User"
+        "403":
+          description: Registration closed by an admin
         "429":
           description: Too many attempts
   /auth/login:
@@ -65,6 +82,97 @@ paths:
                 $ref: "#/components/schemas/User"
         "401":
           description: Not authenticated
+  /admin/users:
+    get:
+      description: All accounts — admin only.
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+        "403":
+          description: Not an admin
+  /admin/users/{id}:
+    patch:
+      description: Set or clear a user's admin flag — admin only. The last admin cannot be demoted.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [isAdmin]
+              properties:
+                isAdmin:
+                  type: boolean
+      responses:
+        "200":
+          description: Updated flag
+        "400":
+          description: Last-admin guard
+        "403":
+          description: Not an admin
+        "404":
+          description: Unknown user
+    delete:
+      description: Delete an account and all its data — admin only. Cannot delete yourself or the last admin.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "400":
+          description: Self-delete or last-admin guard
+        "403":
+          description: Not an admin
+        "404":
+          description: Unknown user
+  /admin/config:
+    get:
+      description: Instance access policy — admin only.
+      responses:
+        "200":
+          description: Admin config
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  allowRegistration:
+                    type: boolean
+        "403":
+          description: Not an admin
+    put:
+      description: Update instance access policy — admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [allowRegistration]
+              properties:
+                allowRegistration:
+                  type: boolean
+      responses:
+        "200":
+          description: Saved config
+        "403":
+          description: Not an admin
   /entries:
     get:
       parameters:
@@ -1057,6 +1165,12 @@ components:
           type: string
         email:
           type: string
+        isAdmin:
+          type: boolean
+          description: Instance administrator — first registered user.
+        createdAt:
+          type: string
+          format: date-time
     Entry:
       type: object
       required: [id, title, type, date, completed, color, tags, recur, createdAt]

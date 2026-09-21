@@ -1,5 +1,6 @@
 import { CalendarDays } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { AuthConfig } from "@cal/api-client";
 import { canUseLocal } from "../lib/local";
 import { usePlanner } from "../stores/planner";
 
@@ -33,6 +34,25 @@ export function AuthPanel() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [authCfg, setAuthCfg] = useState<AuthConfig>();
+
+  // First-run bootstrap: an instance with zero users opens on the register
+  // form (that account becomes admin). When the admin closes registration
+  // the sign-up link is hidden; the server still enforces it either way.
+  useEffect(() => {
+    let live = true;
+    api.authConfig()
+      .then((cfg) => {
+        if (!live) return;
+        setAuthCfg(cfg);
+        if (!cfg.hasUsers) setMode((m) => (m === "login" ? "register" : m));
+      })
+      .catch(() => {});
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const signupHidden = !!authCfg && authCfg.hasUsers && !authCfg.registrationOpen;
 
   function applyServer() {
     const target = server.trim().replace(/\/+$/, "");
@@ -89,7 +109,11 @@ export function AuthPanel() {
             <CalendarDays size={21} strokeWidth={2.2} />
           </div>
           <h1 id="auth-title">{title}</h1>
-          <p>Your self-hosted planner. Tasks, notes, links and holidays in one quiet calendar.</p>
+          <p>
+            {mode === "register" && authCfg && !authCfg.hasUsers
+              ? "The first account becomes the administrator."
+              : "Your self-hosted planner. Tasks, notes, links and holidays in one quiet calendar."}
+          </p>
         </div>
         <form onSubmit={submit} className="auth-form">
           {showServer && (
@@ -166,9 +190,12 @@ export function AuthPanel() {
           ) : (
             <>
               {mode === "login" ? "New here? " : "Already have an account? "}
-              <button type="button" onClick={() => setMode(mode === "login" ? "register" : "login")}>
-                {mode === "login" ? "Create an account" : "Sign in"}
-              </button>
+              {(!signupHidden || mode === "register") && (
+                <button type="button" onClick={() => setMode(mode === "login" ? "register" : "login")}>
+                  {mode === "login" ? "Create an account" : "Sign in"}
+                </button>
+              )}
+              {signupHidden && mode === "login" && <span>Sign-up is closed on this server</span>}
               {mode === "login" && (
                 <>
                   {" · "}

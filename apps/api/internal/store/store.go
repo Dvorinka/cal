@@ -22,8 +22,10 @@ type Store struct {
 }
 
 type User struct {
-	ID    string `json:"id"`
-	Email string `json:"email"`
+	ID        string    `json:"id"`
+	Email     string    `json:"email"`
+	IsAdmin   bool      `json:"isAdmin"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 // entryCols is the canonical SELECT/RETURNING column list for entries.
@@ -183,10 +185,10 @@ func NormalizeEmail(email string) string {
 func (s *Store) CreateUser(ctx context.Context, email, passwordHash string) (User, error) {
 	var u User
 	err := s.db.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash)
-		VALUES ($1, $2)
-		RETURNING id::text, email
-	`, NormalizeEmail(email), passwordHash).Scan(&u.ID, &u.Email)
+		INSERT INTO users (email, password_hash, is_admin)
+		VALUES ($1, $2, NOT EXISTS (SELECT 1 FROM users))
+		RETURNING id::text, email, is_admin, created_at
+	`, NormalizeEmail(email), passwordHash).Scan(&u.ID, &u.Email, &u.IsAdmin, &u.CreatedAt)
 	if err != nil {
 		return User{}, err
 	}
@@ -198,8 +200,8 @@ func (s *Store) UserByEmail(ctx context.Context, email string) (User, string, er
 	var u User
 	var hash string
 	err := s.db.QueryRow(ctx, `
-		SELECT id::text, email, password_hash FROM users WHERE email = $1
-	`, NormalizeEmail(email)).Scan(&u.ID, &u.Email, &hash)
+		SELECT id::text, email, password_hash, is_admin, created_at FROM users WHERE email = $1
+	`, NormalizeEmail(email)).Scan(&u.ID, &u.Email, &hash, &u.IsAdmin, &u.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return User{}, "", ErrNotFound
 	}
@@ -209,11 +211,11 @@ func (s *Store) UserByEmail(ctx context.Context, email string) (User, string, er
 func (s *Store) UserBySession(ctx context.Context, sessionID string) (User, error) {
 	var u User
 	err := s.db.QueryRow(ctx, `
-		SELECT users.id::text, users.email
+		SELECT users.id::text, users.email, users.is_admin, users.created_at
 		FROM sessions
 		JOIN users ON users.id = sessions.user_id
 		WHERE sessions.id = $1 AND sessions.expires_at > now()
-	`, sessionID).Scan(&u.ID, &u.Email)
+	`, sessionID).Scan(&u.ID, &u.Email, &u.IsAdmin, &u.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return User{}, ErrNotFound
 	}

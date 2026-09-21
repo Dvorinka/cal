@@ -79,6 +79,7 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 
 	api := router.Group("/api")
 	api.GET("/health", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) })
+	api.GET("/auth/config", server.authConfig)
 	authLimited := api.Group("/auth", newRateLimiter(8, time.Minute))
 	authLimited.POST("/register", server.register)
 	authLimited.POST("/login", server.login)
@@ -217,6 +218,13 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authed.POST("/holidays/import", server.importHolidays)
 	authed.POST("/carddav/:id/import-people", server.carddavImportPeople)
 
+	admin := authed.Group("/admin", server.requireAdmin)
+	admin.GET("/users", server.adminUsers)
+	admin.PATCH("/users/:id", server.adminUpdateUser)
+	admin.DELETE("/users/:id", server.adminDeleteUser)
+	admin.GET("/config", server.adminConfig)
+	admin.PUT("/config", server.adminUpdateConfig)
+
 	router.GET("/api/widget/today", server.widgetToday)
 	router.GET("/api/shared/files/:token", server.serveSharedFile)
 	router.GET("/api/shared/boards/:token", server.serveSharedBoard)
@@ -235,6 +243,10 @@ func (s *Server) register(c *gin.Context) {
 	var input authRequest
 	if !bind(c, &input) || !validAuth(input) {
 		c.String(http.StatusBadRequest, "invalid email or password")
+		return
+	}
+	if s.registrationClosed(c) {
+		c.String(http.StatusForbidden, "registration is closed")
 		return
 	}
 	hash, err := auth.HashPassword(input.Password)

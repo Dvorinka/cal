@@ -7,6 +7,19 @@ export type Accent = "green" | "blue" | "violet" | "amber" | "rose";
 export interface User {
   id: string;
   email: string;
+  isAdmin?: boolean;
+  createdAt?: string;
+}
+
+/** Public auth-panel state: whether the instance has accounts and accepts new ones. */
+export interface AuthConfig {
+  hasUsers: boolean;
+  registrationOpen: boolean;
+}
+
+/** Admin instance config (GET/PUT /admin/config). */
+export interface AdminConfig {
+  allowRegistration: boolean;
 }
 
 export interface Entry {
@@ -435,6 +448,31 @@ export class CalApi {
 
   async me(): Promise<User> {
     return this.request<User>("/me");
+  }
+
+  /** Public — no session needed; the auth panel uses it before login. */
+  async authConfig(): Promise<AuthConfig> {
+    return this.request<AuthConfig>("/auth/config");
+  }
+
+  async adminUsers(): Promise<User[]> {
+    return this.request<User[]>("/admin/users");
+  }
+
+  async adminSetUserAdmin(id: string, isAdmin: boolean): Promise<void> {
+    await this.request(`/admin/users/${id}`, { method: "PATCH", body: { isAdmin } });
+  }
+
+  async adminDeleteUser(id: string): Promise<void> {
+    await this.request(`/admin/users/${id}`, { method: "DELETE" });
+  }
+
+  async adminConfig(): Promise<AdminConfig> {
+    return this.request<AdminConfig>("/admin/config");
+  }
+
+  async adminUpdateConfig(input: AdminConfig): Promise<AdminConfig> {
+    return this.request<AdminConfig>("/admin/config", { method: "PUT", body: input });
   }
 
   async entries(params: { from?: string; to?: string; q?: string; workspace?: string } = {}): Promise<Entry[]> {
