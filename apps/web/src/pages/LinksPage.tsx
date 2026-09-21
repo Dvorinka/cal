@@ -1,4 +1,4 @@
-import { Check, ExternalLink, Link2, Play, Plus, Youtube } from "lucide-react";
+import { Check, ExternalLink, Link2, Play, Plus, SquarePlay } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { linkDomain } from "../lib/entries";
@@ -129,7 +129,7 @@ export function LinksPage() {
                     </button>
                     {link.linkDesc && (
                       <p className="link-desc">
-                        {isVideo && <Youtube size={12} className="link-yt" />}
+                        {isVideo && <SquarePlay size={12} className="link-yt" />}
                         {link.linkDesc}
                       </p>
                     )}
@@ -168,7 +168,7 @@ export function LinksPage() {
                     {link.title}
                     {domain && <span className="link-domain">{domain}</span>}
                   </button>
-                  {link.linkVideoId && <Youtube size={13} style={{ color: "var(--text-3)" }} />}
+                  {link.linkVideoId && <SquarePlay size={13} style={{ color: "var(--text-3)" }} />}
                   <span className="meta-chip date">{formatDayShort(link.date)}</span>
                   {link.linkUrl && (
                     <a

@@ -1,7 +1,7 @@
 // GitHub — open issues/PRs involving you, one-click import to a board card.
 
 import { useEffect, useMemo, useState } from "react";
-import { Github, GitPullRequest, Import, RefreshCw } from "lucide-react";
+import { GitPullRequest, Import, RefreshCw } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { reportErr, usePlanner } from "../stores/planner";
 
@@ -68,7 +68,7 @@ export function GitHubPage() {
           byRepo.map(([repo, repoItems]) => (
             <section key={repo} className="panel" style={{ marginBottom: 10 }}>
               <h3>
-                <Github size={13} style={{ verticalAlign: "-2px", marginRight: 5 }} />
+                <GitPullRequest size={13} style={{ verticalAlign: "-2px", marginRight: 5 }} />
                 {repo}
                 <span className="kanban-count" style={{ marginLeft: 8 }}>{repoItems.length}</span>
               </h3>
