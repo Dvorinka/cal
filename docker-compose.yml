@@ -1,20 +1,22 @@
-# Cal — one container, batteries included.
+# Cal — app + Postgres.
 #
+#   echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" > .env
 #   docker compose up -d --build
 #
-# App serves http://localhost:8080 (UI + API). Data lives in the cal-data
-# volume; the embedded Postgres needs nothing else. To use an external
-# Postgres instead, set DATABASE_URL on the cal service and skip `db`.
+# App serves http://localhost:8080 (UI + API). Two volumes: cal-pg holds the
+# database, cal-data holds uploads and backups — back up both. Rather run a
+# single container? The image has embedded Postgres: drop DATABASE_URL and
+# the db service, and only cal-data is used (that is what install.sh-free
+# `docker run` setups get by default).
 
 services:
   cal:
     # `docker compose up -d` pulls the release image; `--build` builds locally.
     build: .
-    image: ghcr.io/dvorinka/cal:latest
+    image: ghcr.io/dvorinka/cal:${CAL_VERSION:-latest}
     pull_policy: missing
     environment:
-      # Uncomment to use the bundled db service below (or any external PG):
-      # DATABASE_URL: postgres://cal:cal@db:5432/cal?sslmode=disable
+      DATABASE_URL: postgres://cal:${POSTGRES_PASSWORD:?put POSTGRES_PASSWORD in .env}@db:5432/cal?sslmode=disable
       SESSION_SECURE: "false" # set true when serving over https
       PORT: "8080"
       GIN_MODE: release
@@ -23,26 +25,26 @@ services:
       - "${PORT:-8080}:8080"
     volumes:
       - cal-data:/data
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
-    # depends_on:
-    #   db:
-    #     condition: service_healthy
 
-  # Optional external Postgres — uncomment together with DATABASE_URL above.
-  # db:
-  #   image: postgres:16-alpine
-  #   environment:
-  #     POSTGRES_DB: cal
-  #     POSTGRES_USER: cal
-  #     POSTGRES_PASSWORD: cal
-  #   volumes:
-  #     - cal-pg:/var/lib/postgresql/data
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U cal -d cal"]
-  #     interval: 5s
-  #     timeout: 5s
-  #     retries: 10
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: cal
+      POSTGRES_USER: cal
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?put POSTGRES_PASSWORD in .env}
+    volumes:
+      - cal-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cal -d cal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
 
 volumes:
-  cal-data:
-  # cal-pg:
+  cal-data: # uploads, backups — NOT the database
+  cal-pg:   # Postgres data files

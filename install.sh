@@ -1,20 +1,22 @@
 #!/bin/sh
-# Cal — self-hosted planner. One container, one volume, nothing else.
+# Cal — self-hosted planner. Downloads the compose stack, generates a .env,
+# and brings it up.
 #
 #   curl -fsSL https://raw.githubusercontent.com/Dvorinka/cal/main/install.sh | sh
 #
-# Idempotent: re-running pulls the image and restarts the container; data in
-# the cal-data volume is never touched. Override with env vars:
+# Installs into ./cal (override: CAL_DIR=/opt/cal). Idempotent: re-running
+# pulls fresh images and restarts; .env and the named volumes are never
+# touched. From a git checkout, ./install.sh installs in place. Overrides:
 #
-#   PORT=9090 sh install.sh          # host port (default 8080)
-#   CAL_VERSION=v1.2.3 sh install.sh # pin a release tag (default latest)
-#   CAL_NAME=mycal DATA_VOLUME=mycal-data sh install.sh
+#   PORT=9090 sh install.sh          # host port (default 8080, first run)
+#   CAL_VERSION=v1.2.3 sh install.sh # pin image tag (default latest)
+#   CAL_REF=main sh install.sh       # git ref for the downloaded compose file
 set -eu
 
+CAL_DIR="${CAL_DIR:-cal}"
 PORT="${PORT:-8080}"
-IMAGE="ghcr.io/dvorinka/cal:${CAL_VERSION:-latest}"
-NAME="${CAL_NAME:-cal}"
-DATA_VOLUME="${DATA_VOLUME:-cal-data}"
+CAL_REF="${CAL_REF:-main}"
+BASE="https://raw.githubusercontent.com/Dvorinka/cal/$CAL_REF"
 
 command -v docker >/dev/null 2>&1 || {
   echo "error: docker not found — install Docker first: https://docs.docker.com/get-docker/" >&2
@@ -24,19 +26,44 @@ docker info >/dev/null 2>&1 || {
   echo "error: docker daemon not reachable (try: sudo usermod -aG docker $USER, then re-login)" >&2
   exit 1
 }
+docker compose version >/dev/null 2>&1 || {
+  echo "error: docker compose plugin not found — https://docs.docker.com/compose/install/" >&2
+  exit 1
+}
 
-echo "→ pulling $IMAGE"
-docker pull "$IMAGE"
+# A compose file in cwd means a git checkout — install in place. Otherwise
+# fetch it into CAL_DIR.
+if [ -f docker-compose.yml ]; then
+  CAL_DIR=.
+else
+  mkdir -p "$CAL_DIR"
+  echo "→ fetching docker-compose.yml ($CAL_REF)"
+  curl -fsSL "$BASE/docker-compose.yml" -o "$CAL_DIR/docker-compose.yml"
+fi
+cd "$CAL_DIR"
 
-# Replace a previous install cleanly; the volume survives.
-docker rm -f "$NAME" >/dev/null 2>&1 || true
+# .env carries the generated DB password and the host port; never overwritten,
+# so re-runs reuse the same database credentials.
+if [ ! -f .env ]; then
+  if command -v openssl >/dev/null 2>&1; then
+    PW="$(openssl rand -hex 24)"
+  else
+    PW="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  fi
+  printf 'POSTGRES_PASSWORD=%s\nPORT=%s\n' "$PW" "$PORT" > .env
+  chmod 600 .env
+  echo "→ generated .env"
+else
+  # .env wins on re-runs — health check uses the port it actually recorded.
+  SAVED_PORT="$(sed -n 's/^PORT=//p' .env | tail -1)"
+  PORT="${SAVED_PORT:-$PORT}"
+fi
 
-echo "→ starting $NAME on port $PORT (volume: $DATA_VOLUME)"
-docker run -d --name "$NAME" \
-  -p "$PORT:8080" \
-  -v "$DATA_VOLUME:/data" \
-  --restart unless-stopped \
-  "$IMAGE" >/dev/null
+echo "→ pulling images"
+docker compose pull
+
+echo "→ starting stack"
+docker compose up -d
 
 echo "→ waiting for Cal to come up"
 i=0
@@ -53,8 +80,9 @@ cat <<EOF
 Cal is running.
 
   UI + API   http://localhost:$PORT
-  Data       docker volume: $DATA_VOLUME
-  Stop       docker stop $NAME
+  Install    $CAL_DIR (docker-compose.yml + .env)
+  Volumes    cal-pg (database), cal-data (files) — back up both
+  Stop       cd $CAL_DIR && docker compose down
   Upgrade    re-run this script
 
 Open http://localhost:$PORT and create your account — the first one is yours.

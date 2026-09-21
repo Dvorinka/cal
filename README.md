@@ -91,28 +91,30 @@ Requires Docker:
 curl -fsSL https://raw.githubusercontent.com/Dvorinka/cal/main/install.sh | sh
 ```
 
-Pulls the published image, starts one container with a `cal-data` volume, and
-waits for the health check — UI and API at `http://localhost:8080`. The
-script is idempotent: re-running upgrades in place and never touches your
-data.
+Downloads `docker-compose.yml` into `./cal`, generates a `.env` with a
+random Postgres password, pulls the published images, and starts the app
+plus its database — UI and API at `http://localhost:8080`. Re-running pulls
+new images and restarts; `.env` and the named volumes are never touched.
 
 Override with env vars:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Dvorinka/cal/main/install.sh | \
-  PORT=9090 CAL_VERSION=v1.2.3 sh
+  PORT=9090 CAL_DIR=/opt/cal CAL_VERSION=v1.2.3 sh
 ```
 
-No script needed, either — it's a single `docker run`:
+Or run the compose stack by hand:
 
 ```bash
-docker run -d --name cal -p 8080:8080 -v cal-data:/data ghcr.io/dvorinka/cal:latest
+echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" > .env
+docker compose up -d
 ```
 
-Open http://localhost:8080 and create your account. UI, API and an embedded
-Postgres all run in that one container; the `cal-data` volume is the only
-thing to back up. Prefer your own database? Set `DATABASE_URL` and the
-embedded one stays off.
+Open http://localhost:8080 and create your account. Back up two volumes:
+`cal-pg` (the database) and `cal-data` (uploads, exports). Rather run a
+single container? A bare `docker run` without `DATABASE_URL` starts the
+image's embedded Postgres instead — then `cal-data` is the only thing to
+back up.
 
 Desktop apps (Windows/Linux/macOS), headless `cal-server` binaries and an
 Android APK attach to every
@@ -155,7 +157,7 @@ Never commit `.env` — if a secret was ever committed, rotate it.
 npm install
 cp apps/api/.env.example apps/api/.env
 
-# Postgres (or uncomment the db service in docker-compose.yml)
+# Postgres (or use the db service in docker-compose.yml)
 docker run -d --name cal-db -e POSTGRES_DB=cal -e POSTGRES_USER=cal \
   -e POSTGRES_PASSWORD=cal -p 5432:5432 postgres:16-alpine
 
