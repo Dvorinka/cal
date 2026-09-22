@@ -1,6 +1,7 @@
 // GitHub — open issues/PRs involving you, one-click import to a board card.
 
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { GitPullRequest, Import, RefreshCw } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { reportErr, usePlanner } from "../stores/planner";
@@ -57,7 +58,10 @@ export function GitHubPage() {
         {err ? (
           <div className="empty-hint">
             <strong>No GitHub token</strong>
-            <span>Add a personal access token in Settings → GitHub, then refresh.</span>
+            <span>Add a personal access token under Integrations, then refresh.</span>
+            <Link className="btn btn-primary" to="/settings" style={{ marginTop: 10 }}>
+              Open Settings
+            </Link>
           </div>
         ) : byRepo.length === 0 ? (
           <div className="empty-hint">

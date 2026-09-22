@@ -617,6 +617,16 @@ button {
   background: var(--bg-sidepanel);
 }
 
+/* short viewports: drop the mini-month so nav + filters + footer all fit */
+@media (max-height: 1000px) {
+  .sidebar {
+    gap: 10px;
+  }
+  .sidebar .mini-month {
+    display: none;
+  }
+}
+
 /* settings popover */
 .popover-wrap {
   position: relative;

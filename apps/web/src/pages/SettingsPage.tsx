@@ -341,17 +341,6 @@ export function SettingsPage() {
               </select>
             </label>
             <label className="field">
-              <span>Week starts on</span>
-              <select
-                className="select"
-                value={settings.weekStart}
-                onChange={(e) => set({ weekStart: e.target.value as typeof settings.weekStart })}
-              >
-                <option value="monday">Monday</option>
-                <option value="sunday">Sunday</option>
-              </select>
-            </label>
-            <label className="field">
               <span>Default view</span>
               <select
                 className="select"
@@ -361,6 +350,38 @@ export function SettingsPage() {
                 <option value="month">Month</option>
                 <option value="week">Week</option>
                 <option value="day">Day</option>
+              </select>
+            </label>
+            <div className="field">
+              <span>Accent</span>
+              <div className="dots">
+                {ACCENTS.map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={`dot accent-${value} ${settings.accent === value ? "active" : ""}`}
+                    onClick={() => set({ accent: value })}
+                    aria-label={`Accent ${label}`}
+                    title={label}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="panel">
+          <h3>General</h3>
+          <div className="settings-grid">
+            <label className="field">
+              <span>Week starts on</span>
+              <select
+                className="select"
+                value={settings.weekStart}
+                onChange={(e) => set({ weekStart: e.target.value as typeof settings.weekStart })}
+              >
+                <option value="monday">Monday</option>
+                <option value="sunday">Sunday</option>
               </select>
             </label>
             <label className="field">
@@ -376,28 +397,6 @@ export function SettingsPage() {
                   </option>
                 ))}
               </select>
-            </label>
-            <label className="field">
-              <span>GitHub token</span>
-              <input
-                type="password"
-                className="input"
-                placeholder="Personal access token — issues & PRs"
-                value={settings.githubToken ?? ""}
-                onChange={(e) => set({ githubToken: e.target.value })}
-              />
-            </label>
-            <label className="field">
-              <span>Default hourly rate</span>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                className="input"
-                placeholder="$/h for billable timers"
-                value={settings.defaultRate ?? ""}
-                onChange={(e) => set({ defaultRate: e.target.value === "" ? undefined : Number(e.target.value) })}
-              />
             </label>
             <label className="field">
               <span>Morning digest push</span>
@@ -419,6 +418,34 @@ export function SettingsPage() {
               />
             </label>
             <label className="field">
+              <span>Default hourly rate</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                className="input"
+                placeholder="$/h for billable timers"
+                value={settings.defaultRate ?? ""}
+                onChange={(e) => set({ defaultRate: e.target.value === "" ? undefined : Number(e.target.value) })}
+              />
+            </label>
+          </div>
+        </section>
+
+        <section className="panel">
+          <h3>Integrations</h3>
+          <div className="settings-grid">
+            <label className="field">
+              <span>GitHub token</span>
+              <input
+                type="password"
+                className="input"
+                placeholder="Personal access token — issues & PRs"
+                value={settings.githubToken ?? ""}
+                onChange={(e) => set({ githubToken: e.target.value })}
+              />
+            </label>
+            <label className="field">
               <span>Invidious instance</span>
               <input
                 type="url"
@@ -428,21 +455,6 @@ export function SettingsPage() {
                 onChange={(e) => set({ invidiousUrl: e.target.value })}
               />
             </label>
-            <div className="field">
-              <span>Accent</span>
-              <div className="dots">
-                {ACCENTS.map(({ value, label }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    className={`dot accent-${value} ${settings.accent === value ? "active" : ""}`}
-                    onClick={() => set({ accent: value })}
-                    aria-label={`Accent ${label}`}
-                    title={label}
-                  />
-                ))}
-              </div>
-            </div>
           </div>
         </section>
 

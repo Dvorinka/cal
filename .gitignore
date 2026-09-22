@@ -28,3 +28,6 @@ apps/desktop/desktop
 
 # Wails generated bindings
 apps/desktop/frontend/wailsjs/
+
+# tsc incremental build cache
+*.tsbuildinfo

@@ -365,13 +365,11 @@ func (s *Store) CreateEntry(ctx context.Context, userID string, input EntryInput
 		input.Tags = []string{}
 	}
 	var e Entry
-	err := s.db.QueryRow(ctx, `
+	err := e.scan(s.db.QueryRow(ctx, `
 		INSERT INTO entries (user_id, title, content, type, link_url, date, start_time, end_time, color, tags, recur, remind, account_id, board_id, column_id, position, dirty, workspace_id, blocked_by)
 		VALUES ($1, $2, $3, $4, $5, $6, nullif($7, '')::time, nullif($8, '')::time, $9, $10, coalesce(nullif($11, ''), 'none'), $12, $13::uuid, $14::uuid, $15::uuid, $16, $13 IS NOT NULL, nullif($17, '')::uuid, nullif($18, '')::uuid)
 		RETURNING `+entryCols+`
-	`, userID, input.Title, input.Content, input.Type, input.LinkURL, input.Date, input.StartTime, input.EndTime, input.Color, input.Tags, input.Recur, input.Remind, input.AccountID, input.BoardID, input.ColumnID, input.Position, input.WorkspaceID, input.BlockedBy).
-		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.Watched, &e.LinkImage, &e.LinkDesc, &e.LinkFavicon, &e.LinkVideoID, &e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
-			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty, &e.WorkspaceID, &e.BlockedBy)
+	`, userID, input.Title, input.Content, input.Type, input.LinkURL, input.Date, input.StartTime, input.EndTime, input.Color, input.Tags, input.Recur, input.Remind, input.AccountID, input.BoardID, input.ColumnID, input.Position, input.WorkspaceID, input.BlockedBy))
 	return e, err
 }
 
@@ -481,7 +479,7 @@ func (s *Store) UpdateEntry(ctx context.Context, userID, id string, patch EntryP
 	resetRemind := patch.Remind != nil || patch.StartTime != nil || patch.Date != nil
 
 	var e Entry
-	err = tx.QueryRow(ctx, `
+	err = e.scan(tx.QueryRow(ctx, `
 		UPDATE entries
 		SET title = $1, content = $2, type = $3, link_url = $4, date = $5,
 		    start_time = nullif($6, '')::time, end_time = nullif($7, '')::time,
@@ -494,9 +492,7 @@ func (s *Store) UpdateEntry(ctx context.Context, userID, id string, patch EntryP
 		RETURNING `+entryCols+`
 	`, current.Title, current.Content, current.Type, current.LinkURL, current.Date,
 		strOrEmpty(current.StartTime), strOrEmpty(current.EndTime),
-		current.Completed, current.Color, current.Tags, current.Recur, current.Remind, id, userID, resetRemind, current.Pinned, current.BoardID, current.ColumnID, current.Watched, current.WorkspaceID, current.BlockedBy).
-		Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date, &e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.Watched, &e.LinkImage, &e.LinkDesc, &e.LinkFavicon, &e.LinkVideoID, &e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
-			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty, &e.WorkspaceID, &e.BlockedBy)
+		current.Completed, current.Color, current.Tags, current.Recur, current.Remind, id, userID, resetRemind, current.Pinned, current.BoardID, current.ColumnID, current.Watched, current.WorkspaceID, current.BlockedBy))
 	if err != nil {
 		return Entry{}, err
 	}
@@ -1698,10 +1694,7 @@ func (s *Store) BoardCards(ctx context.Context, userID, boardID string) ([]Entry
 	out := []Entry{}
 	for rows.Next() {
 		var e Entry
-		if err := rows.Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date,
-			&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.Watched, &e.LinkImage, &e.LinkDesc, &e.LinkFavicon, &e.LinkVideoID,
-			&e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
-			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty, &e.WorkspaceID, &e.BlockedBy); err != nil {
+		if err := e.scan(rows); err != nil {
 			return nil, err
 		}
 		out = append(out, e)
@@ -1750,10 +1743,7 @@ func (s *Store) ListTrash(ctx context.Context, userID string) ([]Entry, error) {
 	out := []Entry{}
 	for rows.Next() {
 		var e Entry
-		if err := rows.Scan(&e.ID, &e.Title, &e.Content, &e.Type, &e.LinkURL, &e.Date,
-			&e.StartTime, &e.EndTime, &e.Completed, &e.Color, &e.Tags, &e.Recur, &e.Remind, &e.Pinned, &e.Watched, &e.LinkImage, &e.LinkDesc, &e.LinkFavicon, &e.LinkVideoID,
-			&e.BoardID, &e.ColumnID, &e.Position, &e.CreatedAt,
-			&e.AccountID, &e.ExternalUID, &e.ExternalHref, &e.ExternalETag, &e.Dirty, &e.WorkspaceID, &e.BlockedBy); err != nil {
+		if err := e.scan(rows); err != nil {
 			return nil, err
 		}
 		out = append(out, e)

@@ -256,7 +256,7 @@ export function TodayPage() {
                 title="Start a focus timer"
                 onClick={() => void api.startTimer({}).then(() => api.timeSummary().then(setTime)).catch((e) => toast(e instanceof Error ? e.message : "Could not start timer"))}
               >
-                <Timer size={12} /> Focus
+                <Timer size={12} /> Focus timer
               </button>
             </div>
             {time && time.todayMinutes > 0 && (
@@ -475,29 +475,31 @@ export function TodayPage() {
               </ul>
             </section>
 
-            {dash && dash.deadlines.length > 0 && (
+            {dash && dash.deadlines.filter((d) => !dayEntries.some((e) => e.id === d.id)).length > 0 && (
               <section className="panel">
                 <h3>Upcoming deadlines</h3>
                 <ul className="check-list">
-                  {dash.deadlines.map((e) => {
-                    const daysLeft = Math.round((new Date(`${e.date}T12:00:00`).getTime() - new Date(`${today}T12:00:00`).getTime()) / 86400000);
-                    return (
-                      <li key={e.id}>
-                        <button
-                          type="button"
-                          className="tickbox"
-                          aria-label="Complete"
-                          onClick={() => void updateEntry(e.id, { completed: true })}
-                        />
-                        <button type="button" className="row-title" onClick={() => openEdit(e)}>
-                          {e.title}
-                        </button>
-                        <span className={`meta-chip ${daysLeft <= 0 ? "overdue" : daysLeft <= 2 ? "soon" : ""}`}>
-                          {daysLeft <= 0 ? "today" : daysLeft === 1 ? "tomorrow" : `${daysLeft}d`}
-                        </span>
-                      </li>
-                    );
-                  })}
+                  {dash.deadlines
+                    .filter((d) => !dayEntries.some((e) => e.id === d.id))
+                    .map((e) => {
+                      const daysLeft = Math.round((new Date(`${e.date}T12:00:00`).getTime() - new Date(`${today}T12:00:00`).getTime()) / 86400000);
+                      return (
+                        <li key={e.id}>
+                          <button
+                            type="button"
+                            className="tickbox"
+                            aria-label="Complete"
+                            onClick={() => void updateEntry(e.id, { completed: true })}
+                          />
+                          <button type="button" className="row-title" onClick={() => openEdit(e)}>
+                            {e.title}
+                          </button>
+                          <span className={`meta-chip ${daysLeft <= 0 ? "overdue" : daysLeft <= 2 ? "soon" : ""}`}>
+                            {daysLeft < 0 ? "overdue" : daysLeft === 0 ? "today" : daysLeft === 1 ? "tomorrow" : `${daysLeft}d`}
+                          </span>
+                        </li>
+                      );
+                    })}
                 </ul>
               </section>
             )}
@@ -538,7 +540,7 @@ export function TodayPage() {
               )}
             </section>
 
-            {dash && (dash.feed.length > 0 || storage) && (
+            {dash && dash.feed.length > 0 && (
               <section className="panel">
                 <h3>Recent activity</h3>
                 <ul className="feed-list">
@@ -554,14 +556,18 @@ export function TodayPage() {
                     </li>
                   ))}
                 </ul>
-                {storage && storage.quotaBytes > 0 && (
-                  <div className="storage-row" title={`${fmtBytes(storage.usedBytes)} of ${fmtBytes(storage.quotaBytes)} used`}>
-                    <div className="meter" aria-hidden>
-                      <i style={{ width: `${Math.min(100, (storage.usedBytes / storage.quotaBytes) * 100)}%` }} />
-                    </div>
-                    <span className="panel-note">{fmtBytes(storage.usedBytes)} / {fmtBytes(storage.quotaBytes)}</span>
+              </section>
+            )}
+
+            {storage && storage.quotaBytes > 0 && (
+              <section className="panel">
+                <h3>Storage</h3>
+                <div className="storage-row" title={`${fmtBytes(storage.usedBytes)} of ${fmtBytes(storage.quotaBytes)} used`}>
+                  <div className="meter" aria-hidden>
+                    <i style={{ width: `${Math.min(100, (storage.usedBytes / storage.quotaBytes) * 100)}%` }} />
                   </div>
-                )}
+                  <span className="panel-note">{fmtBytes(storage.usedBytes)} / {fmtBytes(storage.quotaBytes)}</span>
+                </div>
               </section>
             )}
 
