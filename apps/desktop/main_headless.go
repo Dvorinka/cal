@@ -12,12 +12,19 @@ import (
 )
 
 func main() {
-	handler, closeDB, err := NewHandler()
-	if err != nil {
-		log.Fatalf("cal: %v", err)
-	}
-	defer closeDB()
+	b := newBackend()
+
 	addr := envOr("PORT", "8080")
 	log.Printf("cal (headless) on :%s", addr)
-	log.Fatal(http.ListenAndServe(":"+addr, handler))
+
+	// A failed init should fail the process, not just the status endpoint —
+	// CI and supervisors rely on a nonzero exit.
+	go func() {
+		<-b.ready
+		if b.handler == nil {
+			log.Fatalf("cal: %s", b.status.Error)
+		}
+	}()
+
+	log.Fatal(http.ListenAndServe(":"+addr, b))
 }

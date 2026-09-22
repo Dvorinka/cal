@@ -12,8 +12,8 @@ git push --tags
 | Artifact | Contents |
 |---|---|
 | `ghcr.io/dvorinka/cal:{version,latest}` | All-in-one image (SPA + API + embedded Postgres), linux/amd64 + arm64 |
-| `cal-desktop-windows-amd64.exe` | `cal.exe` GUI binary, signed when secrets set |
-| `cal-desktop-windows-amd64.msi` | WiX installer (Program Files + Start Menu shortcut), signed when secrets set |
+| `cal-desktop-windows-amd64-setup.exe` | NSIS installer — wizard, WebView2 bootstrap, Start Menu/Desktop shortcuts, uninstaller, bundled Postgres runtime (fully offline first launch). Signed when secrets set |
+| `cal-desktop-windows-amd64.msi` | WiX package with the same bundled runtime, for managed/enterprise deployment. Signed when secrets set |
 | `cal-desktop-linux-amd64.AppImage` | Portable AppImage, no install needed |
 | `cal-desktop-linux-amd64.deb` / `.rpm` | `nfpm` packages — `/usr/bin/cal` + desktop entry + icon |
 | `cal-desktop-macos-arm64.dmg` | `cal.app` inside a DMG |

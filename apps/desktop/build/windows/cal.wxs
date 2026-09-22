@@ -13,7 +13,9 @@
 
   <Fragment>
     <StandardDirectory Id="ProgramFiles64Folder">
-      <Directory Id="INSTALLFOLDER" Name="Cal" />
+      <Directory Id="CompanyFolder" Name="TDvorak">
+        <Directory Id="INSTALLFOLDER" Name="Cal" />
+      </Directory>
     </StandardDirectory>
     <StandardDirectory Id="ProgramMenuFolder" />
   </Fragment>
@@ -25,8 +27,12 @@
         <Shortcut Name="Cal"
                   Directory="ProgramMenuFolder"
                   Target="[INSTALLFOLDER]cal.exe"
-                  WorkingDirectory="INSTALLFOLDER" />
+                  WorkingDirectory="INSTALLFOLDER"
+                  Description="Self-hosted calendar, planner and productivity hub" />
       </Component>
+      <!-- Bundled Postgres runtime — harvested from $(var.BinDir)\pg-runtime,
+           preserving its bin/lib/share layout under INSTALLFOLDER\pg-runtime. -->
+      <Files Directory="INSTALLFOLDER" Subdirectory="pg-runtime" Include="$(var.BinDir)\pg-runtime\**" />
     </ComponentGroup>
   </Fragment>
 </Wix>

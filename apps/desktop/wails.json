@@ -7,12 +7,15 @@
   "frontend:dev:watcher": "",
   "frontend:dev:serverUrl": "",
   "author": {
-    "name": "Cal",
-    "email": ""
+    "name": "TDvorak",
+    "email": "info@tdvorak.dev"
   },
   "info": {
+    "companyName": "TDvorak",
     "comments": "Self-hosted calendar, planner and productivity hub",
     "productName": "Cal",
-    "productVersion": "0.1.1"
+    "productVersion": "0.1.1",
+    "copyright": "Copyright © TDvorak",
+    "productIdentifier": "dev.cal.app"
   }
 }
