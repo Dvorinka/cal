@@ -8,6 +8,16 @@ maintainer: TDvorak <info@tdvorak.dev>
 description: Self-hosted calendar, planner and productivity hub
 homepage: https://github.com/Dvorinka/cal
 license: MIT
+# The binary links webkit2gtk-4.1 (wails -tags webkit2_41): declare it so
+# apt/dnf pull it in instead of installing a cal that cannot launch.
+depends:
+  - libwebkit2gtk-4.1-0
+  - libgtk-3-0
+overrides:
+  rpm:
+    depends:
+      - webkit2gtk4.1
+      - gtk3
 contents:
   - src: build/bin/cal
     dst: /usr/bin/cal

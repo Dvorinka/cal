@@ -103,8 +103,11 @@ jobs:
 
       - name: Build desktop app
         working-directory: apps/desktop
-        # webkit2_41 tag: Ubuntu 24.04+ ships webkit2gtk-4.1 only
-        run: wails build -clean ${{ runner.os == 'Linux' && '-tags webkit2_41' || '' }} ${{ runner.os == 'Windows' && '-nsis' || '' }}
+        # webkit2_41 tag: Ubuntu 24.04+ ships webkit2gtk-4.1 only.
+        # -installscope user: per-user install in %LOCALAPPDATA%\Programs —
+        # no UAC prompt, no admin needed (VS Code/Discord model).
+        # darwin/universal: one DMG covering Apple Silicon + Intel.
+        run: wails build -clean ${{ runner.os == 'Linux' && '-tags webkit2_41' || '' }} ${{ runner.os == 'Windows' && '-nsis -installscope user' || '' }} ${{ runner.os == 'macOS' && '-platform darwin/universal' || '' }}
 
       - name: Build headless server binary
         working-directory: apps/desktop
@@ -173,15 +176,34 @@ jobs:
           set -euo pipefail
           nfpm package -f build/linux/nfpm.yaml -p deb -t "build/bin/Cal-Linux.deb"
           nfpm package -f build/linux/nfpm.yaml -p rpm -t "build/bin/Cal-Linux.rpm"
-          # AppImage: appimagetool is itself an AppImage; --appimage-extract
-          # sidesteps the missing FUSE on GH runners.
+          # AppImage: linuxdeploy + gtk plugin bundles GTK + WebKit so the
+          # image is self-contained on any distro (a bare AppRun wrapper only
+          # works where webkit2gtk already happens to be installed).
+          # --appimage-extract sidesteps the missing FUSE on GH runners.
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage -O /tmp/linuxdeploy
+          wget -q https://raw.githubusercontent.com/linuxdeploy/linuxdeploy-plugin-gtk/master/linuxdeploy-plugin-gtk.sh -O /tmp/linuxdeploy-plugin-gtk.sh
           wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O /tmp/appimagetool
-          chmod +x /tmp/appimagetool
-          (cd /tmp && /tmp/appimagetool --appimage-extract >/dev/null)
-          mkdir build/bin/AppDir
-          install -m755 build/bin/cal build/bin/AppDir/AppRun
-          install -m644 build/linux/cal.desktop build/linux/cal.png build/bin/AppDir/
-          (cd build/bin && ARCH=x86_64 /tmp/squashfs-root/AppRun AppDir "Cal-Linux.AppImage")
+          chmod +x /tmp/linuxdeploy /tmp/linuxdeploy-plugin-gtk.sh /tmp/appimagetool
+          mkdir /tmp/ld /tmp/at
+          (cd /tmp/ld && /tmp/linuxdeploy --appimage-extract >/dev/null)
+          (cd /tmp/at && /tmp/appimagetool --appimage-extract >/dev/null)
+          export PATH="/tmp:$PATH"  # linuxdeploy finds the gtk plugin on PATH
+          mkdir -p build/bin/AppDir/usr/bin build/bin/AppDir/usr/share/applications build/bin/AppDir/usr/share/icons/hicolor/512x512/apps
+          install -m755 build/bin/cal build/bin/AppDir/usr/bin/
+          install -m644 build/linux/cal.desktop build/bin/AppDir/usr/share/applications/
+          install -m644 build/linux/cal.png build/bin/AppDir/usr/share/icons/hicolor/512x512/apps/
+          DEPLOY_GTK_VERSION=3 /tmp/ld/squashfs-root/AppRun --appdir build/bin/AppDir --plugin gtk \
+            -d build/bin/AppDir/usr/share/applications/cal.desktop \
+            -i build/bin/AppDir/usr/share/icons/hicolor/512x512/apps/cal.png
+          # linuxdeploy scans the main binary's NEEDED libs but not webkit's
+          # out-of-process helpers — without these the webview renders blank.
+          WEBKIT_LIBEXEC=$(dirname "$(find /usr/lib -name WebKitWebProcess | head -1)")
+          cp -r "$WEBKIT_LIBEXEC" build/bin/AppDir/usr/lib/
+          mkdir -p build/bin/AppDir/apprun-hooks
+          printf 'export WEBKIT_EXEC_PATH="$APPDIR/usr/lib/%s"\nexport WEBKIT_INJECTED_BUNDLE_PATH="$APPDIR/usr/lib/%s/injected-bundle"\n' \
+            "$(basename "$WEBKIT_LIBEXEC")" "$(basename "$WEBKIT_LIBEXEC")" \
+            > build/bin/AppDir/apprun-hooks/webkit-exec-path.sh
+          ARCH=x86_64 /tmp/at/squashfs-root/usr/bin/appimagetool build/bin/AppDir "build/bin/Cal-Linux.AppImage"
           # headless server ships as a bare binary
           mv "build/bin/cal-server${{ matrix.ext }}" "build/bin/cal-server-${{ matrix.label }}"
 

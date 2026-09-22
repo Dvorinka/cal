@@ -5,9 +5,9 @@ database. First launch works fully offline.
 
 | Platform | File | Notes |
 |---|---|---|
-| **Windows** | **`Cal-Setup-Windows.exe`** | Installer — recommended |
+| **Windows** | **`Cal-Setup-Windows.exe`** | Installer — recommended. Per-user, no admin needed |
 | | `Cal-Windows.msi` | For managed / enterprise deployment |
-| **macOS** (Apple Silicon) | **`Cal-macOS.dmg`** | Open, drag to Applications |
+| **macOS** | **`Cal-macOS.dmg`** | Apple Silicon + Intel. Open, drag to Applications |
 | **Linux** | **`Cal-Linux.AppImage`** | Runs anywhere, no install |
 | | `Cal-Linux.deb` | Debian / Ubuntu |
 | | `Cal-Linux.rpm` | Fedora / RHEL / openSUSE |
