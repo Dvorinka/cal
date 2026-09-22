@@ -5,16 +5,14 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
 	"cal/apps/api/app"
-
-	embeddedpostgres "github.com/fergusstrange/embedded-postgres"
 )
 
 //go:embed all:frontend/dist
@@ -26,27 +24,29 @@ var distFS embed.FS
 //
 // DATABASE_URL set → external Postgres (dev, power users). Unset → an
 // embedded Postgres starts in <dataDir>/pg on a free port so the binary is
-// turnkey; first run unpacks ~80MB of binaries into the cache.
-func NewHandler() (http.Handler, func(), error) {
-	dataDir := envOr("DATA_DIR", defaultDataDir())
-
-	var pg *embeddedpostgres.EmbeddedPostgres
+// turnkey; binaries come from the installer-bundled pg-runtime when present,
+// else download once into <dataDir>/pg-bin.
+func NewHandler(dataDir string, report progress, logFile *os.File) (http.Handler, func(), error) {
+	var pg *embeddedPG
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
 		var err error
-		pg, databaseURL, err = startEmbeddedPostgres(filepath.Join(dataDir, "pg"))
+		pg, databaseURL, err = startEmbeddedPostgres(dataDir, report, logFile)
 		if err != nil {
 			return nil, nil, fmt.Errorf("embedded postgres: %w", err)
 		}
+	} else {
+		report("connect", "Connecting to Postgres")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	report("migrate", "Preparing application")
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	api, closeDB, err := app.New(ctx, databaseURL, dataDir)
 	if err != nil {
 		if pg != nil {
-			_ = pg.Stop()
+			pg.stop()
 		}
 		return nil, nil, err
 	}
@@ -78,7 +78,7 @@ func NewHandler() (http.Handler, func(), error) {
 	return mux, func() {
 		closeDB()
 		if pg != nil {
-			_ = pg.Stop()
+			pg.stop()
 		}
 	}, nil
 }
@@ -102,27 +102,6 @@ func securityHeaders(w http.ResponseWriter, path string) {
 	}
 }
 
-// startEmbeddedPostgres boots a private Postgres in dir on a free port.
-func startEmbeddedPostgres(dir string) (*embeddedpostgres.EmbeddedPostgres, string, error) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return nil, "", err
-	}
-	port := uint32(ln.Addr().(*net.TCPAddr).Port)
-	_ = ln.Close()
-
-	pg := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().
-		Port(port).
-		DataPath(dir).
-		Username("cal").
-		Password("cal").
-		Database("cal"))
-	if err := pg.Start(); err != nil {
-		return nil, "", err
-	}
-	return pg, fmt.Sprintf("postgres://cal:cal@127.0.0.1:%d/cal?sslmode=disable", port), nil
-}
-
 func envOr(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
@@ -131,6 +110,13 @@ func envOr(key, fallback string) string {
 }
 
 func defaultDataDir() string {
+	// LocalAppData on Windows — a Postgres data cluster has no business in a
+	// roaming profile. UserConfigDir there maps to %APPDATA% (roaming).
+	if runtime.GOOS == "windows" {
+		if dir := os.Getenv("LOCALAPPDATA"); dir != "" {
+			return filepath.Join(dir, "cal")
+		}
+	}
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return "./data"

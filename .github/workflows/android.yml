@@ -51,15 +51,31 @@ jobs:
         working-directory: apps/web/android
         run: ./gradlew assembleDebug --no-daemon --max-workers=2
 
+      # Give the APK a human name: app-debug.apk / app-release.apk tell users
+      # nothing. Debug stays labelled debug — it's unsigned and unoptimized.
+      - name: Rename APK for release
+        run: |
+          cd apps/web/android/app/build/outputs/apk
+          if [ -f release/app-release.apk ]; then
+            mv release/app-release.apk Cal-Android.apk
+          elif [ -f debug/app-debug.apk ]; then
+            mv debug/app-debug.apk Cal-Android-debug.apk
+          else
+            # Unexpected output name (e.g. unsigned release) — take whatever
+            # assemble produced rather than failing the release.
+            f=$(find . -name '*.apk' | head -1)
+            mv "$f" Cal-Android.apk
+          fi
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v7
         with:
           name: cal-apk
-          path: apps/web/android/app/build/outputs/apk/**/*.apk
+          path: apps/web/android/app/build/outputs/apk/**/Cal-*.apk
           retention-days: 30
 
       - name: Attach APK to release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v3
         with:
-          files: apps/web/android/app/build/outputs/apk/**/*.apk
+          files: apps/web/android/app/build/outputs/apk/**/Cal-*.apk

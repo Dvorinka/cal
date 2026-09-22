@@ -128,8 +128,10 @@ back up.
 
 Desktop apps (Windows/Linux/macOS), headless `cal-server` binaries and an
 Android APK attach to every
-[release](https://github.com/Dvorinka/cal/releases). The desktop app bundles
-its own server, or can sign in to a server URL to share data between devices.
+[release](https://github.com/Dvorinka/cal/releases). On Windows grab
+`Cal-Setup-Windows.exe` — a real installer with the database engine bundled,
+so first launch works offline. The desktop app bundles its own server, or
+can sign in to a server URL to share data between devices.
 
 ## Architecture
 

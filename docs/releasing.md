@@ -12,16 +12,17 @@ git push --tags
 | Artifact | Contents |
 |---|---|
 | `ghcr.io/dvorinka/cal:{version,latest}` | All-in-one image (SPA + API + embedded Postgres), linux/amd64 + arm64 |
-| `cal-desktop-windows-amd64.exe` | `cal.exe` GUI binary, signed when secrets set |
-| `cal-desktop-windows-amd64.msi` | WiX installer (Program Files + Start Menu shortcut), signed when secrets set |
-| `cal-desktop-linux-amd64.AppImage` | Portable AppImage, no install needed |
-| `cal-desktop-linux-amd64.deb` / `.rpm` | `nfpm` packages — `/usr/bin/cal` + desktop entry + icon |
-| `cal-desktop-macos-arm64.dmg` | `cal.app` inside a DMG |
+| `Cal-Setup-Windows.exe` | NSIS installer — per-user (no admin), wizard, WebView2 bootstrap, Start Menu/Desktop shortcuts, uninstaller, bundled Postgres runtime (fully offline first launch). Signed when secrets set |
+| `Cal-Windows.msi` | WiX package with the same bundled runtime, for managed/enterprise deployment. Signed when secrets set |
+| `Cal-Linux.AppImage` | Portable AppImage, no install needed |
+| `Cal-Linux.deb` / `Cal-Linux.rpm` | `nfpm` packages — `/usr/bin/cal` + desktop entry + icon |
+| `Cal-macOS.dmg` | `cal.app` inside a DMG |
 | `cal-server-<os>-<arch>[.exe]` | Bare headless server binaries |
-| `cal-android-debug.apk` / signed AAB-capable APK | via android.yml |
+| `Cal-Android.apk` / `Cal-Android-debug.apk` | via android.yml — signed release when keystore secrets exist, debug otherwise |
 
-Everything attaches to a GitHub Release on the tag. `workflow_dispatch` builds
-the same matrix without creating a release — useful for verifying CI.
+The release body comes from `.github/release-notes.md` — a pick-your-platform
+download table — with GitHub's generated changelog appended. `workflow_dispatch`
+builds the same matrix without creating a release — useful for verifying CI.
 
 ## Signing state today
 
@@ -74,17 +75,19 @@ The step imports into a throwaway keychain, `codesign --deep --options
 runtime` (hardened runtime — required for notarization), submits via
 `xcrun notarytool`, then staples the ticket into `cal.app`.
 
-Note: the macOS build is `macos-latest` = **arm64 only**. Intel users would
-need a universal build (`wails build -platform darwin/amd64` as a second
-matrix row) — left out until there's demand.
+The macOS build is `-platform darwin/universal` — one DMG covers Apple
+Silicon and Intel.
 
 ## Linux
 
 No signing needed — unsigned binaries are the norm. Three formats ship:
 
 - `.deb` / `.rpm` — built by `nfpm` from `apps/desktop/build/linux/nfpm.yaml`;
-  installs `cal` to `/usr/bin` with the desktop entry and icon
-- `.AppImage` — portable single file built with `appimagetool`
+  installs `cal` to `/usr/bin` with the desktop entry and icon, and declares
+  `webkit2gtk`/`gtk3` as real package dependencies
+- `.AppImage` — self-contained: linuxdeploy + gtk plugin bundles GTK, WebKit
+  and its helper processes, so it runs on distros without webkit2gtk
+  preinstalled
 
 `install.sh` remains in `apps/desktop/build/linux/` for manual source builds.
 

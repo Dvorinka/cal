@@ -10,7 +10,8 @@ permissions:
   packages: write
 
 env:
-  WAILS_VERSION: v2.15.0
+  # Keep in sync with github.com/wailsapp/wails/v2 in apps/desktop/go.mod.
+  WAILS_VERSION: v2.16.0
 
 jobs:
   docker:
@@ -88,10 +89,25 @@ jobs:
       - name: Install wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
 
+      - name: Install NSIS (Windows)
+        if: runner.os == 'Windows'
+        run: choco install nsis --no-progress -y
+
+      # Bundled runtime must exist before `wails build -nsis` runs makensis —
+      # project.nsi File /r's it into the installer. It makes first launch
+      # fully offline and hides every postgres console window.
+      - name: Bundle Postgres runtime (Windows)
+        if: runner.os == 'Windows'
+        working-directory: apps/desktop
+        run: node scripts/prepare-pg-runtime.mjs windows amd64 build/windows/installer/pg-runtime
+
       - name: Build desktop app
         working-directory: apps/desktop
-        # webkit2_41 tag: Ubuntu 24.04+ ships webkit2gtk-4.1 only
-        run: wails build -clean ${{ runner.os == 'Linux' && '-tags webkit2_41' || '' }}
+        # webkit2_41 tag: Ubuntu 24.04+ ships webkit2gtk-4.1 only.
+        # -installscope user: per-user install in %LOCALAPPDATA%\Programs —
+        # no UAC prompt, no admin needed (VS Code/Discord model).
+        # darwin/universal: one DMG covering Apple Silicon + Intel.
+        run: wails build -clean ${{ runner.os == 'Linux' && '-tags webkit2_41' || '' }} ${{ runner.os == 'Windows' && '-nsis -installscope user' || '' }} ${{ runner.os == 'macOS' && '-platform darwin/universal' || '' }}
 
       - name: Build headless server binary
         working-directory: apps/desktop
@@ -101,8 +117,10 @@ jobs:
         if: runner.os == 'Linux'
         run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.46.3
 
-      # windows-latest ships signtool via the bundled Windows SDK. The exe is
-      # signed before the MSI wraps it, then the MSI itself is signed.
+      # windows-latest ships signtool via the bundled Windows SDK. cal.exe is
+      # signed before packaging; the NSIS installer and MSI are signed after.
+      # The bare cal.exe is deliberately NOT shipped — the NSIS setup exe is
+      # the user-facing artifact.
       - name: Sign & package (Windows)
         if: runner.os == 'Windows'
         working-directory: apps/desktop
@@ -112,13 +130,18 @@ jobs:
             [IO.File]::WriteAllBytes("$PWD/cert.pfx", [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_BASE64))
             signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f cert.pfx /p $env:WINDOWS_CERT_PASSWORD build/bin/cal.exe
           }
+          # NSIS installer produced by `wails build -nsis` → Cal-amd64-installer.exe
+          Rename-Item build/bin/Cal-amd64-installer.exe "Cal-Setup-Windows.exe"
+          if ($env:WINDOWS_CERT_PFX_BASE64) {
+            signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f cert.pfx /p $env:WINDOWS_CERT_PASSWORD "build/bin/Cal-Setup-Windows.exe"
+          }
           # v7 requires accepting the OSMF EULA; v6 does not.
           dotnet tool install --global wix --version 6.0.2
-          Copy-Item build/bin/cal.exe "build/bin/cal-desktop-${{ matrix.label }}.exe"
-          wix build build/windows/cal.wxs -arch x64 -d "BinDir=$PWD/build/bin" -d "ProductVersion=$env:VERSION" -o "build/bin/cal-desktop-${{ matrix.label }}.msi"
+          Copy-Item -Recurse build/windows/installer/pg-runtime build/bin/pg-runtime
+          wix build build/windows/cal.wxs -arch x64 -d "BinDir=$PWD/build/bin" -d "ProductVersion=$env:VERSION" -o "build/bin/Cal-Windows.msi"
           Remove-Item build/bin/*.wixpdb
           if ($env:WINDOWS_CERT_PFX_BASE64) {
-            signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f cert.pfx /p $env:WINDOWS_CERT_PASSWORD "build/bin/cal-desktop-${{ matrix.label }}.msi"
+            signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f cert.pfx /p $env:WINDOWS_CERT_PASSWORD "build/bin/Cal-Windows.msi"
             Remove-Item cert.pfx
           }
           Move-Item build/bin/cal-server.exe "build/bin/cal-server-${{ matrix.label }}.exe"
@@ -151,17 +174,36 @@ jobs:
         working-directory: apps/desktop
         run: |
           set -euo pipefail
-          nfpm package -f build/linux/nfpm.yaml -p deb -t "build/bin/cal-desktop-${{ matrix.label }}.deb"
-          nfpm package -f build/linux/nfpm.yaml -p rpm -t "build/bin/cal-desktop-${{ matrix.label }}.rpm"
-          # AppImage: appimagetool is itself an AppImage; --appimage-extract
-          # sidesteps the missing FUSE on GH runners.
+          nfpm package -f build/linux/nfpm.yaml -p deb -t "build/bin/Cal-Linux.deb"
+          nfpm package -f build/linux/nfpm.yaml -p rpm -t "build/bin/Cal-Linux.rpm"
+          # AppImage: linuxdeploy + gtk plugin bundles GTK + WebKit so the
+          # image is self-contained on any distro (a bare AppRun wrapper only
+          # works where webkit2gtk already happens to be installed).
+          # --appimage-extract sidesteps the missing FUSE on GH runners.
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage -O /tmp/linuxdeploy
+          wget -q https://raw.githubusercontent.com/linuxdeploy/linuxdeploy-plugin-gtk/master/linuxdeploy-plugin-gtk.sh -O /tmp/linuxdeploy-plugin-gtk.sh
           wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O /tmp/appimagetool
-          chmod +x /tmp/appimagetool
-          (cd /tmp && /tmp/appimagetool --appimage-extract >/dev/null)
-          mkdir build/bin/AppDir
-          install -m755 build/bin/cal build/bin/AppDir/AppRun
-          install -m644 build/linux/cal.desktop build/linux/cal.png build/bin/AppDir/
-          (cd build/bin && ARCH=x86_64 /tmp/squashfs-root/AppRun AppDir "cal-desktop-${{ matrix.label }}.AppImage")
+          chmod +x /tmp/linuxdeploy /tmp/linuxdeploy-plugin-gtk.sh /tmp/appimagetool
+          mkdir /tmp/ld /tmp/at
+          (cd /tmp/ld && /tmp/linuxdeploy --appimage-extract >/dev/null)
+          (cd /tmp/at && /tmp/appimagetool --appimage-extract >/dev/null)
+          export PATH="/tmp:$PATH"  # linuxdeploy finds the gtk plugin on PATH
+          mkdir -p build/bin/AppDir/usr/bin build/bin/AppDir/usr/share/applications build/bin/AppDir/usr/share/icons/hicolor/512x512/apps
+          install -m755 build/bin/cal build/bin/AppDir/usr/bin/
+          install -m644 build/linux/cal.desktop build/bin/AppDir/usr/share/applications/
+          install -m644 build/linux/cal.png build/bin/AppDir/usr/share/icons/hicolor/512x512/apps/
+          DEPLOY_GTK_VERSION=3 /tmp/ld/squashfs-root/AppRun --appdir build/bin/AppDir --plugin gtk \
+            -d build/bin/AppDir/usr/share/applications/cal.desktop \
+            -i build/bin/AppDir/usr/share/icons/hicolor/512x512/apps/cal.png
+          # linuxdeploy scans the main binary's NEEDED libs but not webkit's
+          # out-of-process helpers — without these the webview renders blank.
+          WEBKIT_LIBEXEC=$(dirname "$(find /usr/lib -name WebKitWebProcess | head -1)")
+          cp -r "$WEBKIT_LIBEXEC" build/bin/AppDir/usr/lib/
+          mkdir -p build/bin/AppDir/apprun-hooks
+          printf 'export WEBKIT_EXEC_PATH="$APPDIR/usr/lib/%s"\nexport WEBKIT_INJECTED_BUNDLE_PATH="$APPDIR/usr/lib/%s/injected-bundle"\n' \
+            "$(basename "$WEBKIT_LIBEXEC")" "$(basename "$WEBKIT_LIBEXEC")" \
+            > build/bin/AppDir/apprun-hooks/webkit-exec-path.sh
+          ARCH=x86_64 /tmp/at/squashfs-root/usr/bin/appimagetool build/bin/AppDir "build/bin/Cal-Linux.AppImage"
           # headless server ships as a bare binary
           mv "build/bin/cal-server${{ matrix.ext }}" "build/bin/cal-server-${{ matrix.label }}"
 
@@ -169,16 +211,24 @@ jobs:
         if: runner.os == 'macOS'
         working-directory: apps/desktop/build/bin
         run: |
-          hdiutil create -volname Cal -srcfolder cal.app -ov -format UDZO "cal-desktop-${{ matrix.label }}.dmg"
+          hdiutil create -volname Cal -srcfolder cal.app -ov -format UDZO "Cal-macOS.dmg"
           mv cal-server "cal-server-${{ matrix.label }}"
 
       - uses: actions/upload-artifact@v7
         with:
           name: cal-${{ matrix.label }}
-          path: apps/desktop/build/bin/cal-*
+          path: |
+            apps/desktop/build/bin/Cal-*
+            apps/desktop/build/bin/cal-*
 
+      # body_path gives the release a pick-your-platform table;
+      # generate_release_notes appends the auto changelog below it.
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v3
         with:
-          files: apps/desktop/build/bin/cal-*
+          body_path: .github/release-notes.md
+          generate_release_notes: true
+          files: |
+            apps/desktop/build/bin/Cal-*
+            apps/desktop/build/bin/cal-*

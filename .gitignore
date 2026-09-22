@@ -18,6 +18,13 @@ apps/web/test-results/
 apps/desktop/frontend/dist/
 !apps/desktop/frontend/dist/.gitkeep
 apps/desktop/build/bin/
+apps/desktop/build/windows/installer/wails_tools.nsh
+apps/desktop/build/windows/installer/tmp/
+apps/desktop/build/windows/installer/pg-runtime/*
+!apps/desktop/build/windows/installer/pg-runtime/.gitkeep
 apps/api/data/
 apps/desktop/desktop
 .vercel
+
+# Wails generated bindings
+apps/desktop/frontend/wailsjs/
