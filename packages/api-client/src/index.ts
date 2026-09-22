@@ -442,7 +442,22 @@ export class CalApi {
 
   constructor(private readonly baseUrl = "/api") {
     try {
-      this.server = localStorage.getItem("cal:server") ?? "";
+      // A page served over http(s) IS the server — a remote URL only makes
+      // sense inside app shells (Wails, Capacitor) where the shell and the
+      // API live on different hosts. A stale stored value on the web UI would
+      // silently send its calls to another server (and fail on CORS anyway),
+      // so drop it. Android webviews run on http(s)://localhost too — detect
+      // the shell, not the scheme.
+      const proto = typeof location !== "undefined" ? location.protocol : "";
+      const win = typeof window !== "undefined"
+        ? (window as { Capacitor?: { isNativePlatform?: () => boolean }; runtime?: unknown })
+        : undefined;
+      const appShell =
+        proto === "wails:" || proto === "capacitor:" || proto === "ionic:" ||
+        win?.Capacitor?.isNativePlatform?.() === true || win?.runtime !== undefined;
+      const servedByServer = /^https?:$/.test(proto) && !appShell;
+      this.server = servedByServer ? "" : (localStorage.getItem("cal:server") ?? "");
+      if (servedByServer) localStorage.removeItem("cal:server");
       this.session = localStorage.getItem("cal:session") ?? "";
     } catch {
       // storage unavailable
