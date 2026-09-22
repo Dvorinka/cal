@@ -128,17 +128,17 @@ jobs:
             signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f cert.pfx /p $env:WINDOWS_CERT_PASSWORD build/bin/cal.exe
           }
           # NSIS installer produced by `wails build -nsis` → Cal-amd64-installer.exe
-          Rename-Item build/bin/Cal-amd64-installer.exe "cal-desktop-${{ matrix.label }}-setup.exe"
+          Rename-Item build/bin/Cal-amd64-installer.exe "Cal-Setup-Windows.exe"
           if ($env:WINDOWS_CERT_PFX_BASE64) {
-            signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f cert.pfx /p $env:WINDOWS_CERT_PASSWORD "build/bin/cal-desktop-${{ matrix.label }}-setup.exe"
+            signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f cert.pfx /p $env:WINDOWS_CERT_PASSWORD "build/bin/Cal-Setup-Windows.exe"
           }
           # v7 requires accepting the OSMF EULA; v6 does not.
           dotnet tool install --global wix --version 6.0.2
           Copy-Item -Recurse build/windows/installer/pg-runtime build/bin/pg-runtime
-          wix build build/windows/cal.wxs -arch x64 -d "BinDir=$PWD/build/bin" -d "ProductVersion=$env:VERSION" -o "build/bin/cal-desktop-${{ matrix.label }}.msi"
+          wix build build/windows/cal.wxs -arch x64 -d "BinDir=$PWD/build/bin" -d "ProductVersion=$env:VERSION" -o "build/bin/Cal-Windows.msi"
           Remove-Item build/bin/*.wixpdb
           if ($env:WINDOWS_CERT_PFX_BASE64) {
-            signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f cert.pfx /p $env:WINDOWS_CERT_PASSWORD "build/bin/cal-desktop-${{ matrix.label }}.msi"
+            signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f cert.pfx /p $env:WINDOWS_CERT_PASSWORD "build/bin/Cal-Windows.msi"
             Remove-Item cert.pfx
           }
           Move-Item build/bin/cal-server.exe "build/bin/cal-server-${{ matrix.label }}.exe"
@@ -171,8 +171,8 @@ jobs:
         working-directory: apps/desktop
         run: |
           set -euo pipefail
-          nfpm package -f build/linux/nfpm.yaml -p deb -t "build/bin/cal-desktop-${{ matrix.label }}.deb"
-          nfpm package -f build/linux/nfpm.yaml -p rpm -t "build/bin/cal-desktop-${{ matrix.label }}.rpm"
+          nfpm package -f build/linux/nfpm.yaml -p deb -t "build/bin/Cal-Linux.deb"
+          nfpm package -f build/linux/nfpm.yaml -p rpm -t "build/bin/Cal-Linux.rpm"
           # AppImage: appimagetool is itself an AppImage; --appimage-extract
           # sidesteps the missing FUSE on GH runners.
           wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O /tmp/appimagetool
@@ -181,7 +181,7 @@ jobs:
           mkdir build/bin/AppDir
           install -m755 build/bin/cal build/bin/AppDir/AppRun
           install -m644 build/linux/cal.desktop build/linux/cal.png build/bin/AppDir/
-          (cd build/bin && ARCH=x86_64 /tmp/squashfs-root/AppRun AppDir "cal-desktop-${{ matrix.label }}.AppImage")
+          (cd build/bin && ARCH=x86_64 /tmp/squashfs-root/AppRun AppDir "Cal-Linux.AppImage")
           # headless server ships as a bare binary
           mv "build/bin/cal-server${{ matrix.ext }}" "build/bin/cal-server-${{ matrix.label }}"
 
@@ -189,16 +189,24 @@ jobs:
         if: runner.os == 'macOS'
         working-directory: apps/desktop/build/bin
         run: |
-          hdiutil create -volname Cal -srcfolder cal.app -ov -format UDZO "cal-desktop-${{ matrix.label }}.dmg"
+          hdiutil create -volname Cal -srcfolder cal.app -ov -format UDZO "Cal-macOS.dmg"
           mv cal-server "cal-server-${{ matrix.label }}"
 
       - uses: actions/upload-artifact@v7
         with:
           name: cal-${{ matrix.label }}
-          path: apps/desktop/build/bin/cal-*
+          path: |
+            apps/desktop/build/bin/Cal-*
+            apps/desktop/build/bin/cal-*
 
+      # body_path gives the release a pick-your-platform table;
+      # generate_release_notes appends the auto changelog below it.
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v3
         with:
-          files: apps/desktop/build/bin/cal-*
+          body_path: .github/release-notes.md
+          generate_release_notes: true
+          files: |
+            apps/desktop/build/bin/Cal-*
+            apps/desktop/build/bin/cal-*

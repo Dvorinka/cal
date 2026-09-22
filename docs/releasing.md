@@ -12,16 +12,17 @@ git push --tags
 | Artifact | Contents |
 |---|---|
 | `ghcr.io/dvorinka/cal:{version,latest}` | All-in-one image (SPA + API + embedded Postgres), linux/amd64 + arm64 |
-| `cal-desktop-windows-amd64-setup.exe` | NSIS installer — wizard, WebView2 bootstrap, Start Menu/Desktop shortcuts, uninstaller, bundled Postgres runtime (fully offline first launch). Signed when secrets set |
-| `cal-desktop-windows-amd64.msi` | WiX package with the same bundled runtime, for managed/enterprise deployment. Signed when secrets set |
-| `cal-desktop-linux-amd64.AppImage` | Portable AppImage, no install needed |
-| `cal-desktop-linux-amd64.deb` / `.rpm` | `nfpm` packages — `/usr/bin/cal` + desktop entry + icon |
-| `cal-desktop-macos-arm64.dmg` | `cal.app` inside a DMG |
+| `Cal-Setup-Windows.exe` | NSIS installer — wizard, WebView2 bootstrap, Start Menu/Desktop shortcuts, uninstaller, bundled Postgres runtime (fully offline first launch). Signed when secrets set |
+| `Cal-Windows.msi` | WiX package with the same bundled runtime, for managed/enterprise deployment. Signed when secrets set |
+| `Cal-Linux.AppImage` | Portable AppImage, no install needed |
+| `Cal-Linux.deb` / `Cal-Linux.rpm` | `nfpm` packages — `/usr/bin/cal` + desktop entry + icon |
+| `Cal-macOS.dmg` | `cal.app` inside a DMG |
 | `cal-server-<os>-<arch>[.exe]` | Bare headless server binaries |
-| `cal-android-debug.apk` / signed AAB-capable APK | via android.yml |
+| `Cal-Android.apk` / `Cal-Android-debug.apk` | via android.yml — signed release when keystore secrets exist, debug otherwise |
 
-Everything attaches to a GitHub Release on the tag. `workflow_dispatch` builds
-the same matrix without creating a release — useful for verifying CI.
+The release body comes from `.github/release-notes.md` — a pick-your-platform
+download table — with GitHub's generated changelog appended. `workflow_dispatch`
+builds the same matrix without creating a release — useful for verifying CI.
 
 ## Signing state today
 
