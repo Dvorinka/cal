@@ -11,6 +11,13 @@ const isNative = typeof window !== "undefined" &&
     window.location.protocol === "ionic:" ||
     (window as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.() === true);
 
+// The Wails desktop shell serves this page on wails://localhost with the API
+// in-process; it may point at a remote server instead. A plain http(s) page
+// is served BY a server — asking "which server?" there makes no sense.
+const isWails = typeof window !== "undefined" &&
+  (window.location.protocol === "wails:" ||
+    (window as { runtime?: unknown }).runtime !== undefined);
+
 // Password-reset links mail to /reset-password?token=… — the shell renders
 // AuthPanel for every unauthenticated path, so the token is picked up here.
 const resetToken = (() => {
@@ -30,7 +37,9 @@ export function AuthPanel() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [server, setServer] = useState(api.remote || "");
-  const [showServer, setShowServer] = useState(isNative || !!api.remote);
+  // Native must show the field (required); desktop only surfaces it when a
+  // remote was already configured — otherwise it hides behind the reveal link.
+  const [showServer, setShowServer] = useState(isNative || (isWails && !!api.remote));
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -204,7 +213,7 @@ export function AuthPanel() {
                   </button>
                 </>
               )}
-              {!isNative && !showServer && (
+              {isWails && !showServer && (
                 <>
                   {" · "}
                   <button type="button" onClick={() => setShowServer(true)}>other server</button>
