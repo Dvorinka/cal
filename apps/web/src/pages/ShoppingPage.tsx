@@ -235,7 +235,8 @@ export function ShoppingPage() {
           ))}
           <input
             className="input shop-newlist"
-            placeholder="New list…"
+            placeholder="+ New list…"
+            aria-label="New list name"
             value={newList}
             onChange={(e) => setNewList(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") void addList(); }}

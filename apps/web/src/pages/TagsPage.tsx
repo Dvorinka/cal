@@ -34,16 +34,18 @@ export function TagsPage() {
   return (
     <>
       <PageHeader title="Tags" sub={sel ? `#${sel}` : `${Object.keys(counts).length} tags in use`} />
-      <div className="tag-filter-row" style={{ paddingTop: 8 }}>
-        <button type="button" className={`tag-chip ${sel === "" ? "on" : ""}`} onClick={() => setSel("")}>
-          All
-        </button>
-        {Object.entries(counts).map(([t, n]) => (
-          <button key={t} type="button" className={`tag-chip ${sel === t ? "on" : ""}`} onClick={() => setSel(sel === t ? "" : t)}>
-            #{t} <span className="tag-n">{n}</span>
+      {Object.keys(counts).length > 0 && (
+        <div className="tag-filter-row" style={{ paddingTop: 8 }}>
+          <button type="button" className={`tag-chip ${sel === "" ? "on" : ""}`} onClick={() => setSel("")}>
+            All
           </button>
-        ))}
-      </div>
+          {Object.entries(counts).map(([t, n]) => (
+            <button key={t} type="button" className={`tag-chip ${sel === t ? "on" : ""}`} onClick={() => setSel(sel === t ? "" : t)}>
+              #{t} <span className="tag-n">{n}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="page-scroll">
         {sel === "" ? (
           <div className="empty-hint">
