@@ -2,12 +2,30 @@
 
 ## How to cut a release
 
+Merge to `main`. `.github/workflows/auto-release.yml` bumps the patch
+version (`apps/desktop/scripts/bump-version.mjs`), commits it as
+`chore: release vX.Y.Z`, tags the commit, and dispatches the release
+pipelines on the tag.
+
+Two ways to control what ships:
+
+- **Routine merge** — releases `latest tag + 1 patch` automatically.
+- **Release PR** — if the merged commit already bumped the version files
+  (run `node apps/desktop/scripts/bump-version.mjs <latest-tag>` locally to
+  produce the diff), the tag is placed on the merge commit as-is. This is
+  how to ship a minor/major bump: set the version files yourself.
+
+Escape hatches: `[no-release]` in the commit message skips tagging for that
+merge, and pushing a tag manually still works — the workflow skips commits
+that already carry a `v*` tag:
+
 ```bash
 git tag v0.1.0
 git push --tags
 ```
 
-`.github/workflows/release.yml` runs on `v*` tags and produces:
+`.github/workflows/release.yml` runs on `v*` tags (directly or via dispatch
+from auto-release) and produces:
 
 | Artifact | Contents |
 |---|---|

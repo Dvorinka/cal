@@ -81,6 +81,9 @@ jobs:
           V="${GITHUB_REF_NAME#v}"
           [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]] || V=$(node -p "require('./wails.json').info.productVersion")
           echo "VERSION=$V" >> "$GITHUB_ENV"
+          # A tag pushed without a version-bump commit leaves productVersion
+          # stale — sync it so installers and About dialogs report the tag.
+          node -e "const j=require('./wails.json');j.info.productVersion='$V';require('fs').writeFileSync('wails.json',JSON.stringify(j,null,2)+'\n')"
 
       - name: Webkit deps (Linux)
         if: runner.os == 'Linux'
