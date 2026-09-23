@@ -1,0 +1,73 @@
+name: Auto release
+
+# Every merge to main ships a release. The tag push below is made with
+# GITHUB_TOKEN, which does NOT trigger the tag-based workflows (GitHub blocks
+# token-triggered runs to prevent recursion) — so the release pipelines are
+# dispatched explicitly on the new tag instead.
+#
+# Escape hatches:
+#   - "[no-release]" anywhere in the merge/commit message skips the run.
+#   - HEAD already carrying a v* tag skips the run (manual tag flow).
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write # bump commit + tag
+  actions: write  # gh workflow run
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    if: >-
+      !contains(github.event.head_commit.message, '[no-release]')
+      && !startsWith(github.event.head_commit.message, 'chore: release v')
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Skip if HEAD is already released
+        id: guard
+        run: |
+          git tag --points-at HEAD | grep -qE '^v[0-9]' \
+            && echo "released=true" >> "$GITHUB_OUTPUT" || true
+
+      # bump-version.mjs prints next=/changed= to GITHUB_OUTPUT. When a merge
+      # already bumped the version files (release PR), changed=false and the
+      # merge commit is tagged directly — no bot commit needed.
+      - name: Resolve next version, bump files if needed
+        if: steps.guard.outputs.released != 'true'
+        id: bump
+        run: |
+          latest=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)
+          node apps/desktop/scripts/bump-version.mjs "${latest#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Commit bump, tag, push
+        if: steps.guard.outputs.released != 'true'
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.bump.outputs.changed }}" = "true" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -am "chore: release v${{ steps.bump.outputs.next }}"
+            git push origin HEAD:main
+          fi
+          git tag "v${{ steps.bump.outputs.next }}"
+          git push origin "v${{ steps.bump.outputs.next }}"
+
+      - name: Dispatch release pipelines on the tag
+        if: steps.guard.outputs.released != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run release.yml --ref "v${{ steps.bump.outputs.next }}"
+          gh workflow run android.yml --ref "v${{ steps.bump.outputs.next }}"
