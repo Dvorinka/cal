@@ -60,12 +60,11 @@ if (cmp(repo, latest) <= 0) {
       .replace(/versionName "[^"]+"/, `versionName "${next}"`),
   );
 
-  // Lockfile mirrors the workspace versions; root package.json stays put —
-  // it was never bumped for releases.
+  // Lockfile mirrors the workspace versions. Only the apps/web entry is
+  // bumped — the root entries must keep mirroring root package.json, which
+  // stays put (never bumped for releases), or npm/dependabot regen drifts.
   const lockPath = "package-lock.json";
   const lock = readJson(lockPath);
-  lock.version = next;
-  lock.packages[""].version = next;
   lock.packages["apps/web"].version = next;
   writeJson(lockPath, lock);
 }
