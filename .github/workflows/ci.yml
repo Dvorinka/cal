@@ -7,7 +7,7 @@ on:
 
 jobs:
   web:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -20,7 +20,7 @@ jobs:
       - run: npm run build
 
   api:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -34,7 +34,7 @@ jobs:
         working-directory: apps/api
 
   desktop:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -48,7 +48,7 @@ jobs:
         working-directory: apps/desktop
 
   docker:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v7
       - name: Build all-in-one image
