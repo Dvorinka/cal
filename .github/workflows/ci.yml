@@ -55,13 +55,13 @@ jobs:
         run: docker build -t cal:ci .
       - name: Smoke test — embedded Postgres, SPA, register roundtrip
         run: |
-          docker run -d --name cal -p 8080:8080 cal:ci
+          docker run -d --name cal -p 18080:8080 cal:ci
           for i in $(seq 1 120); do
-            curl -fsS http://localhost:8080/api/health && break || sleep 1
+            curl -fsS http://localhost:18080/api/health && break || sleep 1
           done
-          curl -fsS http://localhost:8080/ | grep -qi "html"
+          curl -fsS http://localhost:18080/ | grep -qi "html"
           curl -fsS -c /tmp/jar -H 'Content-Type: application/json' \
             -d '{"email":"ci@cal.local","password":"ci-password-123"}' \
-            http://localhost:8080/api/auth/register
-          curl -fsS -b /tmp/jar http://localhost:8080/api/me | grep -q "ci@cal.local"
+            http://localhost:18080/api/auth/register
+          curl -fsS -b /tmp/jar http://localhost:18080/api/me | grep -q "ci@cal.local"
           docker rm -f cal
