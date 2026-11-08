@@ -27,6 +27,8 @@ jobs:
           node-version: "22"
           cache: npm
 
+      - uses: android-actions/setup-android@v3
+
       - name: Install deps, build web, sync Capacitor
         run: |
           npm ci
