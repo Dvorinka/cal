@@ -379,8 +379,9 @@ The surface had outgrown a flat sidebar and a single Settings scroll.
       rows wrap.
 - [x] **Surface detail.** Panel actions sit in the heading. An empty
       storage meter stays empty. Days outside the month recede. The
-      activity grid marks today. The editor and segmented controls meet
-      the 32px hit target.
+      activity grid marks today and spans the Today columns. The editor
+      and segmented controls meet the 32px hit target. Week stats fold
+      to two columns on a phone.
 
 ## Remaining — needs something external
 

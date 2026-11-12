@@ -547,7 +547,7 @@ export function TodayPage() {
               </section>
             )}
 
-            <section className="panel">
+            <section className="panel span-2">
               <h3>Activity</h3>
               <ActivityGrid counts={activity} today={today} />
             </section>
