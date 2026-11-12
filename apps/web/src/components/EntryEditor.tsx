@@ -110,12 +110,12 @@ export function EntryEditor() {
       setDate(editor.date);
       setStartTime(editor.startTime ?? "");
       setEndTime(editor.startTime ? addHour(editor.startTime) : "");
-      setRecur("none");
+      setRecur(p.recur ?? "none");
       setRemind("");
       setAccountId("");
       setLinkUrl(p.linkUrl ?? "");
       setColor("slate");
-      setTags("");
+      setTags(p.tags ?? "");
       setContent(p.content ?? "");
       setWsId("");
       setBlockedBy("");

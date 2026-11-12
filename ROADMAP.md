@@ -355,6 +355,24 @@ the last API-only features get UI handles.
 - [x] **Mobile nav audit** — shipped in Phase 8: bottom nav + More tab
       opens the full sidebar drawer, everything reachable on phones.
 
+## Phase 11 — Structure (shipped 2026-11-12)
+
+The surface had outgrown a flat sidebar and a single Settings scroll.
+
+- [x] **Grouped navigation** — Plan, Library, Connect. Habits and
+      Connections sit with the work they belong to. Palette reaches
+      shopping, habits, the weekly review, connections and the family tree.
+- [x] **Habits** — `/habits` lists streak, cadence and last completion,
+      and checks off the open occurrence. New habit opens the editor
+      already tagged and set to daily.
+- [x] **Weekly review** — `/review` shows the four counts plus a per-day
+      bar and saves the digest as a note. Today shows the counts without
+      a click.
+- [x] **Connections** — `/connections` is the status of every integration.
+      Settings keeps the forms and gains a section index with anchors.
+- [x] **Light-mode buttons** — primary and secondary fills were only
+      defined for the dark theme, so light mode drew them with no background.
+
 ## Remaining — needs something external
 
 - [ ] **GitHub PAT** — the inbox, import, and sync loop are built and

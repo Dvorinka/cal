@@ -7,6 +7,9 @@ export interface EditorPrefill {
   content?: string;
   linkUrl?: string;
   type?: string;
+  /** Comma-separated, same shape as the editor's tags field. */
+  tags?: string;
+  recur?: "none" | "daily" | "weekly" | "monthly" | "yearly";
 }
 
 export type EditorState =

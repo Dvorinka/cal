@@ -1,6 +1,7 @@
 import type { Accent, AdminConfig, CarddavAccount, Country, NagerHoliday, RestorePreview, SessionInfo, User, Webhook } from "@cal/api-client";
 import { Bell, BellOff, Copy, Download, FileText, LogOut, Plus, RefreshCw, Trash2, Upload, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { PageHeader } from "../components/PageHeader";
 import { MODULES, moduleOn } from "../lib/modules";
 import { disablePush, enablePush, pushEnabled } from "../lib/push";
@@ -12,6 +13,27 @@ const timezones: string[] = (() => {
   return local && !zones.includes(local) ? [local, ...zones] : zones;
 })();
 
+const SECTIONS: { id: string; label: string; admin?: boolean }[] = [
+  { id: "set-appearance", label: "Appearance" },
+  { id: "set-general", label: "General" },
+  { id: "set-integrations", label: "Integrations" },
+  { id: "set-workspaces", label: "Workspaces" },
+  { id: "set-modules", label: "Modules" },
+  { id: "set-feeds", label: "Feeds" },
+  { id: "set-calendars", label: "Calendars" },
+  { id: "set-google", label: "Google" },
+  { id: "set-carddav", label: "CardDAV" },
+  { id: "set-webhooks", label: "Webhooks" },
+  { id: "set-holidays", label: "Holidays" },
+  { id: "set-notifications", label: "Notifications" },
+  { id: "set-mcp", label: "Agents" },
+  { id: "set-widget", label: "Widget" },
+  { id: "set-data", label: "Data" },
+  { id: "set-account", label: "Account" },
+  { id: "set-security", label: "Security" },
+  { id: "set-users", label: "Users", admin: true },
+];
+
 const ACCENTS: { value: Accent; label: string }[] = [
   { value: "green", label: "Forest" },
   { value: "blue", label: "Lake" },
@@ -21,6 +43,7 @@ const ACCENTS: { value: Accent; label: string }[] = [
 ];
 
 export function SettingsPage() {
+  const route = useLocation();
   const settings = usePlanner((state) => state.settings);
   const updateSettings = usePlanner((state) => state.updateSettings);
   const countries = usePlanner((state) => state.countries);
@@ -104,6 +127,12 @@ export function SettingsPage() {
     void api.namedayCountries().then(setNamedayCountries).catch(() => setNamedayCountries([]));
     void api.browseHolidayCountries().then(setNagerCountries).catch(() => setNagerCountries([]));
   }, [loadEntries, loadFeeds, loadAccounts, api]);
+
+  useEffect(() => {
+    const id = route.hash.replace("#", "");
+    if (!id) return;
+    document.getElementById(id)?.scrollIntoView({ block: "start" });
+  }, [route.hash]);
 
   useEffect(() => {
     if (!user?.isAdmin) return;
@@ -325,7 +354,12 @@ export function SettingsPage() {
     <>
       <PageHeader title="Settings" />
       <div className="page-scroll settings-page">
-        <section className="panel">
+        <nav className="settings-index" aria-label="Settings sections">
+          {SECTIONS.filter((section) => !section.admin || user?.isAdmin).map((section) => (
+            <a key={section.id} href={`#${section.id}`}>{section.label}</a>
+          ))}
+        </nav>
+        <section className="panel" id="set-appearance">
           <h3>Appearance</h3>
           <div className="settings-grid">
             <label className="field">
@@ -370,7 +404,7 @@ export function SettingsPage() {
           </div>
         </section>
 
-        <section className="panel">
+        <section className="panel" id="set-general">
           <h3>General</h3>
           <div className="settings-grid">
             <label className="field">
@@ -412,7 +446,7 @@ export function SettingsPage() {
               <span>Weather city</span>
               <input
                 className="input"
-                placeholder="e.g. Prague — blank hides the strip"
+                placeholder="City — blank hides weather"
                 value={settings.city}
                 onChange={(e) => set({ city: e.target.value })}
               />
@@ -432,7 +466,7 @@ export function SettingsPage() {
           </div>
         </section>
 
-        <section className="panel">
+        <section className="panel" id="set-integrations">
           <h3>Integrations</h3>
           <div className="settings-grid">
             <label className="field">
@@ -458,7 +492,7 @@ export function SettingsPage() {
           </div>
         </section>
 
-        <section className="panel">
+        <section className="panel" id="set-workspaces">
           <h3>Workspaces</h3>
           <p className="panel-note">Separate scopes for entries, files and time — Work, Personal, anything. Deleting a space returns its contents to Personal.</p>
           <ul className="check-list" style={{ marginBottom: 10 }}>
@@ -497,7 +531,7 @@ export function SettingsPage() {
           </div>
         </section>
 
-        <section className="panel">
+        <section className="panel" id="set-modules">
           <h3>Modules</h3>
           <p className="panel-note">Turn off what you don't use — hidden from navigation, routes and search.</p>
           <div className="module-grid">
@@ -521,7 +555,7 @@ export function SettingsPage() {
           </div>
         </section>
 
-        <section className="panel">
+        <section className="panel" id="set-feeds">
           <h3>Feeds</h3>
           <p className="panel-note">
             Subscribe to iCalendar (.ics) or RSS/Atom URLs — Google Calendar's secret address,
@@ -581,7 +615,7 @@ export function SettingsPage() {
           </p>
         </section>
 
-        <section className="panel">
+        <section className="panel" id="set-calendars">
           <h3>Connected calendars</h3>
           <p className="panel-note">
             Two-way sync over CalDAV — Nextcloud, Radicale, Baikal, Fastmail (app password). Events on a
@@ -660,7 +694,7 @@ export function SettingsPage() {
           </p>
         </section>
 
-        <section className="panel">
+        <section className="panel" id="set-google">
           <h3>Google Calendar</h3>
           {google === undefined ? null : google.connected ? (
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -714,7 +748,7 @@ export function SettingsPage() {
           )}
         </section>
 
-        <section className="panel">
+        <section className="panel" id="set-carddav">
           <h3>Birthdays (CardDAV)</h3>
           <p className="panel-note">
             Connect an addressbook (Nextcloud contacts, Radicale, Baikal) — contacts with a birthday
@@ -783,7 +817,7 @@ export function SettingsPage() {
           </div>
         </section>
 
-        <section className="panel">
+        <section className="panel" id="set-webhooks">
           <h3>Webhooks</h3>
           <p className="panel-note">
             Cal POSTs <code>{"{event, entry}"}</code> to each URL on create/update/delete, signed with
@@ -812,7 +846,7 @@ export function SettingsPage() {
           </p>
         </section>
 
-        <section className="panel">
+        <section className="panel" id="set-holidays">
           <h3>Holidays</h3>
           <div className="settings-grid">
             <label className="switch-row">
@@ -906,7 +940,7 @@ export function SettingsPage() {
           )}
         </section>
 
-        <section className="panel">
+        <section className="panel" id="set-notifications">
           <h3>Notifications</h3>
           <p className="panel-note">
             Entries with a reminder fire a notification at start − lead time. Push works even when the
@@ -958,7 +992,7 @@ export function SettingsPage() {
           )}
         </section>
 
-        <section className="panel">
+        <section className="panel" id="set-mcp">
           <h3>MCP / API access</h3>
           <p className="panel-note">
             Cal exposes a Model Context Protocol endpoint so assistants (Claude, Devin, others) can read and
@@ -984,7 +1018,7 @@ export function SettingsPage() {
           </button>
         </section>
 
-        <section className="panel">
+        <section className="panel" id="set-widget">
           <h3>Today widget</h3>
           <p className="panel-note">
             A minimal read-only agenda for embedding in dashboards (Homepage, Heimdall, an iframe, a TV).
@@ -1016,7 +1050,7 @@ export function SettingsPage() {
           </div>
         </section>
 
-        <section className="panel">
+        <section className="panel" id="set-data">
           <h3>Your data</h3>
           <p className="panel-note">
             {stats.task} tasks ({stats.done} done), {stats.event} events, {stats.note} notes, {stats.link}{" "}
@@ -1119,7 +1153,7 @@ export function SettingsPage() {
           </p>
         </section>
 
-        <section className="panel">
+        <section className="panel" id="set-account">
           <h3>Account</h3>
           <p className="panel-note">{user?.email}</p>
           <button type="button" className="btn btn-secondary" onClick={() => void logout()}>
@@ -1127,7 +1161,7 @@ export function SettingsPage() {
           </button>
         </section>
 
-        <section className="panel">
+        <section className="panel" id="set-security">
           <h3>Security</h3>
           <div className="feed-add" style={{ gridTemplateColumns: "1fr 1fr auto" }}>
             <input
@@ -1178,7 +1212,7 @@ export function SettingsPage() {
         </section>
 
         {user?.isAdmin && (
-          <section className="panel">
+          <section className="panel" id="set-users">
             <h3>Users &amp; access</h3>
             <p className="panel-note">
               Instance administration. The first registered account is the administrator;

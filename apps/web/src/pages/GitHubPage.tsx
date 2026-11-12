@@ -59,8 +59,8 @@ export function GitHubPage() {
           <div className="empty-hint">
             <strong>No GitHub token</strong>
             <span>Add a personal access token under Integrations, then refresh.</span>
-            <Link className="btn btn-primary" to="/settings" style={{ marginTop: 10 }}>
-              Open Settings
+            <Link className="btn btn-primary" to="/settings#set-integrations" style={{ marginTop: 10 }}>
+              Add a token
             </Link>
           </div>
         ) : byRepo.length === 0 ? (
