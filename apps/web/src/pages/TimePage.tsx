@@ -10,6 +10,7 @@ import { formatDayShort, todayIso } from "../lib/date";
 import { reportErr, usePlanner } from "../stores/planner";
 
 function fmtMins(m: number): string {
+  if (m <= 0) return "0m";
   if (m < 1) return "<1m";
   if (m < 60) return `${m}m`;
   const h = Math.floor(m / 60);
@@ -170,7 +171,7 @@ export function TimePage() {
         )}
         {!running && todaysTimed.length > 0 && (
           <section className="panel" style={{ marginBottom: 10 }}>
-            <h3>Today's agenda — track it</h3>
+            <h3>Today's agenda. Track it</h3>
             <ul className="time-agenda">
               {todaysTimed.map((e) => (
                 <li key={e.id} className="time-agenda-row">

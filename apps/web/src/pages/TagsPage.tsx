@@ -50,7 +50,7 @@ export function TagsPage() {
         {sel === "" ? (
           <div className="empty-hint">
             <strong>Pick a tag</strong>
-            <span>Tags span tasks, notes, links, board cards, files and people — one tap filters everything.</span>
+            <span>Tags span tasks, notes, links, board cards, files and people. One tap filters everything.</span>
           </div>
         ) : filtered.length === 0 && taggedPeople.length === 0 ? (
           <div className="empty-hint">

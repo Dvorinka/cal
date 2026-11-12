@@ -105,12 +105,12 @@ export function MailPage() {
   if (accounts.length === 0 && !adding) {
     return (
       <>
-        <PageHeader title="Mail" sub="connect an account to begin" />
+        <PageHeader title="Mail" sub="Connect an account to begin" />
         <div className="page-scroll">
           <div className="empty-hint">
             <Inbox size={28} style={{ color: "var(--text-3)" }} />
             <strong>No mail accounts</strong>
-            <span>IMAP/SMTP — works with Gmail, Fastmail, Dovecot, anything.</span>
+            <span>IMAP and SMTP. Works with Gmail, Fastmail, Dovecot, anything.</span>
             <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
               <Plus size={14} /> Add account
             </button>
@@ -122,7 +122,7 @@ export function MailPage() {
 
   return (
     <>
-      <PageHeader title="Mail" sub={account ? `${account.email} · ${mailbox}` : "choose an account"}>
+      <PageHeader title="Mail" sub={account ? `${account.email} · ${mailbox}` : "Choose an account"}>
         {account && (
           <>
             <button type="button" className="btn btn-secondary btn-xs" onClick={() => loadMessages(account, mailbox)} disabled={busy}>

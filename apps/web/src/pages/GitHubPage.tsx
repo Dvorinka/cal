@@ -48,7 +48,7 @@ export function GitHubPage() {
     <>
       <PageHeader
         title="GitHub"
-        sub={activity ? `${activity.login} — ${activity.eventsThisWeek} events this week` : "issue & PR inbox"}
+        sub={activity ? `${activity.login} · ${activity.eventsThisWeek} events this week` : "Issues and pull requests"}
       >
         <button type="button" className="btn btn-secondary btn-xs" onClick={load} disabled={loading}>
           <RefreshCw size={12} /> Refresh

@@ -474,7 +474,7 @@ export function SettingsPage() {
               <input
                 type="password"
                 className="input"
-                placeholder="Personal access token — issues & PRs"
+                placeholder="Personal access token"
                 value={settings.githubToken ?? ""}
                 onChange={(e) => set({ githubToken: e.target.value })}
               />
@@ -484,7 +484,7 @@ export function SettingsPage() {
               <input
                 type="url"
                 className="input"
-                placeholder="https://invidious.example — enables YouTube search on Links"
+                placeholder="https://invidious.example"
                 value={settings.invidiousUrl ?? ""}
                 onChange={(e) => set({ invidiousUrl: e.target.value })}
               />

@@ -240,7 +240,7 @@ export function PersonProfilePage() {
                   </li>
                 );
               })}
-              {!person.birthday && (person.dates ?? []).length === 0 && <li className="fact-empty">No dates yet — birthdays and anniversaries land on the calendar.</li>}
+              {!person.birthday && (person.dates ?? []).length === 0 && <li className="fact-empty">No dates yet. Birthdays and anniversaries land on the calendar.</li>}
             </ul>
           </section>
 
@@ -316,7 +316,7 @@ export function PersonProfilePage() {
                   </button>
                 </span>
               ))}
-              {relations.length === 0 && <span className="fact-empty">No links yet — parents, partners, friends.</span>}
+              {relations.length === 0 && <span className="fact-empty">No links yet. Parents, partners, friends.</span>}
             </div>
             {others.length > 0 && (
               <div className="rel-add">
@@ -432,7 +432,7 @@ export function PersonProfilePage() {
                   </li>
                 ),
               )}
-              {timeline.length === 0 && <li className="fact-empty">No memories yet — first meeting, trips, gifts.</li>}
+              {timeline.length === 0 && <li className="fact-empty">No memories yet. First meeting, trips, gifts.</li>}
             </ul>
             {tlForm ? (
               <TimelineForm
@@ -500,7 +500,7 @@ export function PersonProfilePage() {
                   </li>
                 );
               })}
-              {files.length === 0 && <li className="fact-empty">No attachments — photos, documents, voice notes.</li>}
+              {files.length === 0 && <li className="fact-empty">No attachments. Photos, documents, voice notes.</li>}
             </ul>
           </section>
         </div>

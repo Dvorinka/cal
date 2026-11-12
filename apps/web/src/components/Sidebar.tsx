@@ -1,7 +1,7 @@
 import { CalendarDays, ChevronLeft, ChevronRight, Flame, FolderOpen, GitPullRequest as GithubIcon, Hash, Link2, ListChecks, Mail, Plug, Plus, Search, Settings2, ShoppingCart, StickyNote, Sun, Timer as TimerIcon, Trash2, Kanban, Users } from "lucide-react";
 import { TimerPill } from "./TimerPill";
 import { useEffect, useMemo, useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { addMonths, fromIso, iso, monthMatrix, todayIso, weekdayNames, type WeekStartPref } from "../lib/date";
 import { moduleOn, type ModuleKey } from "../lib/modules";
 import { usePlanner } from "../stores/planner";
@@ -165,6 +165,11 @@ export function Sidebar() {
   const toggleFeed = useUi((state) => state.toggleFeed);
   const sidebarOpen = useUi((state) => state.sidebarOpen);
   const closeSidebar = useUi((state) => state.closeSidebar);
+  const location = useLocation();
+
+  useEffect(() => {
+    document.querySelector(".sidebar .nav-item.active")?.scrollIntoView({ block: "nearest" });
+  }, [location.pathname]);
 
   const counts = useMemo(() => {
     const map: Record<string, number> = { task: 0, event: 0, note: 0, link: 0 };
@@ -207,7 +212,7 @@ export function Sidebar() {
         >
           <Search size={14} />
           <span>Search</span>
-          <kbd>⌘K</kbd>
+          <kbd>{/Mac|iPhone|iPad/.test(navigator.userAgent) ? "⌘K" : "Ctrl K"}</kbd>
         </button>
 
         <div className="side-scroll">
@@ -234,8 +239,6 @@ export function Sidebar() {
             );
           })}
         </nav>
-
-        <MiniMonth weekStart={settings.weekStart} />
 
         <div className="side-label">Lists</div>
         <div className="filter-list">
@@ -282,6 +285,8 @@ export function Sidebar() {
           </>
         )}
         </div>
+
+        <MiniMonth weekStart={settings.weekStart} />
 
         <TimerPill />
 

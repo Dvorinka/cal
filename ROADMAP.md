@@ -372,6 +372,11 @@ The surface had outgrown a flat sidebar and a single Settings scroll.
       Settings keeps the forms and gains a section index with anchors.
 - [x] **Light-mode buttons** — primary and secondary fills were only
       defined for the dark theme, so light mode drew them with no background.
+- [x] **Surface polish** — the mini month stays pinned above the footer,
+      shopping scrolls, connection status is sentence case with a state
+      dot, list pages share one inset, settings anchors clear the sticky
+      index, week all-day chips stay in their column, and narrow task
+      rows wrap.
 
 ## Remaining — needs something external
 
