@@ -26,7 +26,7 @@ export function moduleOn(settings: Settings | undefined, key: ModuleKey): boolea
 
 /** Route → module key. Used for access gating and nav filtering. */
 export function moduleForPath(path: string): ModuleKey | null {
-  if (path.startsWith("/tasks")) return "tasks";
+  if (path.startsWith("/tasks") || path.startsWith("/habits")) return "tasks";
   if (path.startsWith("/boards")) return "boards";
   if (path.startsWith("/notes")) return "notes";
   if (path.startsWith("/links")) return "links";

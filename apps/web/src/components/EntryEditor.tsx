@@ -110,12 +110,12 @@ export function EntryEditor() {
       setDate(editor.date);
       setStartTime(editor.startTime ?? "");
       setEndTime(editor.startTime ? addHour(editor.startTime) : "");
-      setRecur("none");
+      setRecur(p.recur ?? "none");
       setRemind("");
       setAccountId("");
       setLinkUrl(p.linkUrl ?? "");
       setColor("slate");
-      setTags("");
+      setTags(p.tags ?? "");
       setContent(p.content ?? "");
       setWsId("");
       setBlockedBy("");
@@ -723,7 +723,7 @@ export function EntryEditor() {
                 </button>
               )}
               <span className="spacer" />
-              <span className="hint">⌘↵ to save</span>
+              <span className="hint">{/Mac|iPhone|iPad/.test(navigator.userAgent) ? "⌘↵" : "Ctrl+Enter"} to save</span>
               <button type="button" className="btn btn-ghost" onClick={close}>
                 Cancel
               </button>

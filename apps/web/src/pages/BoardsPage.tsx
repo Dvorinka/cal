@@ -108,7 +108,7 @@ export function BoardsPage() {
   if (!boardId) {
     return (
       <>
-        <PageHeader title="Boards" sub="Kanban for projects — cards are real tasks, so they show up everywhere" />
+        <PageHeader title="Boards" sub="Cards are tasks, so they show up on the calendar too" />
         <div className="page-scroll">
           <div className="board-add">
             <input
@@ -137,7 +137,7 @@ export function BoardsPage() {
           {boards.length === 0 ? (
             <div className="empty-hint">
               <strong>No boards yet</strong>
-              <span>A board groups tasks into columns — Todo, Doing, Done or your own flow.</span>
+              <span>A board groups tasks into columns. Todo, Doing, Done, or your own flow.</span>
             </div>
           ) : (
             <div className="board-list">
@@ -175,7 +175,7 @@ export function BoardsPage() {
     <>
       <PageHeader
         title={board?.name ?? "Board"}
-        sub={board?.targetDate ? `target ${board.targetDate} — drag cards between columns` : "drag cards between columns — complete them like any task"}
+        sub={board?.targetDate ? `Target ${board.targetDate}. Drag cards between columns.` : "Drag cards between columns. Complete them like any task."}
       >
         <button
           type="button"
@@ -266,7 +266,7 @@ export function BoardsPage() {
       ) : (
       <div className="kanban">
         {columns.length === 0 && (
-          <p className="panel-empty" style={{ padding: 12 }}>{viewReady ? "No columns — add one on the right." : "Loading…"}</p>
+          <p className="panel-empty" style={{ padding: 12 }}>{viewReady ? "No columns. Add one on the right." : "Loading…"}</p>
         )}
         {columns.map((col) => (
           <section

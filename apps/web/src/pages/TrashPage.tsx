@@ -28,7 +28,7 @@ export function TrashPage() {
         ) : items.length === 0 ? (
           <div className="empty-hint">
             <strong>Nothing in trash</strong>
-            <span>Deleted entries land here — restore or purge them for good.</span>
+            <span>Deleted entries land here. Restore them, or purge them for good.</span>
           </div>
         ) : (
           <ul className="trash-list">

@@ -66,7 +66,8 @@ accounts on someone else's server — one container and it's yours.
   Invidious instance, file uploads with public share links, kanban boards
   with WIP limits and read-only public sharing
 - **Time & people** — focus timer with pomodoro mode, billable sessions with
-  hourly rates and CSV/JSON export; a private relationship manager whose
+  hourly rates and CSV/JSON export; habit streaks on their own page; a weekly
+  review with a per-day bar; a private relationship manager whose
   birthdays, anniversaries and namedays surface on the calendar
 - **Shopping lists** — multiple lists with sections (Dairy, Produce…),
   quantities, a "can't find it" flag, bulk check-off, clear-purchased, and
@@ -77,6 +78,9 @@ accounts on someone else's server — one container and it's yours.
 - **Portable** — full JSON export one click away, or a zip that packs every
   upload binary too; restores merge additively, and the server writes
   nightly snapshots for 14 days
+- **Connections** — one page for the status of CalDAV, Google, CardDAV,
+  GitHub, mail, Invidious, webhooks and the agent endpoint, each linking
+  to the setting that wires it
 - **Sync & feeds** — two-way CalDAV, read-only Google Calendar, iCalendar feed
   subscriptions, CardDAV birthdays, RSS/Atom items on their publish date,
   holidays for 40+ regions

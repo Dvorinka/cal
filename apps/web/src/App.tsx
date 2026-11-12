@@ -17,14 +17,17 @@ import { SharedPeoplePage } from "./pages/SharedPeoplePage";
 import { TagsPage } from "./pages/TagsPage";
 import { TimePage } from "./pages/TimePage";
 import { TrashPage } from "./pages/TrashPage";
+import { ConnectionsPage } from "./pages/ConnectionsPage";
 import { FilesPage } from "./pages/FilesPage";
 import { GitHubPage } from "./pages/GitHubPage";
+import { HabitsPage } from "./pages/HabitsPage";
 import { LinksPage } from "./pages/LinksPage";
 import { MailPage } from "./pages/MailPage";
 import { NotesPage } from "./pages/NotesPage";
 import { PeoplePage } from "./pages/PeoplePage";
 import { PersonProfilePage } from "./pages/PersonProfilePage";
 import { FamilyTreePage } from "./pages/FamilyTreePage";
+import { ReviewPage } from "./pages/ReviewPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { ShoppingPage } from "./pages/ShoppingPage";
 import { TasksPage } from "./pages/TasksPage";
@@ -139,6 +142,9 @@ function Shell() {
           <Route path="/" element={<CalendarPage />} />
           <Route path="/today" element={<TodayPage />} />
           <Route path="/tasks" element={<Gated><TasksPage /></Gated>} />
+          <Route path="/habits" element={<Gated><HabitsPage /></Gated>} />
+          <Route path="/review" element={<ReviewPage />} />
+          <Route path="/connections" element={<ConnectionsPage />} />
           <Route path="/notes" element={<Gated><NotesPage /></Gated>} />
           <Route path="/links" element={<Gated><LinksPage /></Gated>} />
           <Route path="/files" element={<Gated><FilesPage /></Gated>} />

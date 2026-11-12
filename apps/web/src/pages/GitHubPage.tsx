@@ -48,7 +48,7 @@ export function GitHubPage() {
     <>
       <PageHeader
         title="GitHub"
-        sub={activity ? `${activity.login} — ${activity.eventsThisWeek} events this week` : "issue & PR inbox"}
+        sub={activity ? `${activity.login} · ${activity.eventsThisWeek} events this week` : "Issues and pull requests"}
       >
         <button type="button" className="btn btn-secondary btn-xs" onClick={load} disabled={loading}>
           <RefreshCw size={12} /> Refresh
@@ -59,8 +59,8 @@ export function GitHubPage() {
           <div className="empty-hint">
             <strong>No GitHub token</strong>
             <span>Add a personal access token under Integrations, then refresh.</span>
-            <Link className="btn btn-primary" to="/settings" style={{ marginTop: 10 }}>
-              Open Settings
+            <Link className="btn btn-primary" to="/settings#set-integrations" style={{ marginTop: 10 }}>
+              Add a token
             </Link>
           </div>
         ) : byRepo.length === 0 ? (
