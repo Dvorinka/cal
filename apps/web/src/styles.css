@@ -312,7 +312,7 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-height: 26px;
+  min-height: 32px;
   padding: 0 10px;
   border-radius: 6px;
   font-size: 12.5px;
@@ -378,18 +378,27 @@ button {
   flex-wrap: wrap;
 }
 .dot {
+  position: relative;
   width: 22px;
   height: 22px;
   border-radius: 50%;
   background: var(--dot);
   opacity: 0.85;
-  transition: transform 120ms var(--ease-out), box-shadow 120ms;
+  transition: transform 120ms var(--ease-out), box-shadow 120ms var(--ease-out), opacity 120ms var(--ease-out);
   display: grid;
   place-items: center;
 }
+.dot::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+}
 .dot:hover {
-  transform: scale(1.12);
+  transform: scale(1.08);
   opacity: 1;
+}
+.dot:active {
+  transform: scale(0.96);
 }
 .dot.active {
   opacity: 1;
@@ -778,7 +787,13 @@ button {
   box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 .day-cell.outside {
-  background: rgb(128 128 128 / 0.025);
+  background: color-mix(in srgb, var(--text-1) 8%, transparent);
+}
+.day-cell.outside:hover {
+  background: color-mix(in srgb, var(--text-1) 12%, transparent);
+}
+.day-cell.outside.drop-target {
+  background: var(--accent-softer);
 }
 .day-cell.outside .day-num {
   color: var(--text-3);
@@ -788,7 +803,7 @@ button {
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: 24px;
+  min-height: 28px;
 }
 .day-num {
   display: grid;
@@ -821,8 +836,8 @@ button {
 .day-add {
   margin-left: auto;
   opacity: 0;
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
 }
 .day-cell:hover .day-add {
   opacity: 1;
@@ -863,7 +878,14 @@ button {
   color: var(--chip-sub, var(--text-2));
   flex: none;
 }
+.day-cell .entry-chip,
+.day-cell .feed-chip,
+.day-cell .person-chip {
+  min-width: 0;
+  max-width: 100%;
+}
 .entry-chip .title {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1259,7 +1281,7 @@ button {
 
 /* editor modal */
 .editor {
-  width: min(480px, 100%);
+  width: min(560px, 100%);
   background: var(--bg-overlay);
   border-radius: var(--r-xl);
   box-shadow: var(--shadow-3);
@@ -1291,6 +1313,7 @@ button {
 .editor-foot {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   padding-top: 10px;
   position: sticky;
@@ -1521,12 +1544,23 @@ button {
   margin-bottom: 14px;
 }
 .panel h3 {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 28px;
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: var(--text-3);
   margin-bottom: 8px;
+}
+.panel h3 .btn {
+  margin-left: auto;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
 }
 .panel h3.overdue {
   color: var(--c-red);
@@ -2047,6 +2081,7 @@ button {
   font-variant-numeric: tabular-nums;
 }
 .feed-chip .title {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2544,6 +2579,7 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  min-height: 28px;
   padding: 4px 10px;
   border-radius: 999px;
   border: 1px solid var(--line);
@@ -2551,9 +2587,16 @@ button {
   font-size: 11.5px;
   font-weight: 500;
   color: var(--text-3);
+  transition: border-color 140ms var(--ease-out), color 140ms var(--ease-out), background 140ms var(--ease-out), transform 100ms var(--ease-out);
 }
+.habit-chip:hover {
+  border-color: var(--text-3);
+  color: var(--text-2);
+}
+button.habit-chip:active { transform: scale(0.96); }
 .habit-chip.on { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
-.habit-chip b { font-weight: 700; }
+.habit-chip.on:hover { color: var(--accent); }
+.habit-chip b { font-weight: 700; font-variant-numeric: tabular-nums; }
 
 /* ---------- focus mode ---------- */
 .focus-pane {
@@ -2750,8 +2793,18 @@ button {
 .seg-btn { min-height: 32px; padding: 6px 10px; background: none; border: 0; color: var(--text-3); cursor: pointer; display: inline-flex; align-items: center; }
 .seg-btn.on { background: var(--bg-field); color: var(--text-1); }
 .md-tag { color: var(--accent); font-size: 0.92em; }
-.activity-grid { display: grid; grid-template-rows: repeat(7, 1fr); grid-auto-flow: column; gap: 3px; }
-.activity-cell { width: 100%; aspect-ratio: 1; min-width: 8px; border-radius: 2px; background: var(--line); }
+.activity-grid {
+  display: grid;
+  grid-template-rows: repeat(7, 12px);
+  grid-auto-flow: column;
+  grid-auto-columns: 12px;
+  gap: 3px;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.activity-cell { width: 12px; height: 12px; border-radius: 2px; background: var(--line); }
+.activity-cell.is-today { box-shadow: inset 0 0 0 1.5px var(--text-1); }
 .activity-cell.lv1 { background: color-mix(in srgb, var(--accent) 30%, var(--line)); }
 .activity-cell.lv2 { background: color-mix(in srgb, var(--accent) 55%, var(--line)); }
 .activity-cell.lv3 { background: color-mix(in srgb, var(--accent) 80%, var(--line)); }
@@ -2963,7 +3016,7 @@ button {
 .feed-row time { font-size: 11px; color: var(--text-3); flex: none; }
 .storage-row { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 10px; }
 .storage-row .meter { flex: 1; margin-top: 0; max-width: none; }
-.storage-row .meter i { min-width: 4px; }
+.storage-row .meter i { min-width: 0; }
 .storage-row .panel-note { white-space: nowrap; }
 
 /* ── Mail ── */
@@ -3160,7 +3213,7 @@ button {
   width: 100%;
   text-align: left;
 }
-.person-chip .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.person-chip .title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .person-chip svg { flex: none; }
 .day-modal-list .person-chip { font-size: 13px; padding: 6px 9px; }
 

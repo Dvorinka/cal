@@ -377,6 +377,10 @@ The surface had outgrown a flat sidebar and a single Settings scroll.
       dot, list pages share one inset, settings anchors clear the sticky
       index, week all-day chips stay in their column, and narrow task
       rows wrap.
+- [x] **Surface detail.** Panel actions sit in the heading. An empty
+      storage meter stays empty. Days outside the month recede. The
+      activity grid marks today. The editor and segmented controls meet
+      the 32px hit target.
 
 ## Remaining — needs something external
 

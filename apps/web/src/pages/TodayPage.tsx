@@ -496,7 +496,7 @@ export function TodayPage() {
             <section className="panel">
               <h3>
                 This week
-                <Link to="/review" className="btn btn-secondary btn-xs" style={{ float: "right" }}>
+                <Link to="/review" className="btn btn-secondary btn-xs">
                   Review
                 </Link>
               </h3>
@@ -583,8 +583,8 @@ function ActivityGrid({ counts, today }: { counts: Record<string, number>; today
     start.setDate(start.getDate() - ((start.getDay() + 6) % 7) - 16 * 7); // Monday-aligned, 17 weeks back
     const out: { date: string; n: number }[] = [];
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const iso = d.toISOString().slice(0, 10);
-      out.push({ date: iso, n: counts[iso] ?? 0 });
+      const date = iso(d);
+      out.push({ date, n: counts[date] ?? 0 });
     }
     return out;
   }, [counts, today]);
@@ -597,7 +597,7 @@ function ActivityGrid({ counts, today }: { counts: Record<string, number>; today
       {cells.map((c) => (
         <span
           key={c.date}
-          className={`activity-cell lv${level(c.n)}`}
+          className={`activity-cell lv${level(c.n)}${c.date === today ? " is-today" : ""}`}
           title={`${c.date} — ${c.n} entr${c.n === 1 ? "y" : "ies"}`}
         />
       ))}
