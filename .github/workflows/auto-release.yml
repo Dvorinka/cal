@@ -35,6 +35,12 @@ jobs:
         with:
           node-version: 22
 
+      # CI queue delay can leave the event SHA behind main; release the tip.
+      - name: Sync to latest main
+        run: |
+          git fetch origin main
+          git checkout -B main origin/main
+
       - name: Skip if HEAD is already released
         id: guard
         run: |
