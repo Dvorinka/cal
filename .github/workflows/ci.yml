@@ -55,7 +55,14 @@ jobs:
         run: docker build -t cal:ci .
       - name: Smoke test — embedded Postgres, SPA, register roundtrip
         run: |
-          docker run -d --name cal -p 18080:8080 cal:ci
+          # Older runs left a container named cal on the shared runner, so the
+          # next job died on the name before the health check. Unique name,
+          # same host port, and always remove it.
+          docker rm -f cal >/dev/null 2>&1 || true
+          name="cal-ci-${GITHUB_RUN_ID:-local}"
+          docker rm -f "$name" >/dev/null 2>&1 || true
+          docker run -d --name "$name" -p 18080:8080 cal:ci
+          trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
           for i in $(seq 1 120); do
             curl -fsS http://localhost:18080/api/health && break || sleep 1
           done
@@ -64,4 +71,3 @@ jobs:
             -d '{"email":"ci@cal.local","password":"ci-password-123"}' \
             http://localhost:18080/api/auth/register
           curl -fsS -b /tmp/jar http://localhost:18080/api/me | grep -q "ci@cal.local"
-          docker rm -f cal
