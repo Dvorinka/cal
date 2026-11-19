@@ -5,6 +5,7 @@ package httpapi
 // auth, so any MCP client can drive a Cal instance directly.
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -405,6 +406,50 @@ var mcpTools = []gin.H{
 			"type":       "object",
 			"properties": gin.H{"itemId": gin.H{"type": "string"}},
 			"required":   []string{"itemId"},
+		},
+	},
+	{
+		"name":        "list_shopping",
+		"description": "List the user's shopping lists with open and total item counts.",
+		"inputSchema": gin.H{"type": "object", "properties": gin.H{}},
+	},
+	{
+		"name":        "shopping_list",
+		"description": "Read one shopping list: sections and items.",
+		"inputSchema": gin.H{
+			"type":       "object",
+			"properties": gin.H{"listId": gin.H{"type": "string"}},
+			"required":   []string{"listId"},
+		},
+	},
+	{
+		"name":        "add_shopping_item",
+		"description": "Add an item. listId is optional: the first list is used, or a list named Shopping is created. sectionId must belong to that list.",
+		"inputSchema": gin.H{
+			"type": "object",
+			"properties": gin.H{
+				"name":      gin.H{"type": "string"},
+				"listId":    gin.H{"type": "string"},
+				"sectionId": gin.H{"type": "string"},
+				"quantity":  gin.H{"type": "string"},
+				"note":      gin.H{"type": "string"},
+			},
+			"required": []string{"name"},
+		},
+	},
+	{
+		"name":        "set_shopping_item",
+		"description": "Check, uncheck, or rename a shopping item. Only provided fields change.",
+		"inputSchema": gin.H{
+			"type": "object",
+			"properties": gin.H{
+				"id":       gin.H{"type": "string"},
+				"name":     gin.H{"type": "string"},
+				"quantity": gin.H{"type": "string"},
+				"note":     gin.H{"type": "string"},
+				"checked":  gin.H{"type": "boolean"},
+			},
+			"required": []string{"id"},
 		},
 	},
 }
@@ -1183,9 +1228,145 @@ func (s *Server) mcpCall(c *gin.Context, user store.User, req rpcRequest) {
 		}
 		respond(toolText("deleted", false))
 
+	case "list_shopping":
+		lists, err := s.store.ListShoppingLists(ctx, user.ID)
+		if err != nil {
+			fail("query failed")
+			return
+		}
+		respond(toolText(string(mustJSON(lists)), false))
+
+	case "shopping_list":
+		var args struct {
+			ListID string `json:"listId"`
+		}
+		_ = json.Unmarshal(params.Arguments, &args)
+		if args.ListID == "" || !s.store.ShoppingListOwned(ctx, user.ID, args.ListID) {
+			fail("list not found")
+			return
+		}
+		sections, err := s.store.ListShoppingSections(ctx, args.ListID)
+		if err != nil {
+			fail("query failed")
+			return
+		}
+		items, err := s.store.ListShoppingItems(ctx, args.ListID)
+		if err != nil {
+			fail("query failed")
+			return
+		}
+		respond(toolText(string(mustJSON(gin.H{"sections": sections, "items": items})), false))
+
+	case "add_shopping_item":
+		var args struct {
+			ListID    string `json:"listId"`
+			SectionID string `json:"sectionId"`
+			Name      string `json:"name"`
+			Note      string `json:"note"`
+			Quantity  string `json:"quantity"`
+		}
+		_ = json.Unmarshal(params.Arguments, &args)
+		args.Name = strings.TrimSpace(args.Name)
+		if args.Name == "" {
+			fail("name required")
+			return
+		}
+		listID, err := s.ensureShoppingList(ctx, user.ID, args.ListID)
+		if errors.Is(err, store.ErrNotFound) {
+			fail("list not found")
+			return
+		}
+		if err != nil {
+			fail("create failed")
+			return
+		}
+		var sectionID *string
+		if args.SectionID != "" {
+			owner, serr := s.store.ShoppingSectionList(ctx, args.SectionID)
+			if serr != nil || owner != listID {
+				fail("section not found")
+				return
+			}
+			sectionID = &args.SectionID
+		}
+		item, err := s.store.CreateShoppingItem(ctx, listID, sectionID, args.Name, args.Note, args.Quantity)
+		if err != nil {
+			fail("create failed")
+			return
+		}
+		respond(toolText(string(mustJSON(item)), false))
+
+	case "set_shopping_item":
+		var args struct {
+			ID       string  `json:"id"`
+			Name     *string `json:"name"`
+			Note     *string `json:"note"`
+			Quantity *string `json:"quantity"`
+			Checked  *bool   `json:"checked"`
+		}
+		_ = json.Unmarshal(params.Arguments, &args)
+		if args.ID == "" {
+			fail("id required")
+			return
+		}
+		if args.Name != nil {
+			name := strings.TrimSpace(*args.Name)
+			if name == "" {
+				fail("name required")
+				return
+			}
+			args.Name = &name
+		}
+		listID, err := s.store.ShoppingItemList(ctx, args.ID)
+		if err != nil || !s.store.ShoppingListOwned(ctx, user.ID, listID) {
+			fail("item not found")
+			return
+		}
+		item, err := s.store.UpdateShoppingItem(ctx, listID, args.ID, store.ShoppingItemPatch{
+			Name: args.Name, Note: args.Note, Quantity: args.Quantity, Checked: args.Checked,
+		})
+		if err != nil {
+			fail("update failed")
+			return
+		}
+		respond(toolText(string(mustJSON(item)), false))
+
 	default:
 		c.JSON(http.StatusOK, rpcError(req.ID, -32602, "unknown tool"))
 	}
+}
+
+// mcpCatalog is the session-authed tool list the Agents page renders.
+// Names come from mcpTools so the page cannot drift from the server.
+func (s *Server) mcpCatalog(c *gin.Context) {
+	tools := make([]gin.H, 0, len(mcpTools))
+	for _, tool := range mcpTools {
+		tools = append(tools, gin.H{"name": tool["name"], "description": tool["description"]})
+	}
+	c.JSON(http.StatusOK, gin.H{"protocol": mcpProtocol, "tools": tools})
+}
+
+// ensureShoppingList returns listID when it belongs to the user. An empty
+// listID uses the first list, or creates one named Shopping.
+func (s *Server) ensureShoppingList(ctx context.Context, userID, listID string) (string, error) {
+	if listID != "" {
+		if !s.store.ShoppingListOwned(ctx, userID, listID) {
+			return "", store.ErrNotFound
+		}
+		return listID, nil
+	}
+	lists, err := s.store.ListShoppingLists(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	if len(lists) > 0 {
+		return lists[0].ID, nil
+	}
+	created, err := s.store.CreateShoppingList(ctx, userID, "Shopping", "")
+	if err != nil {
+		return "", err
+	}
+	return created.ID, nil
 }
 
 // personToInput copies a stored person into the editable input shape.

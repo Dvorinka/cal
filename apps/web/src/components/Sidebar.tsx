@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronLeft, ChevronRight, Flame, FolderOpen, GitPullRequest as GithubIcon, Hash, Link2, ListChecks, Mail, Plug, Plus, Search, Settings2, ShoppingCart, StickyNote, Sun, Timer as TimerIcon, Trash2, Kanban, Users } from "lucide-react";
+import { Bot, CalendarDays, ChevronLeft, ChevronRight, Flame, FolderOpen, GitPullRequest as GithubIcon, Hash, Link2, ListChecks, Mail, Plug, Plus, Search, Settings2, ShoppingCart, StickyNote, Sun, Timer as TimerIcon, Trash2, Kanban, Users } from "lucide-react";
 import { TimerPill } from "./TimerPill";
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
@@ -45,6 +45,7 @@ const GROUPS: { label: string; items: NavItem[] }[] = [
       { to: "/mail", label: "Mail", icon: Mail, module: "mail" },
       { to: "/github", label: "GitHub", icon: GithubIcon, module: "github" },
       { to: "/connections", label: "Connections", icon: Plug },
+      { to: "/agent", label: "Agents", icon: Bot },
     ],
   },
 ];

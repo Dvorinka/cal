@@ -745,6 +745,32 @@ paths:
           description: JSON-RPC response
         "401":
           description: Invalid API token
+  /mcp/tools:
+    get:
+      description: Session-authed catalog of MCP tools. The Agents page reads this so the list stays the server's list.
+      responses:
+        "200":
+          description: Protocol version and tool names
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [protocol, tools]
+                properties:
+                  protocol:
+                    type: string
+                  tools:
+                    type: array
+                    items:
+                      type: object
+                      required: [name, description]
+                      properties:
+                        name:
+                          type: string
+                        description:
+                          type: string
+        "401":
+          description: Authentication required
   /caldav:
     get:
       summary: List connected CalDAV calendar accounts

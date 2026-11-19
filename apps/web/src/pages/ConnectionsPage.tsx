@@ -128,10 +128,10 @@ export function ConnectionsPage() {
       key: "mcp",
       icon: Plug,
       title: "Agents",
-      detail: "MCP endpoint so an assistant can drive the planner.",
+      detail: "MCP tools an assistant can call. The token stays in Settings.",
       status: "Built in",
       on: true,
-      to: "/settings#set-mcp",
+      to: "/agent",
     },
     {
       key: "ics",

@@ -229,6 +229,15 @@ export function CommandPalette() {
         },
       },
       {
+        id: "agents",
+        label: "Go to agents",
+        icon: <ArrowRight size={15} />,
+        run: () => {
+          close();
+          navigate("/agent");
+        },
+      },
+      {
         id: "tree",
         label: "Go to family tree",
         icon: <ArrowRight size={15} />,
