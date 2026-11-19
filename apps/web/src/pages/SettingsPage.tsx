@@ -1,7 +1,7 @@
 import type { Accent, AdminConfig, CarddavAccount, Country, NagerHoliday, RestorePreview, SessionInfo, User, Webhook } from "@cal/api-client";
 import { Bell, BellOff, Copy, Download, FileText, LogOut, Plus, RefreshCw, Trash2, Upload, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { PageHeader } from "../components/PageHeader";
 import { MODULES, moduleOn } from "../lib/modules";
 import { disablePush, enablePush, pushEnabled } from "../lib/push";
@@ -1013,9 +1013,14 @@ export function SettingsPage() {
             </button>
           </div>
           <pre className="code-block" tabIndex={0}>{mcpConfig}</pre>
-          <button type="button" className="btn btn-secondary" onClick={() => copy(mcpConfig, "Config")}>
-            <Copy size={14} /> Copy client config
-          </button>
+          <div className="agent-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => copy(mcpConfig, "Config")}>
+              <Copy size={14} /> Copy client config
+            </button>
+            <Link className="btn btn-secondary" to="/agent">
+              Tool list
+            </Link>
+          </div>
         </section>
 
         <section className="panel" id="set-widget">

@@ -80,13 +80,14 @@ accounts on someone else's server — one container and it's yours.
   nightly snapshots for 14 days
 - **Connections** — one page for the status of CalDAV, Google, CardDAV,
   GitHub, mail, Invidious, webhooks and the agent endpoint, each linking
-  to the setting that wires it
+  to the page or setting that wires it
 - **Sync & feeds** — two-way CalDAV, read-only Google Calendar, iCalendar feed
   subscriptions, CardDAV birthdays, RSS/Atom items on their publish date,
   holidays for 40+ regions
 - **Automation** — GitHub inbox (issues/PRs become cards, status flows both
   ways), HMAC-signed webhooks out, email-to-task intake, `.ics` import/export,
-  and a token-gated MCP endpoint so AI assistants can drive your planner
+  and a token-gated MCP endpoint so AI assistants can drive your planner,
+  including shopping lists. The Agents page lists every tool the server exposes
 - **Everywhere** — offline-first PWA with a write queue, Android shell with a
   home-screen widget, Wails desktop app, share-target integration, global
   `⌘K` palette, keyboard-first navigation. The Android app can also run

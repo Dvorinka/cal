@@ -22,6 +22,16 @@ export interface AdminConfig {
   allowRegistration: boolean;
 }
 
+export interface McpToolInfo {
+  name: string;
+  description: string;
+}
+
+export interface McpCatalog {
+  protocol: string;
+  tools: McpToolInfo[];
+}
+
 export interface ShoppingList {
   id: string;
   name: string;
@@ -538,6 +548,12 @@ export class CalApi {
 
   async adminUpdateConfig(input: AdminConfig): Promise<AdminConfig> {
     return this.request<AdminConfig>("/admin/config", { method: "PUT", body: input });
+  }
+
+  // ---------- Agents ----------
+
+  async mcpTools(): Promise<McpCatalog> {
+    return this.request<McpCatalog>("/mcp/tools");
   }
 
   // ---------- Shopping lists ----------

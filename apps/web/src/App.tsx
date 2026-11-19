@@ -17,6 +17,7 @@ import { SharedPeoplePage } from "./pages/SharedPeoplePage";
 import { TagsPage } from "./pages/TagsPage";
 import { TimePage } from "./pages/TimePage";
 import { TrashPage } from "./pages/TrashPage";
+import { AgentPage } from "./pages/AgentPage";
 import { ConnectionsPage } from "./pages/ConnectionsPage";
 import { FilesPage } from "./pages/FilesPage";
 import { GitHubPage } from "./pages/GitHubPage";
@@ -145,6 +146,7 @@ function Shell() {
           <Route path="/habits" element={<Gated><HabitsPage /></Gated>} />
           <Route path="/review" element={<ReviewPage />} />
           <Route path="/connections" element={<ConnectionsPage />} />
+          <Route path="/agent" element={<AgentPage />} />
           <Route path="/notes" element={<Gated><NotesPage /></Gated>} />
           <Route path="/links" element={<Gated><LinksPage /></Gated>} />
           <Route path="/files" element={<Gated><FilesPage /></Gated>} />

@@ -49,3 +49,18 @@ func TestMCPPeopleParity(t *testing.T) {
 		}
 	}
 }
+
+func TestMCPShoppingParity(t *testing.T) {
+	want := []string{"list_shopping", "shopping_list", "add_shopping_item", "set_shopping_item"}
+	seen := map[string]bool{}
+	for _, tool := range mcpTools {
+		if name, _ := tool["name"].(string); name != "" {
+			seen[name] = true
+		}
+	}
+	for _, name := range want {
+		if !seen[name] {
+			t.Fatalf("tool %q not registered", name)
+		}
+	}
+}

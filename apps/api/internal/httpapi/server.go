@@ -231,6 +231,7 @@ func New(st *store.Store, holidays *calendar.HolidayCache) *gin.Engine {
 	authed.PATCH("/shopping/items/:id", server.shoppingUpdateItem)
 	authed.DELETE("/shopping/items/:id", server.shoppingDeleteItem)
 	authed.GET("/shopping/suggest", server.shoppingSuggest)
+	authed.GET("/mcp/tools", server.mcpCatalog)
 
 	admin := authed.Group("/admin", server.requireAdmin)
 	admin.GET("/users", server.adminUsers)

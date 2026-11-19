@@ -415,6 +415,10 @@ The surface had outgrown a flat sidebar and a single Settings scroll.
       `/people/shared/<token>` is a no-auth birthday/date list and
       `/api/shared/people/<token>/calendar.ics` a yearly-recurring ICS feed.
 
+- [x] **MCP shopping and the Agents page** — `list_shopping`, `shopping_list`,
+      `add_shopping_item`, `set_shopping_item`. `/agent` renders `GET /api/mcp/tools`
+      so the catalog cannot drift from the server. The API token stays in Settings.
+
 ### Engineering
 
 - [x] **DB-backed API tests** — `testdb_test.go` boots embedded Postgres
