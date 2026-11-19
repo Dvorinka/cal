@@ -452,6 +452,29 @@ var mcpTools = []gin.H{
 			"required": []string{"id"},
 		},
 	},
+	{
+		"name":        "list_trash",
+		"description": "List soft-deleted entries: id, title, type, and date. Newest first.",
+		"inputSchema": gin.H{"type": "object", "properties": gin.H{}},
+	},
+	{
+		"name":        "restore_trash",
+		"description": "Restore a soft-deleted entry by id.",
+		"inputSchema": gin.H{
+			"type":       "object",
+			"properties": gin.H{"id": gin.H{"type": "string"}},
+			"required":   []string{"id"},
+		},
+	},
+	{
+		"name":        "purge_trash",
+		"description": "Permanently delete a trashed entry by id. Live entries are left alone.",
+		"inputSchema": gin.H{
+			"type":       "object",
+			"properties": gin.H{"id": gin.H{"type": "string"}},
+			"required":   []string{"id"},
+		},
+	},
 }
 
 func (s *Server) mcpAuth(c *gin.Context) (store.User, bool) {
@@ -1330,6 +1353,54 @@ func (s *Server) mcpCall(c *gin.Context, user store.User, req rpcRequest) {
 			return
 		}
 		respond(toolText(string(mustJSON(item)), false))
+
+	case "list_trash":
+		items, err := s.store.ListTrash(ctx, user.ID)
+		if err != nil {
+			fail("query failed")
+			return
+		}
+		rows := make([]gin.H, 0, len(items))
+		for _, item := range items {
+			rows = append(rows, gin.H{"id": item.ID, "title": item.Title, "type": item.Type, "date": item.Date})
+		}
+		respond(toolText(string(mustJSON(rows)), false))
+
+	case "restore_trash":
+		var args struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(params.Arguments, &args)
+		if args.ID == "" {
+			fail("id required")
+			return
+		}
+		if err := s.store.RestoreEntry(ctx, user.ID, args.ID); errors.Is(err, store.ErrNotFound) {
+			fail("entry not found")
+			return
+		} else if err != nil {
+			fail("restore failed")
+			return
+		}
+		respond(toolText("restored", false))
+
+	case "purge_trash":
+		var args struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(params.Arguments, &args)
+		if args.ID == "" {
+			fail("id required")
+			return
+		}
+		if err := s.store.PurgeEntry(ctx, user.ID, args.ID); errors.Is(err, store.ErrNotFound) {
+			fail("entry not found")
+			return
+		} else if err != nil {
+			fail("purge failed")
+			return
+		}
+		respond(toolText("purged", false))
 
 	default:
 		c.JSON(http.StatusOK, rpcError(req.ID, -32602, "unknown tool"))
