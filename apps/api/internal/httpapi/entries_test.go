@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"cal/apps/api/internal/store"
 )
 
 // Regression: entryCols gained link_meta_at while four call sites kept
@@ -49,5 +51,50 @@ func TestEntryScanParity(t *testing.T) {
 	trash := doJSON(t, srv, http.MethodGet, "/api/trash", "", session)
 	if !strings.Contains(trash, "Ship it v2") {
 		t.Fatalf("trash list: %s", trash)
+	}
+}
+
+// The editor always posts recur "none", including for notes and events.
+// Treating that as a recurrence rule rejected every non-task create with 400.
+func TestValidEntryRecurNone(t *testing.T) {
+	cases := []struct {
+		name  string
+		input store.EntryInput
+		ok    bool
+	}{
+		{name: "note none", input: store.EntryInput{Title: "test", Type: "note", Date: "2026-11-15", Recur: "none"}, ok: true},
+		{name: "event none", input: store.EntryInput{Title: "Meet", Type: "event", Date: "2026-11-15", Recur: "none"}, ok: true},
+		{name: "link none", input: store.EntryInput{Title: "Ref", Type: "link", Date: "2026-11-15", Recur: "none"}, ok: true},
+		{name: "task none", input: store.EntryInput{Title: "Do", Type: "task", Date: "2026-11-15", Recur: "none"}, ok: true},
+		{name: "note omitted", input: store.EntryInput{Title: "test", Type: "note", Date: "2026-11-15"}, ok: true},
+		{name: "task daily", input: store.EntryInput{Title: "Do", Type: "task", Date: "2026-11-15", Recur: "daily"}, ok: true},
+		{name: "note daily", input: store.EntryInput{Title: "test", Type: "note", Date: "2026-11-15", Recur: "daily"}, ok: false},
+		{name: "task hourly", input: store.EntryInput{Title: "Do", Type: "task", Date: "2026-11-15", Recur: "hourly"}, ok: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := validEntry(tc.input); got != tc.ok {
+				t.Fatalf("validEntry() = %v, want %v", got, tc.ok)
+			}
+		})
+	}
+}
+
+func TestCreateNoteAndEventWithRecurNone(t *testing.T) {
+	srv, session := newTestServer(t)
+	note := `{"title":"test","type":"note","date":"2026-11-15","startTime":"","endTime":"","color":"sky","tags":[],"blockedBy":"","content":"","linkUrl":"","recur":"none","remind":null,"workspaceId":""}`
+	status, body := doJSONStatus(t, srv, http.MethodPost, "/api/entries", note, session)
+	if status != http.StatusCreated || !strings.Contains(body, `"type":"note"`) {
+		t.Fatalf("create note: %d %s", status, body)
+	}
+	event := `{"title":"Standup","type":"event","date":"2026-11-15","startTime":"09:00","endTime":"09:30","color":"sky","tags":[],"recur":"none","workspaceId":"","blockedBy":""}`
+	status, body = doJSONStatus(t, srv, http.MethodPost, "/api/entries", event, session)
+	if status != http.StatusCreated || !strings.Contains(body, `"type":"event"`) {
+		t.Fatalf("create event: %d %s", status, body)
+	}
+	status, body = doJSONStatus(t, srv, http.MethodPost, "/api/entries",
+		`{"title":"nope","type":"note","date":"2026-11-15","recur":"daily"}`, session)
+	if status != http.StatusBadRequest {
+		t.Fatalf("daily note: %d %s", status, body)
 	}
 }

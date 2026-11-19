@@ -813,7 +813,8 @@ func validEntry(input store.EntryInput) bool {
 	if input.StartTime != "" && input.EndTime != "" && input.EndTime <= input.StartTime {
 		return false
 	}
-	if input.Recur != "" && (!validRecur(input.Recur) || input.Type != "task") {
+	// The editor sends "none" for notes and events. Only a real rule is task-only.
+	if input.Recur != "" && input.Recur != "none" && (!validRecur(input.Recur) || input.Type != "task") {
 		return false
 	}
 	return true
