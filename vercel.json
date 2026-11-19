@@ -4,6 +4,16 @@
   "installCommand": "true",
   "buildCommand": "true",
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "*": false,
+      "main": true,
+      "master": true
+    }
+  }
 }
