@@ -418,6 +418,8 @@ The surface had outgrown a flat sidebar and a single Settings scroll.
 - [x] **MCP shopping and the Agents page** — `list_shopping`, `shopping_list`,
       `add_shopping_item`, `set_shopping_item`. `/agent` renders `GET /api/mcp/tools`
       so the catalog cannot drift from the server. The API token stays in Settings.
+- [x] **MCP trash** — `list_trash`, `restore_trash`, `purge_trash`. Purge only
+      removes an entry that is already in trash.
 
 ### Engineering
 

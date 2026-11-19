@@ -51,7 +51,7 @@ func TestMCPPeopleParity(t *testing.T) {
 }
 
 func TestMCPShoppingParity(t *testing.T) {
-	want := []string{"list_shopping", "shopping_list", "add_shopping_item", "set_shopping_item"}
+	want := []string{"list_shopping", "shopping_list", "add_shopping_item", "set_shopping_item", "list_trash", "restore_trash", "purge_trash"}
 	seen := map[string]bool{}
 	for _, tool := range mcpTools {
 		if name, _ := tool["name"].(string); name != "" {

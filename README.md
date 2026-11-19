@@ -87,7 +87,7 @@ accounts on someone else's server — one container and it's yours.
 - **Automation** — GitHub inbox (issues/PRs become cards, status flows both
   ways), HMAC-signed webhooks out, email-to-task intake, `.ics` import/export,
   and a token-gated MCP endpoint so AI assistants can drive your planner,
-  including shopping lists. The Agents page lists every tool the server exposes
+  including shopping lists and trash. The Agents page lists every tool the server exposes
 - **Everywhere** — offline-first PWA with a write queue, Android shell with a
   home-screen widget, Wails desktop app, share-target integration, global
   `⌘K` palette, keyboard-first navigation. The Android app can also run
