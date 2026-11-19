@@ -114,7 +114,7 @@ export function FilesPage() {
 
   return (
     <>
-      <PageHeader title="Files" sub={`${files.length} stored — attach or share`}>
+      <PageHeader title="Files" sub={`${files.length} stored. Attach them to an entry, or share a link.`}>
         <button type="button" className="btn btn-primary" disabled={busy} onClick={() => inputRef.current?.click()}>
           <Upload size={14} /> {busy ? "Uploading…" : "Upload"}
         </button>
@@ -170,7 +170,7 @@ export function FilesPage() {
           {files.length === 0 ? (
             <div className="files-empty">
               <Upload size={22} strokeWidth={1.5} />
-              <p>Drop files here, or click Upload — 20 MB each, quota in Settings.</p>
+              <p>Drop files here, or click Upload. 20 MB each, quota in Settings.</p>
             </div>
           ) : visible.length === 0 ? (
             <div className="files-empty">

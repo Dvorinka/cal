@@ -114,7 +114,7 @@ export function FamilyTreePage() {
         {nodes.length === 0 ? (
           <div className="empty-hint">
             <strong>No one here yet</strong>
-            <span>Add people and link them — parents, partners, siblings — and the tree draws itself.</span>
+            <span>Add people and link them (parents, partners, siblings) and the tree draws itself.</span>
             <Link className="btn btn-primary" to="/people">
               <Users size={14} /> Open people
             </Link>

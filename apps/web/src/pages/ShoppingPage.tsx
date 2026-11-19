@@ -219,7 +219,7 @@ export function ShoppingPage() {
   return (
     <>
       <PageHeader title="Shopping" sub={active ? `${active.open} to buy · ${active.items} total` : "Shared-style shopping lists"} />
-      <div className="panel-wrap">
+      <div className="page-scroll">
         <div className="shop-chips">
           {lists.map((l) => (
             <button
@@ -246,8 +246,8 @@ export function ShoppingPage() {
         {!active && lists.length === 0 && (
           <section className="panel">
             <p className="panel-note">
-              <ShoppingBasket size={15} style={{ verticalAlign: "-3px" }} /> No lists yet —
-              type a name above (Groceries, Pharmacy, Hardware…) and press Enter.
+              <ShoppingBasket size={15} style={{ verticalAlign: "-3px" }} /> No lists yet.
+              Type a name above (Groceries, Pharmacy, Hardware) and press Enter.
             </p>
           </section>
         )}

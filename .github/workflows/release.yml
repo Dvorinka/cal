@@ -15,7 +15,7 @@ env:
 
 jobs:
   docker:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-qemu-action@v4
@@ -47,10 +47,10 @@ jobs:
     strategy:
       matrix:
         include:
-          - { os: ubuntu-latest, ext: "", label: linux-amd64 }
-          - { os: windows-latest, ext: ".exe", label: windows-amd64 }
-          - { os: macos-latest, ext: "", label: macos-arm64 }
-    runs-on: ${{ matrix.os }}
+          - { os: ubuntu-latest, ext: "", label: linux-amd64, ro: [self-hosted, linux, x64] }
+          - { os: windows-latest, ext: ".exe", label: windows-amd64, ro: [self-hosted, windows, x64] }
+          - { os: macos-latest, ext: "", label: macos-arm64, ro: [self-hosted, macos, x64] }
+    runs-on: ${{ matrix.ro }}
     env:
       # Signing is opt-in: the steps below run only when the secrets exist.
       # See docs/releasing.md for what each secret is and how to produce it.

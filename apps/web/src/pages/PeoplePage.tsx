@@ -221,7 +221,7 @@ export function PeoplePage() {
             <span>
               {query
                 ? `Nothing matches “${query.trim()}”.`
-                : "Add family, friends, your partner — birthdays and anniversaries land on the calendar."}
+                : "Add family, friends, your partner. Birthdays and anniversaries land on the calendar."}
             </span>
             {!query && (
               <button type="button" className="btn btn-primary" onClick={() => setEditing("new")}>

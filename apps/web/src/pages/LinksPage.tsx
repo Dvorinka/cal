@@ -129,7 +129,7 @@ export function LinksPage() {
           </form>
           {!settings.invidiousUrl ? (
             <p className="panel-note" style={{ marginTop: 8 }}>
-              YouTube search runs through your own Invidious instance — set its URL in{" "}
+              YouTube search runs through your own Invidious instance. Set its URL in{" "}
               <a href="/settings">Settings</a> first.
             </p>
           ) : ytResults === null ? null : ytResults.length === 0 ? (
@@ -182,7 +182,7 @@ export function LinksPage() {
         {visible.length === 0 ? (
           <div className="empty-hint">
             <strong>{filter === "all" ? "No links saved" : `No ${filter}`}</strong>
-            <span>Save a link — previews and YouTube thumbnails fetch themselves.</span>
+            <span>Save a link. Previews and YouTube thumbnails fetch themselves.</span>
             <button type="button" className="btn btn-primary" onClick={() => openCreate(todayIso())}>
               <Plus size={14} /> Save one
             </button>

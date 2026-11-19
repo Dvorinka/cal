@@ -191,6 +191,54 @@ export function CommandPalette() {
         },
       },
       {
+        id: "habits",
+        label: "Go to habits",
+        icon: <ArrowRight size={15} />,
+        module: "tasks",
+        run: () => {
+          close();
+          navigate("/habits");
+        },
+      },
+      {
+        id: "shopping",
+        label: "Go to shopping",
+        icon: <ArrowRight size={15} />,
+        module: "shopping",
+        run: () => {
+          close();
+          navigate("/shopping");
+        },
+      },
+      {
+        id: "review",
+        label: "Go to weekly review",
+        icon: <ArrowRight size={15} />,
+        run: () => {
+          close();
+          navigate("/review");
+        },
+      },
+      {
+        id: "connections",
+        label: "Go to connections",
+        icon: <ArrowRight size={15} />,
+        run: () => {
+          close();
+          navigate("/connections");
+        },
+      },
+      {
+        id: "tree",
+        label: "Go to family tree",
+        icon: <ArrowRight size={15} />,
+        module: "people",
+        run: () => {
+          close();
+          navigate("/people/tree");
+        },
+      },
+      {
         id: "github",
         label: "Go to GitHub",
         icon: <ArrowRight size={15} />,

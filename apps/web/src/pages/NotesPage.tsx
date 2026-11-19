@@ -141,7 +141,7 @@ export function NotesPage() {
         {notes.length === 0 ? (
           <div className="empty-hint">
             <strong>{tagFilter ? `Nothing tagged #${tagFilter}` : "No notes yet"}</strong>
-            <span>Notes live on the calendar too — they pin context to a day.</span>
+            <span>Notes live on the calendar too. They pin context to a day.</span>
             <button type="button" className="btn btn-primary" onClick={() => openCreate(todayIso())}>
               <Plus size={14} /> Write one
             </button>
