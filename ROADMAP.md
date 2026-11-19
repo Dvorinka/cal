@@ -433,6 +433,8 @@ The surface had outgrown a flat sidebar and a single Settings scroll.
       chip until it lands instead of guessing.
 - [x] **Streaming restore** — the request body spools to a temp file and the
       zip reads lazily via `io.ReaderAt`; big archives no longer sit in RAM.
+- [x] **Route code-split** — 22 of 24 pages lazy-load; the main chunk drops
+      712 kB → 554 kB and secondary pages ship on demand.
 
 ## Deliberately out of scope
 
