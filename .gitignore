@@ -31,3 +31,4 @@ apps/desktop/frontend/wailsjs/
 
 # tsc incremental build cache
 *.tsbuildinfo
+.playwright-cli/

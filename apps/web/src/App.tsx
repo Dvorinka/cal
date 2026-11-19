@@ -1,6 +1,6 @@
 import { CalendarDays } from "lucide-react";
 import { moduleForPath, moduleOn } from "./lib/modules";
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AuthPanel } from "./components/AuthPanel";
 import { BottomNav } from "./components/BottomNav";
@@ -11,29 +11,31 @@ import { LocalShell } from "./components/LocalShell";
 import { Sidebar } from "./components/Sidebar";
 import { Toasts } from "./components/Toasts";
 import { CalendarPage } from "./pages/CalendarPage";
-import { BoardsPage } from "./pages/BoardsPage";
-import { SharedBoardPage } from "./pages/SharedBoardPage";
-import { SharedPeoplePage } from "./pages/SharedPeoplePage";
-import { TagsPage } from "./pages/TagsPage";
-import { TimePage } from "./pages/TimePage";
-import { TrashPage } from "./pages/TrashPage";
-import { AgentPage } from "./pages/AgentPage";
-import { ConnectionsPage } from "./pages/ConnectionsPage";
-import { FilesPage } from "./pages/FilesPage";
-import { GitHubPage } from "./pages/GitHubPage";
-import { HabitsPage } from "./pages/HabitsPage";
-import { LinksPage } from "./pages/LinksPage";
-import { MailPage } from "./pages/MailPage";
-import { NotesPage } from "./pages/NotesPage";
-import { PeoplePage } from "./pages/PeoplePage";
-import { PersonProfilePage } from "./pages/PersonProfilePage";
-import { FamilyTreePage } from "./pages/FamilyTreePage";
-import { ReviewPage } from "./pages/ReviewPage";
-import { SettingsPage } from "./pages/SettingsPage";
-import { ShoppingPage } from "./pages/ShoppingPage";
-import { TasksPage } from "./pages/TasksPage";
+import { MailPage } from "./pages/MailPage"; // also loaded eagerly by LocalShell
 import { TodayPage } from "./pages/TodayPage";
-import { WidgetPage } from "./pages/WidgetPage";
+
+// Every page except the two primary routes lazy-loads on first visit.
+const AgentPage = lazy(() => import("./pages/AgentPage").then((m) => ({ default: m.AgentPage })));
+const BoardsPage = lazy(() => import("./pages/BoardsPage").then((m) => ({ default: m.BoardsPage })));
+const ConnectionsPage = lazy(() => import("./pages/ConnectionsPage").then((m) => ({ default: m.ConnectionsPage })));
+const FamilyTreePage = lazy(() => import("./pages/FamilyTreePage").then((m) => ({ default: m.FamilyTreePage })));
+const FilesPage = lazy(() => import("./pages/FilesPage").then((m) => ({ default: m.FilesPage })));
+const GitHubPage = lazy(() => import("./pages/GitHubPage").then((m) => ({ default: m.GitHubPage })));
+const HabitsPage = lazy(() => import("./pages/HabitsPage").then((m) => ({ default: m.HabitsPage })));
+const LinksPage = lazy(() => import("./pages/LinksPage").then((m) => ({ default: m.LinksPage })));
+const NotesPage = lazy(() => import("./pages/NotesPage").then((m) => ({ default: m.NotesPage })));
+const PeoplePage = lazy(() => import("./pages/PeoplePage").then((m) => ({ default: m.PeoplePage })));
+const PersonProfilePage = lazy(() => import("./pages/PersonProfilePage").then((m) => ({ default: m.PersonProfilePage })));
+const ReviewPage = lazy(() => import("./pages/ReviewPage").then((m) => ({ default: m.ReviewPage })));
+const SettingsPage = lazy(() => import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
+const SharedBoardPage = lazy(() => import("./pages/SharedBoardPage").then((m) => ({ default: m.SharedBoardPage })));
+const SharedPeoplePage = lazy(() => import("./pages/SharedPeoplePage").then((m) => ({ default: m.SharedPeoplePage })));
+const ShoppingPage = lazy(() => import("./pages/ShoppingPage").then((m) => ({ default: m.ShoppingPage })));
+const TagsPage = lazy(() => import("./pages/TagsPage").then((m) => ({ default: m.TagsPage })));
+const TasksPage = lazy(() => import("./pages/TasksPage").then((m) => ({ default: m.TasksPage })));
+const TimePage = lazy(() => import("./pages/TimePage").then((m) => ({ default: m.TimePage })));
+const TrashPage = lazy(() => import("./pages/TrashPage").then((m) => ({ default: m.TrashPage })));
+const WidgetPage = lazy(() => import("./pages/WidgetPage").then((m) => ({ default: m.WidgetPage })));
 import { usePlanner } from "./stores/planner";
 import { useUi } from "./stores/ui";
 
@@ -124,10 +126,12 @@ function Shell() {
   // Public shared pages render without auth.
   if (window.location.pathname.startsWith("/board/") || window.location.pathname.startsWith("/people/shared/")) {
     return (
-      <Routes>
-        <Route path="/board/:token" element={<SharedBoardPage />} />
-        <Route path="/people/shared/:token" element={<SharedPeoplePage />} />
-      </Routes>
+      <Suspense fallback={<PageFallback />}>
+        <Routes>
+          <Route path="/board/:token" element={<SharedBoardPage />} />
+          <Route path="/people/shared/:token" element={<SharedPeoplePage />} />
+        </Routes>
+      </Suspense>
     );
   }
 
@@ -139,33 +143,35 @@ function Shell() {
     <main className="app-shell">
       <Sidebar />
       <section className="workspace">
-        <Routes>
-          <Route path="/" element={<CalendarPage />} />
-          <Route path="/today" element={<TodayPage />} />
-          <Route path="/tasks" element={<Gated><TasksPage /></Gated>} />
-          <Route path="/habits" element={<Gated><HabitsPage /></Gated>} />
-          <Route path="/review" element={<ReviewPage />} />
-          <Route path="/connections" element={<ConnectionsPage />} />
-          <Route path="/agent" element={<AgentPage />} />
-          <Route path="/notes" element={<Gated><NotesPage /></Gated>} />
-          <Route path="/links" element={<Gated><LinksPage /></Gated>} />
-          <Route path="/files" element={<Gated><FilesPage /></Gated>} />
-          <Route path="/boards" element={<Gated><BoardsPage /></Gated>} />
-          <Route path="/boards/:boardId" element={<Gated><BoardsPage /></Gated>} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/trash" element={<TrashPage />} />
-          <Route path="/tags" element={<Gated><TagsPage /></Gated>} />
-          <Route path="/people" element={<Gated><PeoplePage /></Gated>} />
-          <Route path="/people/tree" element={<Gated><FamilyTreePage /></Gated>} />
-          <Route path="/people/:id" element={<Gated><PersonProfilePage /></Gated>} />
-          <Route path="/shopping" element={<Gated><ShoppingPage /></Gated>} />
-          <Route path="/time" element={<Gated><TimePage /></Gated>} />
-          <Route path="/mail" element={<Gated><MailPage /></Gated>} />
-          <Route path="/github" element={<Gated><GitHubPage /></Gated>} />
-          <Route path="/share" element={<ShareTarget />} />
-          <Route path="/entry/:id" element={<EntryDeepLink />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <Suspense fallback={<PageFallback />}>
+          <Routes>
+            <Route path="/" element={<CalendarPage />} />
+            <Route path="/today" element={<TodayPage />} />
+            <Route path="/tasks" element={<Gated><TasksPage /></Gated>} />
+            <Route path="/habits" element={<Gated><HabitsPage /></Gated>} />
+            <Route path="/review" element={<ReviewPage />} />
+            <Route path="/connections" element={<ConnectionsPage />} />
+            <Route path="/agent" element={<AgentPage />} />
+            <Route path="/notes" element={<Gated><NotesPage /></Gated>} />
+            <Route path="/links" element={<Gated><LinksPage /></Gated>} />
+            <Route path="/files" element={<Gated><FilesPage /></Gated>} />
+            <Route path="/boards" element={<Gated><BoardsPage /></Gated>} />
+            <Route path="/boards/:boardId" element={<Gated><BoardsPage /></Gated>} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/trash" element={<TrashPage />} />
+            <Route path="/tags" element={<Gated><TagsPage /></Gated>} />
+            <Route path="/people" element={<Gated><PeoplePage /></Gated>} />
+            <Route path="/people/tree" element={<Gated><FamilyTreePage /></Gated>} />
+            <Route path="/people/:id" element={<Gated><PersonProfilePage /></Gated>} />
+            <Route path="/shopping" element={<Gated><ShoppingPage /></Gated>} />
+            <Route path="/time" element={<Gated><TimePage /></Gated>} />
+            <Route path="/mail" element={<Gated><MailPage /></Gated>} />
+            <Route path="/github" element={<Gated><GitHubPage /></Gated>} />
+            <Route path="/share" element={<ShareTarget />} />
+            <Route path="/entry/:id" element={<EntryDeepLink />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
       </section>
       <BottomNav />
       <CommandPalette />
@@ -274,10 +280,23 @@ export function App() {
 
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/widget/today" element={<WidgetPage />} />
-        <Route path="*" element={<Shell />} />
-      </Routes>
+      <Suspense fallback={<PageFallback />}>
+        <Routes>
+          <Route path="/widget/today" element={<WidgetPage />} />
+          <Route path="*" element={<Shell />} />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
+  );
+}
+
+// PageFallback is the boot splash reused while a lazy page chunk downloads.
+function PageFallback() {
+  return (
+    <main className="splash">
+      <div className="mark">
+        <CalendarDays size={24} strokeWidth={2.2} />
+      </div>
+    </main>
   );
 }
