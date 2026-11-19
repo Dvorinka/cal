@@ -1,7 +1,7 @@
-import { CalendarDays, ChevronLeft, ChevronRight, FolderOpen, GitPullRequest as GithubIcon, Hash, Link2, ListChecks, Mail, Plus, Search, Settings2, ShoppingCart, StickyNote, Sun, Timer as TimerIcon, Trash2, Kanban, Users } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Flame, FolderOpen, GitPullRequest as GithubIcon, Hash, Link2, ListChecks, Mail, Plug, Plus, Search, Settings2, ShoppingCart, StickyNote, Sun, Timer as TimerIcon, Trash2, Kanban, Users } from "lucide-react";
 import { TimerPill } from "./TimerPill";
 import { useEffect, useMemo, useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { addMonths, fromIso, iso, monthMatrix, todayIso, weekdayNames, type WeekStartPref } from "../lib/date";
 import { moduleOn, type ModuleKey } from "../lib/modules";
 import { usePlanner } from "../stores/planner";
@@ -14,20 +14,39 @@ const FILTERS = [
   { type: "link", label: "Links", color: "var(--c-violet)" },
 ] as const;
 
-const NAV: { to: string; label: string; icon: typeof Sun; end?: boolean; module?: ModuleKey }[] = [
-  { to: "/today", label: "Today", icon: Sun },
-  { to: "/", label: "Calendar", icon: CalendarDays, end: true },
-  { to: "/tasks", label: "Tasks", icon: ListChecks, module: "tasks" },
-  { to: "/notes", label: "Notes", icon: StickyNote, module: "notes" },
-  { to: "/links", label: "Links", icon: Link2, module: "links" },
-  { to: "/files", label: "Files", icon: FolderOpen, module: "files" },
-  { to: "/boards", label: "Boards", icon: Kanban, module: "boards" },
-  { to: "/tags", label: "Tags", icon: Hash, module: "tags" },
-  { to: "/people", label: "People", icon: Users, module: "people" },
-  { to: "/shopping", label: "Shopping", icon: ShoppingCart, module: "shopping" },
-  { to: "/time", label: "Time", icon: TimerIcon, module: "time" },
-  { to: "/mail", label: "Mail", icon: Mail, module: "mail" },
-  { to: "/github", label: "GitHub", icon: GithubIcon, module: "github" },
+type NavItem = { to: string; label: string; icon: typeof Sun; end?: boolean; module?: ModuleKey };
+
+const GROUPS: { label: string; items: NavItem[] }[] = [
+  {
+    label: "Plan",
+    items: [
+      { to: "/today", label: "Today", icon: Sun },
+      { to: "/", label: "Calendar", icon: CalendarDays, end: true },
+      { to: "/tasks", label: "Tasks", icon: ListChecks, module: "tasks" },
+      { to: "/habits", label: "Habits", icon: Flame, module: "tasks" },
+      { to: "/boards", label: "Boards", icon: Kanban, module: "boards" },
+      { to: "/shopping", label: "Shopping", icon: ShoppingCart, module: "shopping" },
+      { to: "/time", label: "Time", icon: TimerIcon, module: "time" },
+    ],
+  },
+  {
+    label: "Library",
+    items: [
+      { to: "/notes", label: "Notes", icon: StickyNote, module: "notes" },
+      { to: "/links", label: "Links", icon: Link2, module: "links" },
+      { to: "/files", label: "Files", icon: FolderOpen, module: "files" },
+      { to: "/tags", label: "Tags", icon: Hash, module: "tags" },
+      { to: "/people", label: "People", icon: Users, module: "people" },
+    ],
+  },
+  {
+    label: "Connect",
+    items: [
+      { to: "/mail", label: "Mail", icon: Mail, module: "mail" },
+      { to: "/github", label: "GitHub", icon: GithubIcon, module: "github" },
+      { to: "/connections", label: "Connections", icon: Plug },
+    ],
+  },
 ];
 
 function MiniMonth({ weekStart }: { weekStart: WeekStartPref }) {
@@ -146,6 +165,11 @@ export function Sidebar() {
   const toggleFeed = useUi((state) => state.toggleFeed);
   const sidebarOpen = useUi((state) => state.sidebarOpen);
   const closeSidebar = useUi((state) => state.closeSidebar);
+  const location = useLocation();
+
+  useEffect(() => {
+    document.querySelector(".sidebar .nav-item.active")?.scrollIntoView({ block: "nearest" });
+  }, [location.pathname]);
 
   const counts = useMemo(() => {
     const map: Record<string, number> = { task: 0, event: 0, note: 0, link: 0 };
@@ -188,25 +212,33 @@ export function Sidebar() {
         >
           <Search size={14} />
           <span>Search</span>
-          <kbd>⌘K</kbd>
+          <kbd>{/Mac|iPhone|iPad/.test(navigator.userAgent) ? "⌘K" : "Ctrl K"}</kbd>
         </button>
 
+        <div className="side-scroll">
         <nav className="side-nav" aria-label="Primary">
-          {NAV.filter((item) => !item.module || moduleOn(settings, item.module)).map(({ to, label, icon: Icon, end }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={end}
-              className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
-              onClick={closeSidebar}
-            >
-              <Icon size={15} />
-              {label}
-            </NavLink>
-          ))}
+          {GROUPS.map((group) => {
+            const items = group.items.filter((item) => !item.module || moduleOn(settings, item.module));
+            if (items.length === 0) return null;
+            return (
+              <div key={group.label} className="side-group">
+                <div className="side-label">{group.label}</div>
+                {items.map(({ to, label, icon: Icon, end }) => (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    end={end}
+                    className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
+                    onClick={closeSidebar}
+                  >
+                    <Icon size={15} />
+                    {label}
+                  </NavLink>
+                ))}
+              </div>
+            );
+          })}
         </nav>
-
-        <MiniMonth weekStart={settings.weekStart} />
 
         <div className="side-label">Lists</div>
         <div className="filter-list">
@@ -252,6 +284,9 @@ export function Sidebar() {
             </div>
           </>
         )}
+        </div>
+
+        <MiniMonth weekStart={settings.weekStart} />
 
         <TimerPill />
 

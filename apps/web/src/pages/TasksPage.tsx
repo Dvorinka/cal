@@ -1,5 +1,5 @@
 import type { SavedFilter } from "@cal/api-client";
-import { Bookmark, Check, CheckSquare, Plus, Save, Square, Trash2 } from "lucide-react";
+import { Bookmark, Check, CheckSquare, ChevronRight, Plus, Save, Square, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { allTags, groupTasks } from "../lib/entries";
@@ -179,7 +179,7 @@ export function TasksPage() {
             value={quick}
             onChange={(e) => setQuick(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && void addQuick()}
-            placeholder='Try "dentist fri 5pm #health" — Enter to add'
+            placeholder='Try "dentist fri 5pm #health", then Enter'
             aria-label="Quick add task"
           />
         </div>
@@ -254,7 +254,8 @@ export function TasksPage() {
           )}
           {groups.done.length > 0 && (
             <section className="panel">
-              <button type="button" className="group-toggle" onClick={() => setShowDone(!showDone)}>
+              <button type="button" className="group-toggle" aria-expanded={showDone} onClick={() => setShowDone(!showDone)}>
+                <ChevronRight size={14} className={showDone ? "chev-open" : undefined} />
                 Done · {groups.done.length}
               </button>
               {showDone && (

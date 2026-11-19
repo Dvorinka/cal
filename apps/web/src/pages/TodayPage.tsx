@@ -19,9 +19,9 @@ import {
 } from "lucide-react";
 import { Cloud, CloudDrizzle, CloudFog, CloudLightning, CloudRain, CloudSun, Snowflake, Sun } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { PageHeader } from "../components/PageHeader";
-import { addDays, formatTime, iso, timeToMinutes, todayIso } from "../lib/date";
+import { addDays, formatDayShort, formatTime, iso, timeToMinutes, todayIso } from "../lib/date";
 import { moduleOn } from "../lib/modules";
 import { daysLabel, upcomingDates } from "../lib/people";
 import { fetchWeather, weatherIcon, type Weather } from "../lib/weather";
@@ -83,7 +83,6 @@ export function TodayPage() {
   const [weather, setWeather] = useState<Weather | null>(null);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [review, setReview] = useState<WeekReview | null>(null);
-  const [showReview, setShowReview] = useState(false);
   const [focus, setFocus] = useState(false);
   const [activity, setActivity] = useState<Record<string, number>>({});
   const [time, setTime] = useState<TimeSummary | null>(null);
@@ -107,6 +106,7 @@ export function TodayPage() {
     void loadFeeds();
     if (peopleOn) void loadPeople();
     void api.habits().then(setHabits).catch(reportErr("Could not load habits"));
+    void api.weeklyReview().then(setReview).catch(reportErr("Could not load review"));
     void api.activity().then(setActivity).catch(reportErr("Could not load activity"));
     void api.timeSummary().then(setTime).catch(reportErr("Could not load time totals"));
     void api.dashboard(activeWorkspace ?? "").then(setDash).catch(reportErr("Could not load dashboard"));
@@ -166,25 +166,6 @@ export function TodayPage() {
   }, [people, peopleOn, activeWorkspace]);
 
   const WeatherIcon = weather ? WEATHER_ICONS[weatherIcon(weather.code).icon] : null;
-
-  async function saveReviewAsNote() {
-    if (!review) return;
-    const lines = [
-      `## Week of ${review.from}`,
-      "",
-      `- **${review.tasksDone}** tasks done, **${review.tasksSlipped}** slipped`,
-      `- **${review.notesWritten}** notes written`,
-      `- Completion streak: **${review.streak}** day${review.streak === 1 ? "" : "s"}`,
-      review.busiestDay ? `- Busiest: ${review.busiestDay} (${review.busiestCount} done)` : "",
-      "",
-      "## Three focuses for next week",
-      "",
-      "1. ",
-      "2. ",
-      "3. ",
-    ].join("\n");
-    await createEntry({ title: `Weekly review ${review.from}`, type: "note", date: today, content: lines });
-  }
 
   // Track — start a timer linked to a scheduled entry, from the focus pane.
   function track(entryId: string) {
@@ -272,16 +253,24 @@ export function TodayPage() {
               </div>
             )}
             {habits.length > 0 && (
-              <div className="habit-row">
+              <div className="habit-row today-recent">
+                <span className="today-recent-label">Habits</span>
                 {habits.map((h) => (
-                  <span key={h.id} className={`habit-chip ${h.streak > 0 ? "on" : ""}`} title={`${h.title} — ${h.recur}, streak ${h.streak}`}>
+                  <button
+                    key={h.id}
+                    type="button"
+                    className={`habit-chip ${h.streak > 0 ? "on" : ""}`}
+                    title={`${h.title} — ${h.recur}, streak ${h.streak}`}
+                    onClick={() => navigate("/habits")}
+                  >
                     <Flame size={12} /> {h.title} <b>{h.streak}</b>
-                  </span>
+                  </button>
                 ))}
               </div>
             )}
             {upcomingPeople.length > 0 && (
-              <div className="habit-row">
+              <div className="habit-row today-recent">
+                <span className="today-recent-label">Soon</span>
                 {upcomingPeople.map((o) => {
                   const milestone = o.label === "birthday" && o.turning !== undefined && MILESTONES.has(o.turning);
                   return (
@@ -507,22 +496,12 @@ export function TodayPage() {
             <section className="panel">
               <h3>
                 This week
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-xs"
-                  style={{ float: "right" }}
-                  onClick={() => {
-                    const next = !showReview;
-                    setShowReview(next);
-                    if (next && !review) void api.weeklyReview().then(setReview).catch(reportErr("Could not load review"));
-                  }}
-                >
-                  {showReview ? "Hide" : "Review"}
-                </button>
+                <Link to="/review" className="btn btn-secondary btn-xs">
+                  Review
+                </Link>
               </h3>
-              {!showReview && <p className="panel-empty">Open the weekly review for a digest of the last 7 days.</p>}
-              {showReview && !review && <p className="panel-empty">Loading…</p>}
-              {showReview && review && (
+              {!review && <p className="panel-empty">Loading the last 7 days…</p>}
+              {review && (
                 <div className="review-body">
                   <div className="review-grid">
                     <div className="review-stat"><b>{review.tasksDone}</b><span>done</span></div>
@@ -531,11 +510,8 @@ export function TodayPage() {
                     <div className="review-stat"><b>{review.streak}</b><span>day streak</span></div>
                   </div>
                   {review.busiestDay && (
-                    <p className="panel-note">Busiest: {review.busiestDay} ({review.busiestCount} completed).</p>
+                    <p className="panel-note">Busiest: {formatDayShort(review.busiestDay)} ({review.busiestCount} completed).</p>
                   )}
-                  <button type="button" className="btn btn-secondary" onClick={() => void saveReviewAsNote()}>
-                    <NotebookPen size={14} /> Save as note
-                  </button>
                 </div>
               )}
             </section>
@@ -571,7 +547,7 @@ export function TodayPage() {
               </section>
             )}
 
-            <section className="panel">
+            <section className="panel span-2">
               <h3>Activity</h3>
               <ActivityGrid counts={activity} today={today} />
             </section>
@@ -607,8 +583,8 @@ function ActivityGrid({ counts, today }: { counts: Record<string, number>; today
     start.setDate(start.getDate() - ((start.getDay() + 6) % 7) - 16 * 7); // Monday-aligned, 17 weeks back
     const out: { date: string; n: number }[] = [];
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const iso = d.toISOString().slice(0, 10);
-      out.push({ date: iso, n: counts[iso] ?? 0 });
+      const date = iso(d);
+      out.push({ date, n: counts[date] ?? 0 });
     }
     return out;
   }, [counts, today]);
@@ -621,7 +597,7 @@ function ActivityGrid({ counts, today }: { counts: Record<string, number>; today
       {cells.map((c) => (
         <span
           key={c.date}
-          className={`activity-cell lv${level(c.n)}`}
+          className={`activity-cell lv${level(c.n)}${c.date === today ? " is-today" : ""}`}
           title={`${c.date} — ${c.n} entr${c.n === 1 ? "y" : "ies"}`}
         />
       ))}
